@@ -23,7 +23,7 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
 
 RUN pip install uwsgi
 
-COPY ./requirements.txt /project/requirements.txt
+COPY ./requirements-docker.txt /project/requirements.txt
 
 RUN pip install -r /project/requirements.txt
 
@@ -40,6 +40,7 @@ COPY server-conf/supervisord.conf /etc/supervisor/
 COPY src /project/src
 
 WORKDIR /project
+EXPOSE 5011
 
 CMD ["/usr/bin/supervisord"]
 
