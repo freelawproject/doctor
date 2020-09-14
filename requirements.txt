@@ -1,3 +1,4 @@
-flask
+coverage
 requests
-
+docker
+pytest

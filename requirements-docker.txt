@@ -1,0 +1,7 @@
+flask
+ipython
+requests
+eyeD3==0.7.11
+lxml~=4.0
+six
+PyPDF2==1.26.0
