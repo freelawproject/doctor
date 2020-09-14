@@ -11,10 +11,14 @@ class BTEUnicodeDecodeError(UnicodeDecodeError):
 
     def __str__(self):
         original = UnicodeDecodeError.__str__(self)
-        return '%s. You passed in %r (%s)' % (original, self.obj, type(self.obj))
+        return "%s. You passed in %r (%s)" % (
+            original,
+            self.obj,
+            type(self.obj),
+        )
 
 
-def force_text(s, encoding='utf-8', strings_only=False, errors='strict'):
+def force_text(s, encoding="utf-8", strings_only=False, errors="strict"):
     """
     Similar to smart_text, except that lazy instances are resolved to
     strings, rather than kept as lazy objects.
@@ -33,7 +37,7 @@ def force_text(s, encoding='utf-8', strings_only=False, errors='strict'):
                     s = six.text_type(s, encoding, errors)
                 else:
                     s = six.text_type(s)
-            elif hasattr(s, '__unicode__'):
+            elif hasattr(s, "__unicode__"):
                 s = six.text_type(s)
             else:
                 s = six.text_type(bytes(s), encoding, errors)
@@ -51,12 +55,13 @@ def force_text(s, encoding='utf-8', strings_only=False, errors='strict'):
             # working unicode method. Try to handle this without raising a
             # further exception by individually forcing the exception args
             # to unicode.
-            s = ' '.join(force_text(arg, encoding, strings_only, errors)
-                         for arg in s)
+            s = " ".join(
+                force_text(arg, encoding, strings_only, errors) for arg in s
+            )
     return s
 
 
-def smart_text(s, encoding='utf-8', strings_only=False, errors='strict'):
+def smart_text(s, encoding="utf-8", strings_only=False, errors="strict"):
     """
     Returns a text object representing 's' -- unicode on Python 2 and str on
     Python 3. Treats bytestrings using the 'encoding' codec.
@@ -69,17 +74,23 @@ def smart_text(s, encoding='utf-8', strings_only=False, errors='strict'):
     return force_text(s, encoding, strings_only, errors)
 
 
-
 class Promise(object):
     """
     This is just a base class for the proxy class created in
     the closure of the lazy function. It can be used to recognize
     promises in code.
     """
+
     pass
 
+
 _PROTECTED_TYPES = six.integer_types + (
-    type(None), float, Decimal, datetime.datetime, datetime.date, datetime.time
+    type(None),
+    float,
+    Decimal,
+    datetime.datetime,
+    datetime.date,
+    datetime.time,
 )
 
 

@@ -66,4 +66,3 @@ def convert_mp3(af_local_path):
         )
         raise
     return tmp_path
-
