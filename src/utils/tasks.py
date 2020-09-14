@@ -1,0 +1,243 @@
+import subprocess
+from tempfile import NamedTemporaryFile
+
+from PyPDF2 import PdfFileReader
+from PyPDF2.utils import PdfReadError
+from lxml.etree import XMLSyntaxError
+from lxml.html.clean import Cleaner
+
+from src.utils.encoding_utils import *
+
+DEVNULL = open("/dev/null", "w")
+
+
+def get_clean_body_content(content):
+    """Parse out the body from an html string, clean it up, and send it along."""
+    cleaner = Cleaner(
+        style=True, remove_tags=["a", "body", "font", "noscript", "img"]
+    )
+    try:
+        return cleaner.clean_html(content)
+    except XMLSyntaxError:
+        return (
+            "Unable to extract the content from this file. Please try "
+            "reading the original."
+        )
+
+
+def extract_from_doc(path):
+    """Extract text from docs.
+
+    We use antiword to pull the text out of MS Doc files.
+    """
+    process = subprocess.Popen(
+        ["antiword", path, "-i", "1"],
+        shell=False,
+        stdout=subprocess.PIPE,
+        stderr=DEVNULL,
+    )
+    content, err = process.communicate()
+    return content, err
+
+
+def extract_from_docx(path):
+    """Extract text from docx files
+
+    We use docx2txt to pull out the text. Pretty simple.
+    """
+    process = subprocess.Popen(
+        ["docx2txt", path, "-"],
+        shell=False,
+        stdout=subprocess.PIPE,
+        stderr=DEVNULL,
+    )
+    content, err = process.communicate()
+    return content, err
+
+
+def extract_from_html(path):
+    """Extract from html.
+
+    A simple wrapper to go get content, and send it along.
+    """
+    try:
+        content = open(path).read().encode()
+        content = get_clean_body_content(content)
+        encodings = ["utf-8", "ISO8859", "cp1252"]
+        for encoding in encodings:
+            try:
+                content = force_text(content, encoding=encoding)
+            except BTEUnicodeDecodeError:
+                continue
+            else:
+                return content, False
+
+        # Fell through, therefore unable to decode the string.
+        return "", True
+    except Exception as e:
+        return "", True
+
+
+def extract_from_pdf(tmp_tiff):
+    pipe = subprocess.PIPE
+    tesseract_cmd = ["tesseract", tmp_tiff.name, "stdout", "-l", "eng"]
+    p = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
+    return p.communicate()[0].decode("utf-8")
+
+
+def make_pdftotext_process(path):
+    """Make a subprocess to hand to higher-level code."""
+    return subprocess.Popen(
+        ["pdftotext", "-layout", "-enc", "UTF-8", path, "-"],
+        shell=False,
+        stdout=subprocess.PIPE,
+        stderr=DEVNULL,
+    )
+
+
+def extract_from_txt(path):
+    """Extract text from plain text files: A fool's errand.
+
+    Unfortunately, plain text files lack encoding information, so we have to
+    guess. We could guess ascii, but we may as well use a superset of ascii,
+    cp1252, and failing that try utf-8, ignoring errors. Most txt files we
+    encounter were produced by converting wpd or doc files to txt on a
+    Microsoft box, so assuming cp1252 as our first guess makes sense.
+
+    May we hope for a better world.
+    """
+    try:
+        err = False
+        data = open(path).read()
+        try:
+            # Alas, cp1252 is probably still more popular than utf-8.
+            content = smart_text(data, encoding="cp1252")
+        except BTEUnicodeDecodeError:
+            content = smart_text(data, encoding="utf-8", errors="ignore")
+    except:
+        err = True
+        content = ""
+    return content, err
+
+
+def extract_from_wpd(path):
+    """Extract text from a Word Perfect file
+
+    Yes, courts still use these, so we extract their text using wpd2html. Once
+    that's done, we pull out the body of the HTML, and do some minor cleanup
+    on it.
+    """
+    process = subprocess.Popen(
+        ["wpd2html", path], shell=False, stdout=subprocess.PIPE, stderr=DEVNULL
+    )
+    content, err = process.communicate()
+    content = get_clean_body_content(content)
+
+    return content, err
+
+
+def convert_file_to_txt(path):
+    tesseract_command = ["tesseract", path, "stdout", "-l", "eng"]
+    p = subprocess.Popen(
+        tesseract_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    return p.communicate()[0].decode("utf-8")
+
+
+def get_page_count(path, extension):
+    """Get the number of pages, if appropriate mimetype.
+
+    :param path: A path to a binary (pdf, wpd, doc, txt, html, etc.)
+    :param extension: The extension of the binary.
+    :return: The number of pages if possible, else return None
+    """
+    if extension == "pdf":
+        try:
+            reader = PdfFileReader(path)
+            return int(reader.getNumPages())
+        except (
+            IOError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AssertionError,
+            PdfReadError,
+        ):
+            # IOError: File doesn't exist. My bad.
+            # ValueError: Didn't get an int for the page count. Their bad.
+            # TypeError: NumberObject has no attribute '__getitem__'. Ugh.
+            # KeyError, AssertionError: assert xrefstream["/Type"] == "/XRef". WTF?
+            # PdfReadError: Something else. I have no words.
+            pass
+    elif extension == "wpd":
+        # Best solution appears to be to dig into the binary format
+        pass
+    elif extension == "doc":
+        # Best solution appears to be to dig into the XML of the file
+        # itself: http://stackoverflow.com/a/12972502/64911
+        pass
+    return None
+
+
+def rasterize_pdf(path, destination):
+    """Convert the PDF into a multipage Tiff file.
+
+    This function uses ghostscript for processing and borrows heavily from:
+
+        https://github.com/jbarlow83/OCRmyPDF/blob/636d1903b35fed6b07a01af53769fea81f388b82/ocrmypdf/ghostscript.py#L11
+
+    """
+    # gs docs, see: http://ghostscript.com/doc/7.07/Use.htm
+    # gs devices, see: http://ghostscript.com/doc/current/Devices.htm
+    #
+    # Compression is a trade off. It takes twice as long to convert PDFs, but
+    # they're about 1-2% the size of the uncompressed version. They take about
+    # 30% of the RAM when Tesseract processes them. See:
+    # https://github.com/tesseract-ocr/tesseract/issues/431#issuecomment-250549208
+    gs = [
+        "gs",
+        "-dQUIET",  # Suppress printing routine info
+        "-dSAFER",  # Lock down the filesystem to only files on command line
+        "-dBATCH",  # Exit after finishing file. Don't wait for more commands.
+        "-dNOPAUSE",  # Don't pause after each page
+        "-sDEVICE=tiffgray",
+        "-sCompression=lzw",
+        "-r300x300",  # Set the resolution to 300 DPI.
+        "-o",
+        destination,
+        path,
+    ]
+    p = subprocess.Popen(
+        gs,
+        close_fds=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+    )
+    stdout, stderr = p.communicate()
+    return stdout, stderr, p.returncode
+
+
+def cleanup_ocr_text(txt):
+    """Do some basic cleanup to make OCR text better.
+
+    Err on the side of safety. Don't make fixes that could cause other issues.
+
+    :param txt: The txt output from the OCR engine.
+    :return: Txt output, cleaned up.
+    """
+    simple_replacements = (
+        (u"Fi|ed", u"Filed"),
+        (u" Il ", u" II "),
+    )
+    for replacement in simple_replacements:
+        txt = txt.replace(replacement[0], replacement[1])
+    return txt
+
+
+def extract_by_ocr(tmp):
+    with NamedTemporaryFile(suffix=".tiff") as tmp_tiff:
+        out, err, returncode = rasterize_pdf(tmp.name, tmp_tiff.name)
+        txt = convert_file_to_txt(tmp_tiff)
+        txt = cleanup_ocr_text(txt)
+    return True, txt
