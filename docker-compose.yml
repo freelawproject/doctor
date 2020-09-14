@@ -2,10 +2,12 @@
 version: '3.7'
 services:
   cl-binary-transformers-and-extractors:
-    build: .
+    image: freelawproject/cl-binary-transformers-and-extractors:latest
     container_name: "cl-binary-transformers-and-extractors"
+    expose:
+      - "5011"
     ports:
-     - "5011:80"
+      - "5011:80"
     networks:
       - cl_net_overlay
 networks:
