@@ -12,6 +12,7 @@ from src.utils.tasks import (
     make_pdftotext_process,
     extract_from_pdf,
     rasterize_pdf,
+    make_png_thumbnail_for_instance,
 )
 
 app = Flask(__name__)
@@ -89,6 +90,16 @@ def convert_audio_file():
         f.save(tmp.name)
         converted_file = convert_mp3(tmp.name)
         return send_file(converted_file)
+
+
+@app.route("/make_png_thumbnail", methods=["POST"])
+def make_png_thumbnail():
+    f = request.files["file"]
+    max_dimension = request.args.get("max_dimension")
+    extension = f.filename.split(".")[-1]
+    with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
+        f.save(tmp.name)
+        return make_png_thumbnail_for_instance(tmp.name, max_dimension)
 
 
 if __name__ == "__main__":

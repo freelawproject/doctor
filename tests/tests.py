@@ -73,6 +73,21 @@ class DockerTestBase(TestCase):
             files={"file": (os.path.basename(filepath), f)},
         )
 
+    def send_file_to_thumbnail_generation(self, filepath, max_dimensions=350):
+        """Send file to extract doc content
+
+        :param filepath:
+        :param do_ocr:
+        :return:
+        """
+        with open(filepath, "rb") as file:
+            f = file.read()
+        return requests.post(
+            "%s/make_png_thumbnail" % self.base_url,
+            files={"file": (os.path.basename(filepath), f)},
+            params={"max_dimensions": max_dimensions},
+        )
+
     def test_sanity(self):
         """Can we start container and check sanity test?"""
         response = requests.get(self.base_url).json()
@@ -175,6 +190,19 @@ class AudioConversionTests(DockerTestBase):
                 test_mp3, r.content, msg="Audio conversion failed"
             )
             print("\nWMA successfully converted to MP3 √\n")
+
+
+class ThumbnailGenerationTests(DockerTestBase):
+    """Can we generate thumbnail images from PDF files"""
+
+    def test_convert_pdf_to_thumbnail_png(self):
+        """Can we generate a pdf to thumbnail?"""
+        for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
+            thumbnail = self.send_file_to_thumbnail_generation(
+                filepath
+            ).content
+            self.assertTrue(thumbnail[1], msg="Thumbnail failed to generate.")
+            print("Generated thumbnail from .pdf successfully")
 
 
 if __name__ == "__main__":

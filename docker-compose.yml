@@ -2,7 +2,8 @@
 version: '3.7'
 services:
   cl-binary-transformers-and-extractors:
-    image: freelawproject/cl-binary-transformers-and-extractors:latest
+    build: .
+#    image: freelawproject/cl-binary-transformers-and-extractors:latest
     container_name: "cl-binary-transformers-and-extractors"
     expose:
       - "5011"

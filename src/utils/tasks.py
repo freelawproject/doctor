@@ -11,6 +11,17 @@ from src.utils.encoding_utils import *
 DEVNULL = open("/dev/null", "w")
 
 
+class THUMBNAIL_STATUSES(object):
+    NEEDED = 0
+    COMPLETE = 1
+    FAILED = 2
+    NAMES = (
+        (NEEDED, "Thumbnail needed"),
+        (COMPLETE, "Thumbnail completed successfully"),
+        (FAILED, "Unable to generate thumbnail"),
+    )
+
+
 def get_clean_body_content(content):
     """Parse out the body from an html string, clean it up, and send it along."""
     cleaner = Cleaner(
@@ -241,3 +252,40 @@ def extract_by_ocr(tmp):
         txt = convert_file_to_txt(tmp_tiff)
         txt = cleanup_ocr_text(txt)
     return True, txt
+
+
+def make_png_thumbnail_for_instance(filepath, max_dimension):
+    """Abstract function for making a thumbnail for a PDF
+
+    See helper functions below for how to use this in a simple way.
+
+    :param filepath: The attr where the PDF is located on the item
+    :param max_dimension: The longest you want any edge to be
+    """
+    # item = InstanceClass.objects.get(pk=pk)
+    command = [
+        "pdftoppm",
+        "-png",
+        filepath,
+        # Start and end on the first page
+        "-f",
+        "1",
+        "-l",
+        "1",
+        # Set the max dimension (generally the height). Alas, we can't just
+        # set the width, so this is our only hope.
+        "-scale-to",
+        str(max_dimension),
+    ]
+
+    # Note that pdftoppm adds things like -01.png to the end of whatever
+    # filename you give it, which makes using a temp file difficult. But,
+    # if you don't give it an output file, it'll send the result to stdout,
+    # so that's why we are capturing it here.
+    p = subprocess.Popen(
+        command, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    stdout, stderr = p.communicate()
+    if p.returncode != 0:
+        return p.returncode, False
+    return stdout, True

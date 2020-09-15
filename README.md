@@ -26,6 +26,13 @@ The post_push is required to generate both latest and version numbering
 in our builds.  If no version number is updated, any commit to master will 
 overwrite the latest docker image. 
 
+Testing
+=======
+
+Build your docker image before testing it with the following command.
+
+```docker build --tag freelawproject/binary-transformers-and-extractors:latest .```
+
 Future
 =======
 
