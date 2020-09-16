@@ -126,8 +126,12 @@ def extract_from_txt(path):
         except BTEUnicodeDecodeError:
             content = smart_text(data, encoding="utf-8", errors="ignore")
     except:
-        err = True
-        content = ""
+        try:
+            data = open(path, encoding="cp1252").read()
+            content = smart_text(data, encoding="cp1252")
+        except:
+            err = True
+            content = ""
     return content, err
 
 

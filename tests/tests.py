@@ -199,6 +199,25 @@ class DocumentConversionTests(DockerTestBase):
             )
             print("Extracted content from .txt successfully")
 
+    def test_bad_txt_extraction(self):
+        """Can we start container and check sanity test?"""
+        for filepath in iglob(
+            os.path.join(self.assets_dir, "txt_file_with_no_encoding*.txt")
+        ):
+            response = self.send_file_to_bte(filepath)
+            extraction = response["content"][0]
+            success = response["content"][1]
+
+            self.assertFalse(
+                success,
+                "Error reported while extracting text from %s" % filepath,
+            )
+            self.assertIn(
+                "¶  1.  DOOLEY, J.   Plaintiffs",
+                extraction,
+                "Issue extracting/encoding text from file at: %s" % filepath,
+            )
+
 
 class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
