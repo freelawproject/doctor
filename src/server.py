@@ -1,6 +1,6 @@
 from tempfile import NamedTemporaryFile
 
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 
 from src.utils.audio import convert_mp3
 from src.utils.tasks import (
@@ -13,6 +13,7 @@ from src.utils.tasks import (
     extract_from_pdf,
     rasterize_pdf,
     make_png_thumbnail_for_instance,
+    get_page_count,
 )
 
 app = Flask(__name__)
@@ -66,7 +67,7 @@ def extract_content():
         elif extension == "doc":
             return extract_from_doc(tmp.name)
         elif extension == "docx":
-            return extract_from_docx(tmp.name)
+            return "{} {}".format(extract_from_docx(tmp.name), True)
         elif extension == "html":
             return extract_from_html(tmp.name)
         elif extension == "txt":
@@ -100,6 +101,15 @@ def make_png_thumbnail():
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
         return make_png_thumbnail_for_instance(tmp.name, max_dimension)
+
+
+@app.route("/get_page_count", methods=["POST"])
+def pg_count():
+    f = request.files["file"]
+    extension = f.filename.split(".")[-1]
+    with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
+        f.save(tmp.name)
+        return jsonify({"pg_count": get_page_count(tmp.name, extension)})
 
 
 if __name__ == "__main__":

@@ -115,9 +115,13 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_docx_to_txt(self):
         """Can we convert docx file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.docx")):
-            extraction = self.send_file_to_bte(
+            # extraction = self.send_file_to_bte(
+            #     filepath, do_ocr=True
+            # ).content.decode("unicode_escape")
+            response, success = self.send_file_to_bte(
                 filepath, do_ocr=True
-            ).content.decode("unicode_escape")
+            ).content
+            extraction = response[0].decode("unicode_escape")
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract from .docx file."
@@ -203,6 +207,35 @@ class ThumbnailGenerationTests(DockerTestBase):
             ).content
             self.assertTrue(thumbnail[1], msg="Thumbnail failed to generate.")
             print("Generated thumbnail from .pdf successfully")
+
+
+class PageCountTests(DockerTestBase):
+    """Can we get page counts"""
+
+    def send_file_to_pg_count(self, filepath):
+        """Send file to extract page count.
+
+        :param filepath:
+        :return:
+        """
+        with open(filepath, "rb") as file:
+            f = file.read()
+        return requests.post(
+            "%s/get_page_count" % self.base_url,
+            files={"file": (os.path.basename(filepath), f)},
+        )
+
+    def test_pdf_page_count_extractor(self):
+        """Can we extract page counts properly?"""
+        counts = [1, 30]
+        for count, filepath in zip(
+            counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
+        ):
+            response = self.send_file_to_pg_count(filepath).json()
+            self.assertEqual(
+                response["pg_count"], count, msg="Page count failed"
+            )
+            print("Successfully returned page count √")
 
 
 if __name__ == "__main__":
