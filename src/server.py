@@ -127,5 +127,20 @@ def pg_count():
         return jsonify({"pg_count": get_page_count(tmp.name, extension)})
 
 
+@app.route("/make_pdftotext_process", methods=["POST"])
+def pdf_to_text():
+    """Extract text from text based PDFs immediately.
+
+    :return:
+    """
+    f = request.files["file"]
+    extension = f.filename.split(".")[-1]
+    with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
+        f.save(tmp.name)
+        process = make_pdftotext_process(tmp.name)
+        content, err = process.communicate()
+        return jsonify({"content": content.decode("utf-8"), "success": err})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
