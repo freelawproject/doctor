@@ -102,7 +102,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response['content']
+            extraction = response["content"]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -115,7 +115,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert docx file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.docx")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response['content'][0]
+            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract from .docx file."
@@ -126,7 +126,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert word perfect document to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.wpd")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response['content'][0]
+            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -139,7 +139,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert doc file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.doc")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response['content'][0]
+            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract .doc document."
@@ -150,7 +150,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert HTML to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.html")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response['content'][0]
+            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract content from HTML."
@@ -161,7 +161,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we start container and check sanity test?"""
         for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response['content'][0]
+            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,

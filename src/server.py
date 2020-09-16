@@ -62,7 +62,9 @@ def extract_content():
             else:
                 if len(content.strip()) == 0:
                     return jsonify({"content": "", "success": False})
-                return jsonify({"content": content.decode("utf-8"), "success": True})
+                return jsonify(
+                    {"content": content.decode("utf-8"), "success": True}
+                )
 
         elif extension == "doc":
             return jsonify(
