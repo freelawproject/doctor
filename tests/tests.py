@@ -60,6 +60,20 @@ class DockerTestBase(TestCase):
             params={"do_ocr": do_ocr},
         ).json()
 
+    def send_file_to_pdftotext(self, filepath):
+        """Send file to extract doc content
+
+        :param filepath:
+        :param do_ocr:
+        :return:
+        """
+        with open(filepath, "rb") as file:
+            f = file.read()
+        return requests.post(
+            "%s/make_pdftotext_process" % self.base_url,
+            files={"file": (os.path.basename(filepath), f)},
+        ).json()
+
     def send_file_to_convert_audio(self, filepath):
         """This is a helper function to post to audio conversion.
 
@@ -102,6 +116,21 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response["content"]
+            answer = self.doc_answers[filepath.split("/")[-1]]
+            self.assertEqual(
+                answer,
+                extraction,
+                msg="Failed to extract content from image pdf.",
+            )
+            print("Extracted content from .pdf successfully")
+
+    def test_direct_text_based_pdf_extraction(self):
+        """Can we extract text from a text pdf?"""
+        for filepath in iglob(
+            os.path.join(self.assets_dir, "opinion_pdf*.pdf")
+        ):
+            response = self.send_file_to_pdftotext(filepath)
             extraction = response["content"]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
