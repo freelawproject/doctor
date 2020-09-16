@@ -27,7 +27,7 @@ class DockerTestBase(TestCase):
     with open(answer_path, "r") as f:
         doc_json = json.load(f)
     for k, v in doc_json.items():
-        doc_answers[k] = bytes(v, "utf-8").decode("unicode_escape")
+        doc_answers[k] = v
 
     def setUp(self):
         client = docker.from_env()
@@ -58,7 +58,7 @@ class DockerTestBase(TestCase):
             "%s/extract_doc_content" % self.base_url,
             files={"file": (os.path.basename(filepath), f)},
             params={"do_ocr": do_ocr},
-        )
+        ).json()
 
     def send_file_to_convert_audio(self, filepath):
         """This is a helper function to post to audio conversion.
@@ -101,9 +101,8 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_pdf_to_txt(self):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
-            extraction = self.send_file_to_bte(
-                filepath, do_ocr=True
-            ).content.decode("unicode_escape")
+            response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response['content']
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -115,13 +114,8 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_docx_to_txt(self):
         """Can we convert docx file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.docx")):
-            # extraction = self.send_file_to_bte(
-            #     filepath, do_ocr=True
-            # ).content.decode("unicode_escape")
-            response, success = self.send_file_to_bte(
-                filepath, do_ocr=True
-            ).content
-            extraction = response[0].decode("unicode_escape")
+            response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response['content'][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract from .docx file."
@@ -131,9 +125,8 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_wpd_to_txt(self):
         """Can we convert word perfect document to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.wpd")):
-            extraction = self.send_file_to_bte(
-                filepath, do_ocr=True
-            ).content.decode("unicode_escape")
+            response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response['content'][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -145,9 +138,8 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_doc_to_txt(self):
         """Can we convert doc file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.doc")):
-            extraction = self.send_file_to_bte(
-                filepath, do_ocr=True
-            ).content.decode("unicode_escape")
+            response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response['content'][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract .doc document."
@@ -157,9 +149,8 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_html_to_txt(self):
         """Can we convert HTML to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.html")):
-            extraction = self.send_file_to_bte(
-                filepath, do_ocr=True
-            ).content.decode("unicode_escape")
+            response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response['content'][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer, extraction, msg="Failed to extract content from HTML."
@@ -168,10 +159,9 @@ class DocumentConversionTests(DockerTestBase):
 
     def test_convert_txt_to_txt(self):
         """Can we start container and check sanity test?"""
-        for filepath in iglob(os.path.join(self.assets_dir, "*.txt")):
-            extraction = self.send_file_to_bte(
-                filepath, do_ocr=True
-            ).content.decode("unicode_escape")
+        for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
+            response = self.send_file_to_bte(filepath, do_ocr=True)
+            extraction = response['content'][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -223,7 +213,7 @@ class PageCountTests(DockerTestBase):
         return requests.post(
             "%s/get_page_count" % self.base_url,
             files={"file": (os.path.basename(filepath), f)},
-        )
+        ).json()
 
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
@@ -231,7 +221,7 @@ class PageCountTests(DockerTestBase):
         for count, filepath in zip(
             counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
         ):
-            response = self.send_file_to_pg_count(filepath).json()
+            response = self.send_file_to_pg_count(filepath)
             self.assertEqual(
                 response["pg_count"], count, msg="Page count failed"
             )

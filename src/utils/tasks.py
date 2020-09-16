@@ -48,7 +48,7 @@ def extract_from_doc(path):
         stderr=DEVNULL,
     )
     content, err = process.communicate()
-    return content, err
+    return content.decode("utf-8"), err
 
 
 def extract_from_docx(path):
@@ -63,7 +63,7 @@ def extract_from_docx(path):
         stderr=DEVNULL,
     )
     content, err = process.communicate()
-    return content, err
+    return content.decode("utf-8"), err
 
 
 def extract_from_html(path):
@@ -144,7 +144,7 @@ def extract_from_wpd(path):
     content, err = process.communicate()
     content = get_clean_body_content(content)
 
-    return content, err
+    return content.decode("utf-8"), err
 
 
 def convert_file_to_txt(path):

@@ -1,3 +1,4 @@
+import json
 from tempfile import NamedTemporaryFile
 
 from flask import Flask, request, send_file, jsonify
@@ -45,7 +46,6 @@ def extract_content():
     extension = f.filename.split(".")[-1]
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
-
         if extension == "pdf":
             process = make_pdftotext_process(tmp.name)
             content, err = process.communicate()
@@ -57,23 +57,36 @@ def extract_content():
                     content = extract_from_pdf(tmp_tiff)
                     if content == "":
                         content = "Unable to extract document content."
-                        return content, False
-                    return content, True
+                        return jsonify({"content": content, "success": False})
+                    return jsonify({"content": content, "success": True})
             else:
                 if len(content.strip()) == 0:
-                    return "", False
-                return content.strip(), True
+                    return jsonify({"content": "", "success": False})
+                return jsonify({"content": content.decode("utf-8"), "success": True})
 
         elif extension == "doc":
-            return extract_from_doc(tmp.name)
+            return jsonify(
+                {"content": extract_from_doc(tmp.name), "success": True}
+            )
         elif extension == "docx":
-            return "{} {}".format(extract_from_docx(tmp.name), True)
+            return jsonify(
+                {"content": extract_from_docx(tmp.name), "success": True}
+            )
         elif extension == "html":
-            return extract_from_html(tmp.name)
+            return jsonify(
+                {"content": extract_from_html(tmp.name), "success": True}
+            )
+
         elif extension == "txt":
-            return extract_from_txt(tmp.name)
+            return jsonify(
+                {"content": extract_from_txt(tmp.name), "success": True}
+            )
+            # return extract_from_txt(tmp.name)
         elif extension == "wpd":
-            return extract_from_wpd(tmp.name)
+            return jsonify(
+                {"content": extract_from_wpd(tmp.name), "success": True}
+            )
+            # return extract_from_wpd(tmp.name)
         # elif extension == "rtf": return extract_from_rtf(tmp.name) # to do
 
         else:
