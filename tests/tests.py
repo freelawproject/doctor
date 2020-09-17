@@ -102,8 +102,8 @@ class DockerTestBase(TestCase):
             params={"max_dimensions": max_dimensions},
         )
 
-    def test_sanity(self):
-        """Can we start container and check sanity test?"""
+    def test_heartbeat(self):
+        """Can we start container and check heartbeat test?"""
         response = requests.get(self.base_url).json()
         self.assertTrue(response["success"], msg="Failed sanity test.")
         print(response)

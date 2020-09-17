@@ -21,10 +21,10 @@ app = Flask(__name__)
 
 
 @app.route("/")
-def sanity_check():
-    """Sanity check
+def heartbeat():
+    """Heartbeat
 
-    :return: Successful response
+    :return: success response
     :type: dict
     """
     return {"success": True, "msg": "Docker container running."}
