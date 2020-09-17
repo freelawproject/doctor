@@ -47,7 +47,7 @@ class DockerTestBase(TestCase):
             container.stop()
 
     def send_file_to_bte(self, filepath, do_ocr=False):
-        """Send file to extract doc content
+        """Send file to extract doc content method.
 
         :param filepath:
         :param do_ocr:
@@ -62,7 +62,7 @@ class DockerTestBase(TestCase):
         ).json()
 
     def send_file_to_pdftotext(self, filepath):
-        """Send file to extract doc content
+        """Send file to pdftotext method.
 
         :param filepath:
         :param do_ocr:
@@ -104,7 +104,7 @@ class DockerTestBase(TestCase):
         )
 
     def test_heartbeat(self):
-        """Can we start container and check heartbeat test?"""
+        """Check heartbeat?"""
         response = requests.get(self.base_url).json()
         self.assertTrue(response["success"], msg="Failed heartbeat test.")
         print(response)
@@ -128,7 +128,7 @@ class DocumentConversionTests(DockerTestBase):
             print("Extracted content from .pdf successfully")
 
     def test_direct_text_based_pdf_extraction(self):
-        """Can we extract text from a text pdf?"""
+        """Can we extract text from a text based pdf?"""
         for filepath in iglob(
             os.path.join(self.assets_dir, "opinion_pdf*.pdf")
         ):
@@ -190,7 +190,7 @@ class DocumentConversionTests(DockerTestBase):
             print("Extracted content from .html successfully")
 
     def test_convert_txt_to_txt(self):
-        """Can we start container and check sanity test?"""
+        """Can we extract text from a txt document?"""
         for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
             answer = self.doc_answers[filepath.split("/")[-1]]
@@ -202,7 +202,7 @@ class DocumentConversionTests(DockerTestBase):
             print("Extracted content from .txt successfully")
 
     def test_bad_txt_extraction(self):
-        """Can we process txt files with bad encoding?"""
+        """Can we extract text from a txt document with bad encoding?"""
         for filepath in iglob(
             os.path.join(self.assets_dir, "txt_file_with_no_encoding*.txt")
         ):
@@ -249,7 +249,7 @@ class ThumbnailGenerationTests(DockerTestBase):
 
 
 class PageCountTests(DockerTestBase):
-    """Can we get page counts"""
+    """Can we get page counts?"""
 
     def send_file_to_pg_count(self, filepath):
         """Send file to extract page count.
@@ -266,6 +266,7 @@ class PageCountTests(DockerTestBase):
 
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
+
         counts = [1, 30]
         for count, filepath in zip(
             counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
