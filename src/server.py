@@ -1,4 +1,3 @@
-import json
 from tempfile import NamedTemporaryFile
 
 from flask import Flask, request, send_file, jsonify
@@ -21,10 +20,10 @@ app = Flask(__name__)
 
 
 @app.route("/")
-def sanity_check():
-    """Sanity check
+def heartbeat():
+    """Heartbeat
 
-    :return: Successful response
+    :return: success response
     :type: dict
     """
     return {"success": True, "msg": "Docker container running."}
@@ -47,56 +46,37 @@ def extract_content():
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
         if extension == "pdf":
-            process = make_pdftotext_process(tmp.name)
-            content, err = process.communicate()
+            content, err = make_pdftotext_process(tmp.name)
             if do_ocr and len(content.strip()) == 0:
                 with NamedTemporaryFile(suffix=".tiff") as tmp_tiff:
-                    out, err, returncode = rasterize_pdf(
-                        tmp.name, tmp_tiff.name
-                    )
-                    content = extract_from_pdf(tmp_tiff)
+                    _, _, _ = rasterize_pdf(tmp.name, tmp_tiff.name)
+                    content, err = extract_from_pdf(tmp_tiff)
                     if content == "":
-                        content = "Unable to extract document content."
-                        return jsonify({"content": content, "success": False})
-                    return jsonify({"content": content, "success": True})
+                        content, err = (
+                            "Unable to extract document content.",
+                            "Failure",
+                        )
             else:
                 if len(content.strip()) == 0:
-                    return jsonify({"content": "", "success": False})
-                return jsonify(
-                    {"content": content.decode("utf-8"), "success": True}
-                )
-
+                    content, err = "", "Failure"
+            return jsonify({"content": content, "err": "err"})
         elif extension == "doc":
-            return jsonify(
-                {"content": extract_from_doc(tmp.name), "success": True}
-            )
+            content, err = extract_from_doc(tmp.name)
         elif extension == "docx":
-            return jsonify(
-                {"content": extract_from_docx(tmp.name), "success": True}
-            )
+            content, err = extract_from_docx(tmp.name)
         elif extension == "html":
-            return jsonify(
-                {"content": extract_from_html(tmp.name), "success": True}
-            )
-
+            content, err = extract_from_html(tmp.name)
         elif extension == "txt":
-            return jsonify(
-                {"content": extract_from_txt(tmp.name), "success": True}
-            )
-            # return extract_from_txt(tmp.name)
+            content, err = extract_from_txt(tmp.name)
         elif extension == "wpd":
-            return jsonify(
-                {"content": extract_from_wpd(tmp.name), "success": True}
-            )
-            # return extract_from_wpd(tmp.name)
-        # elif extension == "rtf": return extract_from_rtf(tmp.name) # to do
-
+            content, err = extract_from_wpd(tmp.name)
         else:
             print(
                 "*****Unable to extract content due to unknown extension: %s "
                 "on opinion: %s****" % (extension, "opinion_pk")
             )
             return
+        return jsonify({"content": content, "err": err})
 
 
 @app.route("/convert_audio_file", methods=["POST"])
@@ -137,9 +117,8 @@ def pdf_to_text():
     extension = f.filename.split(".")[-1]
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
-        process = make_pdftotext_process(tmp.name)
-        content, err = process.communicate()
-        return jsonify({"content": content.decode("utf-8"), "success": err})
+        content, err = make_pdftotext_process(tmp.name)
+        return jsonify({"content": content, "success": err})
 
 
 if __name__ == "__main__":

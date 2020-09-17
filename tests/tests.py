@@ -8,12 +8,13 @@ from __future__ import (
 
 import json
 import os
+import time
 import unittest
 from glob import iglob
 from unittest import TestCase
+
 import docker
 import requests
-import time
 
 
 class DockerTestBase(TestCase):
@@ -102,25 +103,26 @@ class DockerTestBase(TestCase):
             params={"max_dimensions": max_dimensions},
         )
 
-    def test_sanity(self):
-        """Can we start container and check sanity test?"""
+    def test_heartbeat(self):
+        """Can we start container and check heartbeat test?"""
         response = requests.get(self.base_url).json()
-        self.assertTrue(response["success"], msg="Failed sanity test.")
+        self.assertTrue(response["success"], msg="Failed heartbeat test.")
         print(response)
 
 
 class DocumentConversionTests(DockerTestBase):
-    """Test docker images"""
+    """Test document conversion"""
 
     def test_convert_pdf_to_txt(self):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response["content"]
+            # extraction = response["content"]
+            print(response)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
-                extraction,
+                response["content"],
                 msg="Failed to extract content from image pdf.",
             )
             print("Extracted content from .pdf successfully")
@@ -131,11 +133,10 @@ class DocumentConversionTests(DockerTestBase):
             os.path.join(self.assets_dir, "opinion_pdf*.pdf")
         ):
             response = self.send_file_to_pdftotext(filepath)
-            extraction = response["content"]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
-                extraction,
+                response["content"],
                 msg="Failed to extract content from image pdf.",
             )
             print("Extracted content from .pdf successfully")
@@ -144,10 +145,11 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert docx file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.docx")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
-                answer, extraction, msg="Failed to extract from .docx file."
+                answer,
+                response["content"],
+                msg="Failed to extract from .docx file.",
             )
             print("Extracted content from .docx successfully")
 
@@ -155,11 +157,10 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert word perfect document to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.wpd")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
-                extraction,
+                response["content"],
                 msg="Failed to extract word perfect document.",
             )
             print("Extracted content from .wpd successfully")
@@ -168,10 +169,11 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert doc file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.doc")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
-                answer, extraction, msg="Failed to extract .doc document."
+                answer,
+                response["content"],
+                msg="Failed to extract .doc document.",
             )
             print("Extracted content from .doc successfully")
 
@@ -179,10 +181,11 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert HTML to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.html")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
-                answer, extraction, msg="Failed to extract content from HTML."
+                answer,
+                response["content"],
+                msg="Failed to extract content from HTML.",
             )
             print("Extracted content from .html successfully")
 
@@ -190,23 +193,21 @@ class DocumentConversionTests(DockerTestBase):
         """Can we start container and check sanity test?"""
         for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            extraction = response["content"][0]
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
-                extraction,
+                response["content"],
                 msg="Failed to extract content from txt file.",
             )
             print("Extracted content from .txt successfully")
 
     def test_bad_txt_extraction(self):
-        """Can we start container and check sanity test?"""
+        """Can we process txt files with bad encoding?"""
         for filepath in iglob(
             os.path.join(self.assets_dir, "txt_file_with_no_encoding*.txt")
         ):
             response = self.send_file_to_bte(filepath)
-            extraction = response["content"][0]
-            success = response["content"][1]
+            success = response["err"]
 
             self.assertFalse(
                 success,
@@ -214,7 +215,7 @@ class DocumentConversionTests(DockerTestBase):
             )
             self.assertIn(
                 "¶  1.  DOOLEY, J.   Plaintiffs",
-                extraction,
+                response["content"],
                 "Issue extracting/encoding text from file at: %s" % filepath,
             )
 

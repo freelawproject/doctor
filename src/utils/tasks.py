@@ -1,6 +1,7 @@
 import subprocess
 from tempfile import NamedTemporaryFile
 
+import magic
 from PyPDF2 import PdfFileReader
 from PyPDF2.utils import PdfReadError
 from lxml.etree import XMLSyntaxError
@@ -92,21 +93,24 @@ def extract_from_html(path):
 def extract_from_pdf(tmp_tiff):
     pipe = subprocess.PIPE
     tesseract_cmd = ["tesseract", tmp_tiff.name, "stdout", "-l", "eng"]
-    p = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
-    return p.communicate()[0].decode("utf-8")
+    process = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
+    content, err = process.communicate()
+    return content.decode("utf-8"), err
 
 
 def make_pdftotext_process(path):
     """Make a subprocess to hand to higher-level code."""
-    return subprocess.Popen(
+    process = subprocess.Popen(
         ["pdftotext", "-layout", "-enc", "UTF-8", path, "-"],
         shell=False,
         stdout=subprocess.PIPE,
         stderr=DEVNULL,
     )
+    content, err = process.communicate()
+    return content.decode("utf-8"), err
 
 
-def extract_from_txt(path):
+def extract_from_txt(filepath):
     """Extract text from plain text files: A fool's errand.
 
     Unfortunately, plain text files lack encoding information, so we have to
@@ -119,7 +123,8 @@ def extract_from_txt(path):
     """
     try:
         err = False
-        data = open(path).read()
+        with open(filepath, mode="r") as f:
+            data = f.read()
         try:
             # Alas, cp1252 is probably still more popular than utf-8.
             content = smart_text(data, encoding="cp1252")
@@ -127,8 +132,12 @@ def extract_from_txt(path):
             content = smart_text(data, encoding="utf-8", errors="ignore")
     except:
         try:
-            data = open(path, encoding="cp1252").read()
-            content = smart_text(data, encoding="cp1252")
+            blob = open(filepath, "rb").read()
+            m = magic.Magic(mime_encoding=True)
+            encoding = m.from_buffer(blob)
+            with open(filepath, encoding=encoding, mode="r") as f:
+                data = f.read()
+            content = smart_text(data, encoding=encoding, errors="ignore")
         except:
             err = True
             content = ""
