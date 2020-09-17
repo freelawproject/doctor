@@ -93,21 +93,24 @@ def extract_from_html(path):
 def extract_from_pdf(tmp_tiff):
     pipe = subprocess.PIPE
     tesseract_cmd = ["tesseract", tmp_tiff.name, "stdout", "-l", "eng"]
-    p = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
-    return p.communicate()[0].decode("utf-8")
+    process = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
+    content, err = process.communicate()
+    return content.decode("utf-8"), err
 
 
 def make_pdftotext_process(path):
     """Make a subprocess to hand to higher-level code."""
-    return subprocess.Popen(
+    process = subprocess.Popen(
         ["pdftotext", "-layout", "-enc", "UTF-8", path, "-"],
         shell=False,
         stdout=subprocess.PIPE,
         stderr=DEVNULL,
     )
+    content, err = process.communicate()
+    return content.decode("utf-8"), err
 
 
-def extract_from_txt(path):
+def extract_from_txt(filepath):
     """Extract text from plain text files: A fool's errand.
 
     Unfortunately, plain text files lack encoding information, so we have to
