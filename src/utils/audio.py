@@ -1,3 +1,4 @@
+import codecs
 import os
 import subprocess
 import traceback
@@ -36,10 +37,15 @@ def get_audio_binary():
     return path_to_binary
 
 
-def convert_mp3(af_local_path):
+def convert_mp3(af_local_path, response):
+    """Convert to MP3
+
+    :param af_local_path:
+    :param response:
+    :return:
+    """
     av_path = get_audio_binary()
     tmp_path = os.path.join("/tmp", "audio_" + uuid.uuid4().hex + ".mp3")
-
     av_command = [
         av_path,
         "-i",
@@ -52,17 +58,18 @@ def convert_mp3(af_local_path):
     ]
     try:
         _ = subprocess.check_output(av_command, stderr=subprocess.STDOUT)
-
+        response.headers["err"] = None
+        file_data = codecs.open(tmp_path, "rb").read()
     except subprocess.CalledProcessError as e:
-        print(
-            "%s failed command: %s\nerror code: %s\noutput: %s\n%s"
-            % (
-                av_path,
-                av_command,
-                e.returncode,
-                e.output,
-                traceback.format_exc(),
-            )
+        file_data = ""
+        response.headers[
+            "err"
+        ] = "%s failed command: %s\nerror code: %s\noutput: %s\n%s" % (
+            av_path,
+            av_command,
+            e.returncode,
+            e.output,
+            traceback.format_exc(),
         )
-        raise
-    return tmp_path
+    response.data = file_data
+    return response

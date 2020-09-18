@@ -178,7 +178,7 @@ def get_page_count(path, extension):
     if extension == "pdf":
         try:
             reader = PdfFileReader(path)
-            return int(reader.getNumPages())
+            pg_count = int(reader.getNumPages())
         except (
             IOError,
             ValueError,
@@ -192,6 +192,7 @@ def get_page_count(path, extension):
             # TypeError: NumberObject has no attribute '__getitem__'. Ugh.
             # KeyError, AssertionError: assert xrefstream["/Type"] == "/XRef". WTF?
             # PdfReadError: Something else. I have no words.
+            return None, "Error"
             pass
     elif extension == "wpd":
         # Best solution appears to be to dig into the binary format
@@ -200,7 +201,7 @@ def get_page_count(path, extension):
         # Best solution appears to be to dig into the XML of the file
         # itself: http://stackoverflow.com/a/12972502/64911
         pass
-    return None
+    return pg_count, None
 
 
 def rasterize_pdf(path, destination):
@@ -267,38 +268,30 @@ def extract_by_ocr(tmp):
     return True, txt
 
 
-def make_png_thumbnail_for_instance(filepath, max_dimension):
+def make_png_thumbnail_for_instance(filepath, max_dimension, response):
     """Abstract function for making a thumbnail for a PDF
 
     See helper functions below for how to use this in a simple way.
 
     :param filepath: The attr where the PDF is located on the item
     :param max_dimension: The longest you want any edge to be
+    :param response: Flask response object
     """
-    # item = InstanceClass.objects.get(pk=pk)
+
     command = [
         "pdftoppm",
-        "-png",
-        filepath,
-        # Start and end on the first page
+        "-singlefile",
         "-f",
         "1",
-        "-l",
-        "1",
-        # Set the max dimension (generally the height). Alas, we can't just
-        # set the width, so this is our only hope.
         "-scale-to",
         str(max_dimension),
+        filepath,
+        "-png",
     ]
-
-    # Note that pdftoppm adds things like -01.png to the end of whatever
-    # filename you give it, which makes using a temp file difficult. But,
-    # if you don't give it an output file, it'll send the result to stdout,
-    # so that's why we are capturing it here.
     p = subprocess.Popen(
         command, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = p.communicate()
-    if p.returncode != 0:
-        return p.returncode, False
-    return stdout, True
+    response.data = stdout
+    response.headers["err"] = stderr
+    return response

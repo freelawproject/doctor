@@ -47,7 +47,7 @@ class DockerTestBase(TestCase):
             container.stop()
 
     def send_file_to_bte(self, filepath, do_ocr=False):
-        """Send file to extract doc content
+        """Send file to extract doc content method.
 
         :param filepath:
         :param do_ocr:
@@ -62,7 +62,7 @@ class DockerTestBase(TestCase):
         ).json()
 
     def send_file_to_pdftotext(self, filepath):
-        """Send file to extract doc content
+        """Send file to pdftotext method.
 
         :param filepath:
         :param do_ocr:
@@ -88,7 +88,7 @@ class DockerTestBase(TestCase):
             files={"file": (os.path.basename(filepath), f)},
         )
 
-    def send_file_to_thumbnail_generation(self, filepath, max_dimensions=350):
+    def send_file_to_thumbnail_generation(self, filepath, max_dimension=350):
         """Send file to extract doc content
 
         :param filepath:
@@ -100,11 +100,11 @@ class DockerTestBase(TestCase):
         return requests.post(
             "%s/make_png_thumbnail" % self.base_url,
             files={"file": (os.path.basename(filepath), f)},
-            params={"max_dimensions": max_dimensions},
+            params={"max_dimension": max_dimension},
         )
 
     def test_heartbeat(self):
-        """Can we start container and check heartbeat test?"""
+        """Check heartbeat?"""
         response = requests.get(self.base_url).json()
         self.assertTrue(response["success"], msg="Failed heartbeat test.")
         print(response)
@@ -117,8 +117,6 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            # extraction = response["content"]
-            print(response)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -128,7 +126,7 @@ class DocumentConversionTests(DockerTestBase):
             print("Extracted content from .pdf successfully")
 
     def test_direct_text_based_pdf_extraction(self):
-        """Can we extract text from a text pdf?"""
+        """Can we extract text from a text based pdf?"""
         for filepath in iglob(
             os.path.join(self.assets_dir, "opinion_pdf*.pdf")
         ):
@@ -190,7 +188,7 @@ class DocumentConversionTests(DockerTestBase):
             print("Extracted content from .html successfully")
 
     def test_convert_txt_to_txt(self):
-        """Can we start container and check sanity test?"""
+        """Can we extract text from a txt document?"""
         for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
             answer = self.doc_answers[filepath.split("/")[-1]]
@@ -202,7 +200,7 @@ class DocumentConversionTests(DockerTestBase):
             print("Extracted content from .txt successfully")
 
     def test_bad_txt_extraction(self):
-        """Can we process txt files with bad encoding?"""
+        """Can we extract text from a txt document with bad encoding?"""
         for filepath in iglob(
             os.path.join(self.assets_dir, "txt_file_with_no_encoding*.txt")
         ):
@@ -241,15 +239,16 @@ class ThumbnailGenerationTests(DockerTestBase):
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate a pdf to thumbnail?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
-            thumbnail = self.send_file_to_thumbnail_generation(
-                filepath
-            ).content
-            self.assertTrue(thumbnail[1], msg="Thumbnail failed to generate.")
+            thumb_path = filepath.replace(".pdf", "_thumbnail.png")
+            with open(thumb_path, "rb") as f:
+                test_thumbnail = f.read()
+            response = self.send_file_to_thumbnail_generation(filepath)
+            self.assertEqual(response.content, test_thumbnail)
             print("Generated thumbnail from .pdf successfully")
 
 
 class PageCountTests(DockerTestBase):
-    """Can we get page counts"""
+    """Can we get page counts?"""
 
     def send_file_to_pg_count(self, filepath):
         """Send file to extract page count.
@@ -266,6 +265,7 @@ class PageCountTests(DockerTestBase):
 
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
+
         counts = [1, 30]
         for count, filepath in zip(
             counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
@@ -276,6 +276,22 @@ class PageCountTests(DockerTestBase):
             )
             print("Successfully returned page count √")
 
+
+# class TimeoutTests(DockerTestBase):
+#
+#     def test_time_out(self):
+#         try:
+#             response = requests.get(self.base_url, timeout=5).json()
+#             # self.assertTrue(response["success"], msg="Failed heartbeat test.")
+#             print(response)
+#         except requests.exceptions.Timeout:
+#             cd = {'err': requests.exceptions.Timeout}
+#
+#             if cd['err'] == requests.exceptions.Timeout:
+#                 print("TIMED OUT")
+#                 # import time
+#                 # time.sleep(30)
+#                 print("30 seconds")
 
 if __name__ == "__main__":
     unittest.main()

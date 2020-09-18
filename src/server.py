@@ -1,6 +1,6 @@
 from tempfile import NamedTemporaryFile
 
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify, make_response
 
 from src.utils.audio import convert_mp3
 from src.utils.tasks import (
@@ -26,15 +26,15 @@ def heartbeat():
     :return: success response
     :type: dict
     """
-    return {"success": True, "msg": "Docker container running."}
+    return jsonify({"success": True, "msg": "Docker container running."})
 
 
 @app.route("/extract_doc_content", methods=["POST"])
 def extract_content():
-    """Pass documents to extract content
+    """Extract txt from different document types.
 
-    :return: Content of documents
-    :type: str
+    :return: The content of a document/error message.
+    :type: json object
     """
 
     f = request.files["file"]
@@ -81,30 +81,47 @@ def extract_content():
 
 @app.route("/convert_audio_file", methods=["POST"])
 def convert_audio_file():
+    """Convert an audio file to MP3 and return it
+
+    :return: MP3 audio file
+    :type: HTTPS response
+    """
+    response = make_response()
     f = request.files["file"]
     with NamedTemporaryFile() as tmp:
         f.save(tmp.name)
-        converted_file = convert_mp3(tmp.name)
-        return send_file(converted_file)
+        return convert_mp3(tmp.name, response)
 
 
 @app.route("/make_png_thumbnail", methods=["POST"])
 def make_png_thumbnail():
+    """Make a thumbail of the first page of a PDF and return it.
+
+    :return: A response containing our file and any errors
+    :type: HTTPS response
+    """
+    response = make_response()
     f = request.files["file"]
-    max_dimension = request.args.get("max_dimension")
-    extension = f.filename.split(".")[-1]
-    with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
+    max_dimension = int(request.args.get("max_dimension"))
+    with NamedTemporaryFile(suffix=".%s" % "pdf") as tmp:
         f.save(tmp.name)
-        return make_png_thumbnail_for_instance(tmp.name, max_dimension)
+        return make_png_thumbnail_for_instance(
+            tmp.name, max_dimension, response
+        )
 
 
 @app.route("/get_page_count", methods=["POST"])
 def pg_count():
+    """
+
+    :return:
+    """
     f = request.files["file"]
     extension = f.filename.split(".")[-1]
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
-        return jsonify({"pg_count": get_page_count(tmp.name, extension)})
+        content, err = get_page_count(tmp.name, extension)
+        return jsonify({"pg_count": content, "err": err})
 
 
 @app.route("/make_pdftotext_process", methods=["POST"])
@@ -118,7 +135,7 @@ def pdf_to_text():
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
         content, err = make_pdftotext_process(tmp.name)
-        return jsonify({"content": content, "success": err})
+        return jsonify({"content": content, "err": err})
 
 
 if __name__ == "__main__":
