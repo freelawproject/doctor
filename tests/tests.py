@@ -88,7 +88,7 @@ class DockerTestBase(TestCase):
             files={"file": (os.path.basename(filepath), f)},
         )
 
-    def send_file_to_thumbnail_generation(self, filepath, max_dimensions=350):
+    def send_file_to_thumbnail_generation(self, filepath, max_dimension=350):
         """Send file to extract doc content
 
         :param filepath:
@@ -100,7 +100,7 @@ class DockerTestBase(TestCase):
         return requests.post(
             "%s/make_png_thumbnail" % self.base_url,
             files={"file": (os.path.basename(filepath), f)},
-            params={"max_dimensions": max_dimensions},
+            params={"max_dimension": max_dimension},
         )
 
     def test_heartbeat(self):
@@ -117,8 +117,6 @@ class DocumentConversionTests(DockerTestBase):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            # extraction = response["content"]
-            print(response)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -241,10 +239,11 @@ class ThumbnailGenerationTests(DockerTestBase):
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate a pdf to thumbnail?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
-            thumbnail = self.send_file_to_thumbnail_generation(
-                filepath
-            ).content
-            self.assertTrue(thumbnail[1], msg="Thumbnail failed to generate.")
+            thumb_path = filepath.replace(".pdf", "_thumbnail.png")
+            with open(thumb_path, "rb") as f:
+                test_thumbnail = f.read()
+            response = self.send_file_to_thumbnail_generation(filepath)
+            self.assertEqual(response.content, test_thumbnail)
             print("Generated thumbnail from .pdf successfully")
 
 
@@ -277,6 +276,22 @@ class PageCountTests(DockerTestBase):
             )
             print("Successfully returned page count √")
 
+
+# class TimeoutTests(DockerTestBase):
+#
+#     def test_time_out(self):
+#         try:
+#             response = requests.get(self.base_url, timeout=5).json()
+#             # self.assertTrue(response["success"], msg="Failed heartbeat test.")
+#             print(response)
+#         except requests.exceptions.Timeout:
+#             cd = {'err': requests.exceptions.Timeout}
+#
+#             if cd['err'] == requests.exceptions.Timeout:
+#                 print("TIMED OUT")
+#                 # import time
+#                 # time.sleep(30)
+#                 print("30 seconds")
 
 if __name__ == "__main__":
     unittest.main()
