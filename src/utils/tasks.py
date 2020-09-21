@@ -1,8 +1,9 @@
+import io
 import subprocess
 from tempfile import NamedTemporaryFile
 
 import magic
-from PyPDF2 import PdfFileReader
+from PyPDF2 import PdfFileReader, PdfFileMerger
 from PyPDF2.utils import PdfReadError
 from lxml.etree import XMLSyntaxError
 from lxml.html.clean import Cleaner
@@ -295,3 +296,33 @@ def make_png_thumbnail_for_instance(filepath, max_dimension, response):
     response.data = stdout
     response.headers["err"] = stderr
     return response
+
+
+def make_pdf_from_image_array(image_list):
+    """Make a pdf given an array of Image files
+
+    :param image_list: List of images
+    :type image_list: list
+    :return: pdf_data
+    :type pdf_data: PDF as bytes
+    """
+    with io.BytesIO() as output:
+        image_list[0].save(
+            output,
+            "PDF",
+            resolution=100.0,
+            save_all=True,
+            append_images=image_list[1:],
+        )
+        pdf_data = output.getvalue()
+
+    return pdf_data
+
+
+def strip_metadata(pdf_content):
+    pdf_merger = PdfFileMerger()
+    pdf_merger.append(io.BytesIO(pdf_content))
+    pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
+    byte_writer = io.BytesIO()
+    pdf_merger.write(byte_writer)
+    return force_bytes(byte_writer.getvalue())
