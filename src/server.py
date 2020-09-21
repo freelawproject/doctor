@@ -17,7 +17,8 @@ from src.utils.tasks import (
     rasterize_pdf,
     make_png_thumbnail_for_instance,
     get_page_count,
-    make_pdf_from_image_array, strip_metadata,
+    make_pdf_from_image_array,
+    strip_metadata,
 )
 
 app = Flask(__name__)
@@ -184,7 +185,7 @@ def financial_document():
             fd = process_financial_document(file_path=tmp.name, show_logs=True)
             return jsonify(fd)
         except Exception as e:
-            return jsonify({"err":str(e)})
+            return jsonify({"err": str(e)})
 
 
 if __name__ == "__main__":

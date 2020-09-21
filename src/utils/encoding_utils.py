@@ -18,7 +18,7 @@ class BTEUnicodeDecodeError(UnicodeDecodeError):
         )
 
 
-def force_bytes(s, encoding='utf-8', strings_only=False, errors='strict'):
+def force_bytes(s, encoding="utf-8", strings_only=False, errors="strict"):
     """
     Similar to smart_bytes, except that lazy instances are resolved to
     strings, rather than kept as lazy objects.
@@ -27,10 +27,10 @@ def force_bytes(s, encoding='utf-8', strings_only=False, errors='strict'):
     """
     # Handle the common case first for performance reasons.
     if isinstance(s, bytes):
-        if encoding == 'utf-8':
+        if encoding == "utf-8":
             return s
         else:
-            return s.decode('utf-8', errors).encode(encoding, errors)
+            return s.decode("utf-8", errors).encode(encoding, errors)
     if strings_only and is_protected_type(s):
         return s
     if isinstance(s, six.memoryview):
@@ -48,8 +48,10 @@ def force_bytes(s, encoding='utf-8', strings_only=False, errors='strict'):
                 # An Exception subclass containing non-ASCII data that doesn't
                 # know how to print itself properly. We shouldn't raise a
                 # further exception.
-                return b' '.join(force_bytes(arg, encoding, strings_only, errors)
-                                 for arg in s)
+                return b" ".join(
+                    force_bytes(arg, encoding, strings_only, errors)
+                    for arg in s
+                )
             return six.text_type(s).encode(encoding, errors)
     else:
         return s.encode(encoding, errors)
