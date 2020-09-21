@@ -1,6 +1,9 @@
 from tempfile import NamedTemporaryFile
 
-from flask import Flask, request, jsonify, make_response
+import requests
+from PIL import Image
+from disclosure_extractor import process_financial_document
+from flask import Flask, request, jsonify, make_response, send_file
 
 from src.utils.audio import convert_mp3
 from src.utils.tasks import (
