@@ -1,8 +1,10 @@
+disclosure-extractor
 flask
 ipython
 requests
 eyeD3==0.7.11
 lxml~=4.0
 six
+Pillow
 PyPDF2==1.26.0
 python-magic
