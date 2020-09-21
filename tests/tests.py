@@ -116,6 +116,8 @@ class DocumentConversionTests(DockerTestBase):
     def test_convert_pdf_to_txt(self):
         """Can we convert an image pdf to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
+            if "tiff_to_pdf.pdf" in filepath:
+                continue
             response = self.send_file_to_bte(filepath, do_ocr=True)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
@@ -239,6 +241,8 @@ class ThumbnailGenerationTests(DockerTestBase):
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate a pdf to thumbnail?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
+            if "tiff_to_pdf.pdf" in filepath:
+                continue
             thumb_path = filepath.replace(".pdf", "_thumbnail.png")
             with open(thumb_path, "rb") as f:
                 test_thumbnail = f.read()
@@ -266,9 +270,9 @@ class PageCountTests(DockerTestBase):
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
 
-        counts = [1, 30]
+        counts = [30, 1, 6]
         for count, filepath in zip(
-            counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
+            counts, sorted(iglob(os.path.join(self.assets_dir, "*.pdf")))
         ):
             response = self.send_file_to_pg_count(filepath)
             self.assertEqual(
@@ -277,21 +281,38 @@ class PageCountTests(DockerTestBase):
             print("Successfully returned page count √")
 
 
-# class TimeoutTests(DockerTestBase):
-#
-#     def test_time_out(self):
-#         try:
-#             response = requests.get(self.base_url, timeout=5).json()
-#             # self.assertTrue(response["success"], msg="Failed heartbeat test.")
-#             print(response)
-#         except requests.exceptions.Timeout:
-#             cd = {'err': requests.exceptions.Timeout}
-#
-#             if cd['err'] == requests.exceptions.Timeout:
-#                 print("TIMED OUT")
-#                 # import time
-#                 # time.sleep(30)
-#                 print("30 seconds")
+class FinancialDisclosureTests(DockerTestBase):
+    """Test financial dislcosure conversion and extraction"""
+
+    def test_image_url_to_pdf(self):
+        """Test image at URL to PDF conversion"""
+        url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
+        response = requests.post(
+            "%s/image_to_pdf_from_url" % self.base_url,
+            params={"url": url},
+        )
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+
+        with open(pdf_path, "rb") as f:
+            answer = f.read()
+        self.assertEqual(
+            response.content, answer, msg="Image to PDF conversion failed."
+        )
+
+    def test_financial_disclosure_extractor(self):
+        """Test financial disclosure extraction"""
+
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+        response = requests.post(
+            "%s/extract_financial_document" % self.base_url,
+            files={"file": (os.path.basename(pdf_path), f)},
+        )
+        self.assertTrue(
+            response.json()["success"], msg="Disclosure extraction failed."
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

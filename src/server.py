@@ -1,6 +1,9 @@
 from tempfile import NamedTemporaryFile
 
-from flask import Flask, request, jsonify, make_response
+import requests
+from PIL import Image
+from disclosure_extractor import process_financial_document
+from flask import Flask, request, jsonify, make_response, send_file
 
 from src.utils.audio import convert_mp3
 from src.utils.tasks import (
@@ -14,6 +17,8 @@ from src.utils.tasks import (
     rasterize_pdf,
     make_png_thumbnail_for_instance,
     get_page_count,
+    make_pdf_from_image_array,
+    strip_metadata,
 )
 
 app = Flask(__name__)
@@ -136,6 +141,51 @@ def pdf_to_text():
         f.save(tmp.name)
         content, err = make_pdftotext_process(tmp.name)
         return jsonify({"content": content, "err": err})
+
+
+@app.route("/image_to_pdf_from_url", methods=["POST"])
+def generate_pdf_from_image_url():
+    """Take a single image tiff and convert it into a multipage PDF.
+
+    Download a single image and split it into its component pages.
+    :param aws_url: URL of image file we want to process
+    :type aws_url: str
+    :return: PDF
+    """
+    response = make_response()
+    url = request.args.get("url")
+    try:
+        img = Image.open(requests.get(url, stream=True).raw)
+    except TimeoutError:
+        response.headers["err"] = "Timeout occurred"
+        return response
+    width, height = img.size
+    image_list = []
+    i, page_width, page_height = 0, width, (1046 * (float(width) / 792))
+    while i < (height / page_height):
+        image = img.crop(
+            (0, (i * page_height), page_width, (i + 1) * page_height)
+        )
+        image_list.append(image)
+        i += 1
+
+    pdf_bytes = make_pdf_from_image_array(image_list)
+    clean_pdf = strip_metadata(pdf_bytes)
+    response.data = clean_pdf
+    response.headers["err"] = ""
+    return response
+
+
+@app.route("/extract_financial_document", methods=["POST"])
+def financial_document():
+    f = request.files["file"]
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
+        f.save(tmp.name)
+        try:
+            fd = process_financial_document(file_path=tmp.name, show_logs=True)
+            return jsonify(fd)
+        except Exception as e:
+            return jsonify({"err": str(e)})
 
 
 if __name__ == "__main__":
