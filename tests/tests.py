@@ -241,6 +241,8 @@ class ThumbnailGenerationTests(DockerTestBase):
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate a pdf to thumbnail?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
+            if "tiff_to_pdf.pdf" in filepath:
+                continue
             thumb_path = filepath.replace(".pdf", "_thumbnail.png")
             with open(thumb_path, "rb") as f:
                 test_thumbnail = f.read()
@@ -268,7 +270,7 @@ class PageCountTests(DockerTestBase):
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
 
-        counts = [1, 30]
+        counts = [6, 1, 30]
         for count, filepath in zip(
             counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
         ):
