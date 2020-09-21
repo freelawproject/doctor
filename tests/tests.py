@@ -270,9 +270,9 @@ class PageCountTests(DockerTestBase):
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
 
-        counts = [6, 1, 30]
+        counts = [30, 1, 6]
         for count, filepath in zip(
-            counts, iglob(os.path.join(self.assets_dir, "*.pdf"))
+            counts, sorted(iglob(os.path.join(self.assets_dir, "*.pdf")))
         ):
             response = self.send_file_to_pg_count(filepath)
             self.assertEqual(
