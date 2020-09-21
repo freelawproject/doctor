@@ -14,6 +14,7 @@ from src.utils.tasks import (
     rasterize_pdf,
     make_png_thumbnail_for_instance,
     get_page_count,
+    make_pdf_from_image_array, strip_metadata,
 )
 
 app = Flask(__name__)
