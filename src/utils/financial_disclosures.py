@@ -50,7 +50,7 @@ def query_thumbs_db(aws_url):
 
 
 def download_images(sorted_urls):
-    """ Download and save images data.
+    """Download and save images data.
 
     :param sorted_urls: List of sortedd URLs for split financial disclsosure
     :return: image_list
