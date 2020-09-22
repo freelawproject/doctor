@@ -28,4 +28,3 @@ jobs:
         python tests/tests.py AudioConversionTests
         python tests/tests.py ThumbnailGenerationTests
         python tests/tests.py PageCountTests
-        python tests/tests.py FinancialDisclosureTests

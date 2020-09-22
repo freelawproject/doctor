@@ -281,23 +281,39 @@ class PageCountTests(DockerTestBase):
             print("Successfully returned page count √")
 
 
+# These tests aren't automatically triggered by github actions because I have not
+# properly mocked them to avoid hitting AWS and testing properly. They do work
+# when called though.
 class FinancialDisclosureTests(DockerTestBase):
     """Test financial dislcosure conversion and extraction"""
 
     def test_image_url_to_pdf(self):
         """Test image at URL to PDF conversion"""
-        url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
-        response = requests.post(
-            "%s/image_to_pdf_from_url" % self.base_url,
-            params={"url": url},
-        )
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-
         with open(pdf_path, "rb") as f:
             answer = f.read()
+
+        url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
+        response = requests.post(
+            "%s/financial_disclosure/single_image" % self.base_url,
+            params={"url": url},
+        )
         self.assertEqual(
             response.content, answer, msg="Image to PDF conversion failed."
         )
+
+    def test_combine_images_into_pdf(self):
+        """Can we post and combine multiple images into a pdf?"""
+        test_file = os.path.join(
+            self.root, "test_assets", "fd", "Straub-CJ.pdf"
+        )
+        test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
+        with open(test_file, "rb") as f:
+            answer = f.read()
+        service = "%s/financial_disclosure/multi_image" % self.base_url
+        response = requests.post(service, params={"aws_path": test_key})
+        self.assertEqual(response.content, answer, msg="Failed to split tiffs")
+        print("Images combined correctly from AWS √")
 
     def test_financial_disclosure_extractor(self):
         """Test financial disclosure extraction"""
@@ -306,7 +322,7 @@ class FinancialDisclosureTests(DockerTestBase):
         with open(pdf_path, "rb") as file:
             f = file.read()
         response = requests.post(
-            "%s/extract_financial_document" % self.base_url,
+            "%s/financial_disclosure/extract" % self.base_url,
             files={"file": (os.path.basename(pdf_path), f)},
         )
         self.assertTrue(

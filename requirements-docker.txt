@@ -8,3 +8,4 @@ six
 Pillow
 PyPDF2==1.26.0
 python-magic
+boto3==1.9.38
