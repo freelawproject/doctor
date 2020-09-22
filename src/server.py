@@ -6,6 +6,7 @@ from disclosure_extractor import process_financial_document
 from flask import Flask, request, jsonify, make_response, send_file
 
 from src.utils.audio import convert_mp3
+from src.utils.financial_disclosures import query_thumbs_db, download_images
 from src.utils.tasks import (
     extract_from_docx,
     extract_from_doc,
@@ -22,6 +23,7 @@ from src.utils.tasks import (
 )
 
 app = Flask(__name__)
+
 
 
 @app.route("/")
@@ -117,7 +119,7 @@ def make_png_thumbnail():
 
 @app.route("/get_page_count", methods=["POST"])
 def pg_count():
-    """
+    """ Get page count form PDF
 
     :return:
     """
@@ -143,7 +145,9 @@ def pdf_to_text():
         return jsonify({"content": content, "err": err})
 
 
-@app.route("/image_to_pdf_from_url", methods=["POST"])
+# ------- Financial Disclosure Microservice requests ------- #
+
+@app.route("/financial_disclosure/single_image", methods=["POST"])
 def generate_pdf_from_image_url():
     """Take a single image tiff and convert it into a multipage PDF.
 
@@ -176,8 +180,26 @@ def generate_pdf_from_image_url():
     return response
 
 
-@app.route("/extract_financial_document", methods=["POST"])
-def financial_document():
+@app.route("/financial_disclosure/multi_image", methods=["POST"])
+def make_pdf_from_images():
+    """ Query, download and combine multiple images into a PDF
+
+    :return: PDF
+    """
+    aws_path = request.args.get("aws_path")
+    sorted_urls, lookup = query_thumbs_db(aws_path)
+    image_list = download_images(sorted_urls)
+    pdf_content = make_pdf_from_image_array(image_list)
+    clean_pdf = strip_metadata(pdf_content)
+    return clean_pdf
+
+
+@app.route("/financial_disclosure/extract", methods=["POST"])
+def financial_disclosure_extract():
+    """ Extract content from a financial disclsosure PDF.
+
+    :return:
+    """
     f = request.files["file"]
     with NamedTemporaryFile(suffix=".pdf") as tmp:
         f.save(tmp.name)
