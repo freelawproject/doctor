@@ -25,7 +25,6 @@ from src.utils.tasks import (
 app = Flask(__name__)
 
 
-
 @app.route("/")
 def heartbeat():
     """Heartbeat
@@ -119,7 +118,7 @@ def make_png_thumbnail():
 
 @app.route("/get_page_count", methods=["POST"])
 def pg_count():
-    """ Get page count form PDF
+    """Get page count form PDF
 
     :return:
     """
@@ -146,6 +145,7 @@ def pdf_to_text():
 
 
 # ------- Financial Disclosure Microservice requests ------- #
+
 
 @app.route("/financial_disclosure/single_image", methods=["POST"])
 def generate_pdf_from_image_url():
@@ -182,7 +182,7 @@ def generate_pdf_from_image_url():
 
 @app.route("/financial_disclosure/multi_image", methods=["POST"])
 def make_pdf_from_images():
-    """ Query, download and combine multiple images into a PDF
+    """Query, download and combine multiple images into a PDF
 
     :return: PDF
     """
@@ -196,7 +196,7 @@ def make_pdf_from_images():
 
 @app.route("/financial_disclosure/extract", methods=["POST"])
 def financial_disclosure_extract():
-    """ Extract content from a financial disclsosure PDF.
+    """Extract content from a financial disclsosure PDF.
 
     :return:
     """
