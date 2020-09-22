@@ -187,11 +187,14 @@ def make_pdf_from_images():
     :return: PDF
     """
     aws_path = request.args.get("aws_path")
+    response = make_response()
     sorted_urls, lookup = query_thumbs_db(aws_path)
     image_list = download_images(sorted_urls)
     pdf_content = make_pdf_from_image_array(image_list)
     clean_pdf = strip_metadata(pdf_content)
-    return clean_pdf
+    response.data = clean_pdf
+    response.headers["lookup"] = lookup
+    return response
 
 
 @app.route("/financial_disclosure/extract", methods=["POST"])
