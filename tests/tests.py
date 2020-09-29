@@ -348,7 +348,13 @@ class FinancialDisclosureTests(DockerTestBase):
     def test_extract_judicial_watch_fd(self):
         """Can we extract a judicial watch document?"""
 
-        url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"
+        pdf_path = os.path.join(
+            self.root, "test_assets", "fd", "2003-judicial-watch.pdf"
+        )
+        # tests/test_assets/fd/2012-Straub-CJ.pdf
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+
         response = requests.post(
             "%s/financial_disclosure/jw_extract" % self.base_url,
             files=None,
@@ -358,6 +364,20 @@ class FinancialDisclosureTests(DockerTestBase):
         self.assertTrue(response.json()["success"], msg="JW document failed")
         print(response.content)
 
+    def test_extract_large_fd_document(self):
+        """Can we extract a normal FD document?"""
+
+        response = requests.post(
+            "%s/financial_disclosure/jw_extract" % self.base_url,
+            files=None,
+            params={"url": "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"},
+            timeout=60 * 60,
+        )
+        self.assertTrue(
+            response.json()["success"],
+            msg="Fiancial disclosure document parsing failed.",
+        )
+        print(response.json())
 
 
 if __name__ == "__main__":
