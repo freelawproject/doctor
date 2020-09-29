@@ -2,8 +2,12 @@ from tempfile import NamedTemporaryFile
 
 import requests
 from PIL import Image
-from disclosure_extractor import process_financial_document
-from flask import Flask, request, jsonify, make_response, send_file
+from disclosure_extractor import (
+    process_financial_document,
+    process_judicial_watch,
+    print_results,
+)
+from flask import Flask, request, jsonify, make_response
 
 from src.utils.audio import convert_mp3
 from src.utils.financial_disclosures import query_thumbs_db, download_images
@@ -199,18 +203,50 @@ def make_pdf_from_images():
 
 @app.route("/financial_disclosure/extract", methods=["POST"])
 def financial_disclosure_extract():
-    """Extract content from a financial disclsosure PDF.
+    """Extract content from a financial disclosure.
 
     :return:
     """
-    f = request.files["file"]
+    url = request.args.get("url")
+    f = request.files.get("file", None)
+    if url is not None:
+        download = requests.get(url, timeout=60 * 10)
+        with NamedTemporaryFile(suffix=".pdf") as tmp:
+            tmp.write(download.content)
+            fd = process_financial_document(file_path=tmp.name, show_logs=True)
+            print_results(fd)
+            return jsonify(fd)
+    elif request.files.get("file", None) is None:
+        return jsonify({"err": "No file posted"})
     with NamedTemporaryFile(suffix=".pdf") as tmp:
         f.save(tmp.name)
-        try:
-            fd = process_financial_document(file_path=tmp.name, show_logs=True)
+        fd = process_financial_document(file_path=tmp.name, show_logs=True)
+        print_results(fd)
+        return jsonify(fd)
+
+
+@app.route("/financial_disclosure/jw_extract", methods=["POST"])
+def judical_watch_extract():
+    """Extract content from an older JW financial disclosure.
+
+    :return: Disclosure information
+    """
+    url = request.args.get("url")
+    f = request.files.get("file", None)
+    if url is not None:
+        download = requests.get(url, timeout=60 * 10)
+        with NamedTemporaryFile(suffix=".pdf") as tmp:
+            tmp.write(download.content)
+            fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
+            print_results(fd)
             return jsonify(fd)
-        except Exception as e:
-            return jsonify({"err": str(e)})
+    elif request.files.get("file", None) is None:
+        return jsonify({"err": "No file posted"})
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
+        f.save(tmp.name)
+        fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
+        print_results(fd)
+        return jsonify(fd)
 
 
 if __name__ == "__main__":
