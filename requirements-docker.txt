@@ -1,4 +1,4 @@
-disclosure-extractor
+disclosure-extractor==0.0.6
 flask
 ipython
 requests

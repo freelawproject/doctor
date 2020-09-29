@@ -2,8 +2,12 @@ from tempfile import NamedTemporaryFile
 
 import requests
 from PIL import Image
-from disclosure_extractor import process_financial_document
-from flask import Flask, request, jsonify, make_response, send_file
+from disclosure_extractor import (
+    process_financial_document,
+    process_judicial_watch,
+    print_results,
+)
+from flask import Flask, request, jsonify, make_response
 
 from src.utils.audio import convert_mp3
 from src.utils.financial_disclosures import query_thumbs_db, download_images
@@ -145,8 +149,6 @@ def pdf_to_text():
 
 
 # ------- Financial Disclosure Microservice requests ------- #
-
-
 @app.route("/financial_disclosure/single_image", methods=["POST"])
 def generate_pdf_from_image_url():
     """Take a single image tiff and convert it into a multipage PDF.
@@ -199,18 +201,44 @@ def make_pdf_from_images():
 
 @app.route("/financial_disclosure/extract", methods=["POST"])
 def financial_disclosure_extract():
-    """Extract content from a financial disclsosure PDF.
+    """Extract content from a financial disclosure.
 
     :return:
     """
-    f = request.files["file"]
-    with NamedTemporaryFile(suffix=".pdf") as tmp:
-        f.save(tmp.name)
-        try:
-            fd = process_financial_document(file_path=tmp.name, show_logs=True)
-            return jsonify(fd)
-        except Exception as e:
-            return jsonify({"err": str(e)})
+    url = request.args.get("url")
+    file = request.files.get("file", None)
+    if url is not None:
+        pdf = requests.get(url, timeout=60 * 10).content
+    elif file is not None:
+        pdf = file.read()
+    else:
+        return jsonify({"err": "No file posted"})
+
+    fd = process_financial_document(pdf_bytes=pdf, show_logs=True)
+    if fd["success"] is True:
+        print_results(fd)
+    return jsonify(fd)
+
+
+@app.route("/financial_disclosure/jw_extract", methods=["POST"])
+def judical_watch_extract():
+    """Extract content from an older JW financial disclosure.
+
+    :return: Disclosure information
+    """
+    url = request.args.get("url")
+    file = request.files.get("file", None)
+    if url is not None:
+        pdf = requests.get(url, timeout=60 * 10).content
+    elif file is not None:
+        pdf = file.read()
+    else:
+        return jsonify({"err": "No file posted"})
+    fd = process_judicial_watch(pdf_bytes=pdf, show_logs=True)
+    if fd["success"] is True:
+        print_results(fd)
+
+    return jsonify(fd)
 
 
 if __name__ == "__main__":

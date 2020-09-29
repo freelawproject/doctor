@@ -280,13 +280,67 @@ class PageCountTests(DockerTestBase):
             )
             print("Successfully returned page count √")
 
+    def test_post_pdf_data(self):
+        """Can we send pdf as a file and get a response?"""
+        service = "%s/%s" % (self.base_url, "get_page_count")
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+
+        response = requests.post(
+            url=service,
+            files={"file": (os.path.basename(pdf_path), f)},
+            timeout=60,
+        ).json()
+        self.assertEqual(response["pg_count"], 6)
+
+
+class FinancialDisclosureTests(DockerTestBase):
+    """Test financial dislcosure conversion and extraction"""
+
+    def test_financial_disclosure_extractor(self):
+        """Test financial disclosure extraction"""
+
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+        response = requests.post(
+            "%s/financial_disclosure/extract" % self.base_url,
+            files={"file": (os.path.basename(pdf_path), f)},
+            timeout=60 * 60,
+        )
+        self.assertTrue(
+            response.json()["success"], msg="Disclosure extraction failed."
+        )
+
+    def test_judicial_watch_document(self):
+        """Can we extract data from a judicial watch document?"""
+        pdf_path = os.path.join(
+            self.root, "test_assets", "fd", "2003-judicial-watch.pdf"
+        )
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+
+        response = requests.post(
+            "%s/financial_disclosure/jw_extract" % self.base_url,
+            files={"file": (os.path.basename(pdf_path), f)},
+            params={"url": None},
+            timeout=60 * 60,
+        )
+        self.assertTrue(
+            response.json()["success"],
+            msg="Fiancial disclosure document parsing failed.",
+        )
+        print(response.json())
+
 
 # These tests aren't automatically triggered by github actions because I have not
 # properly mocked them to avoid hitting AWS and testing properly. They do work
 # when called though.
-class FinancialDisclosureTests(DockerTestBase):
-    """Test financial dislcosure conversion and extraction"""
 
+
+class AWSFinancialDisclosureTests(DockerTestBase):
     def test_image_url_to_pdf(self):
         """Test image at URL to PDF conversion"""
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
@@ -294,6 +348,7 @@ class FinancialDisclosureTests(DockerTestBase):
             answer = f.read()
 
         url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
+        # url = "http://com-courtlistener-storage.s3.amazonaws.com/financial-disclosures/2018/A%20-%20G/Barrett-AC.%20J3.%2007.%20SPE_R_18.tiff"
         response = requests.post(
             "%s/financial_disclosure/single_image" % self.base_url,
             params={"url": url},
@@ -305,7 +360,7 @@ class FinancialDisclosureTests(DockerTestBase):
     def test_combine_images_into_pdf(self):
         """Can we post and combine multiple images into a pdf?"""
         test_file = os.path.join(
-            self.root, "test_assets", "fd", "Straub-CJ.pdf"
+            self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
         )
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:
@@ -314,20 +369,6 @@ class FinancialDisclosureTests(DockerTestBase):
         response = requests.post(service, params={"aws_path": test_key})
         self.assertEqual(response.content, answer, msg="Failed to split tiffs")
         print("Images combined correctly from AWS √")
-
-    def test_financial_disclosure_extractor(self):
-        """Test financial disclosure extraction"""
-
-        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-        with open(pdf_path, "rb") as file:
-            f = file.read()
-        response = requests.post(
-            "%s/financial_disclosure/extract" % self.base_url,
-            files={"file": (os.path.basename(pdf_path), f)},
-        )
-        self.assertTrue(
-            response.json()["success"], msg="Disclosure extraction failed."
-        )
 
 
 if __name__ == "__main__":
