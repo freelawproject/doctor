@@ -220,7 +220,7 @@ def financial_disclosure_extract():
         with NamedTemporaryFile(suffix=".pdf") as tmp:
             f.save(tmp.name)
             fd = process_financial_document(file_path=tmp.name, show_logs=True)
-    if fd['success']:
+    if fd["success"]:
         print_results(fd)
         return jsonify(fd)
     return jsonify({"err": "Failed to parse the document", "success": False})
@@ -248,7 +248,6 @@ def judical_watch_extract():
             return jsonify(fd)
     else:
         return jsonify({"err": "No file posted"})
-
 
 
 if __name__ == "__main__":

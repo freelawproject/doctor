@@ -357,9 +357,9 @@ class FinancialDisclosureTests(DockerTestBase):
 
         response = requests.post(
             "%s/financial_disclosure/jw_extract" % self.base_url,
-            files=None,
-            params={"url": url},
-            timeout=60*60
+            files={"file": (os.path.basename(pdf_path), f)},
+            params={"url": None},
+            timeout=60 * 60,
         )
         self.assertTrue(response.json()["success"], msg="JW document failed")
         print(response.content)
@@ -370,7 +370,9 @@ class FinancialDisclosureTests(DockerTestBase):
         response = requests.post(
             "%s/financial_disclosure/jw_extract" % self.base_url,
             files=None,
-            params={"url": "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"},
+            params={
+                "url": "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"
+            },
             timeout=60 * 60,
         )
         self.assertTrue(
