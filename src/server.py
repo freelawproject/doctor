@@ -214,15 +214,16 @@ def financial_disclosure_extract():
         with NamedTemporaryFile(suffix=".pdf") as tmp:
             tmp.write(download.content)
             fd = process_financial_document(file_path=tmp.name, show_logs=True)
-            print_results(fd)
-            return jsonify(fd)
     elif request.files.get("file", None) is None:
         return jsonify({"err": "No file posted"})
-    with NamedTemporaryFile(suffix=".pdf") as tmp:
-        f.save(tmp.name)
-        fd = process_financial_document(file_path=tmp.name, show_logs=True)
+    else:
+        with NamedTemporaryFile(suffix=".pdf") as tmp:
+            f.save(tmp.name)
+            fd = process_financial_document(file_path=tmp.name, show_logs=True)
+    if fd['success']:
         print_results(fd)
         return jsonify(fd)
+    return jsonify({"err": "Failed to parse the document", "success": False})
 
 
 @app.route("/financial_disclosure/jw_extract", methods=["POST"])
@@ -240,13 +241,14 @@ def judical_watch_extract():
             fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
             print_results(fd)
             return jsonify(fd)
-    elif request.files.get("file", None) is None:
+    elif f is not None:
+        with NamedTemporaryFile(suffix=".pdf") as tmp:
+            f.save(tmp.name)
+            fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
+            return jsonify(fd)
+    else:
         return jsonify({"err": "No file posted"})
-    with NamedTemporaryFile(suffix=".pdf") as tmp:
-        f.save(tmp.name)
-        fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
-        print_results(fd)
-        return jsonify(fd)
+
 
 
 if __name__ == "__main__":

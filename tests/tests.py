@@ -345,7 +345,7 @@ class FinancialDisclosureTests(DockerTestBase):
             response.json()["success"], msg="Disclosure extraction failed."
         )
 
-    def test_extract_judicial_watch_document_url(self):
+    def test_extract_judicial_watch_fd(self):
         """Can we extract a judicial watch document?"""
 
         url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"
