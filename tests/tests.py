@@ -339,7 +339,7 @@ class FinancialDisclosureTests(DockerTestBase):
         response = requests.post(
             "%s/financial_disclosure/extract" % self.base_url,
             files={"file": (os.path.basename(pdf_path), f)},
-            timeout=60 * 60
+            timeout=60 * 60,
         )
         self.assertTrue(
             response.json()["success"], msg="Disclosure extraction failed."
