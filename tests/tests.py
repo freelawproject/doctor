@@ -305,7 +305,7 @@ class FinancialDisclosureTests(DockerTestBase):
     def test_combine_images_into_pdf(self):
         """Can we post and combine multiple images into a pdf?"""
         test_file = os.path.join(
-            self.root, "test_assets", "fd", "Straub-CJ.pdf"
+            self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
         )
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:
@@ -324,10 +324,25 @@ class FinancialDisclosureTests(DockerTestBase):
         response = requests.post(
             "%s/financial_disclosure/extract" % self.base_url,
             files={"file": (os.path.basename(pdf_path), f)},
+            timeout=60 * 60
         )
         self.assertTrue(
             response.json()["success"], msg="Disclosure extraction failed."
         )
+
+    def test_extract_judicial_watch_document_url(self):
+        """Can we extract a judicial watch document?"""
+
+        url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"
+        response = requests.post(
+            "%s/financial_disclosure/jw_extract" % self.base_url,
+            files=None,
+            params={"url": url},
+            timeout=60*60
+        )
+        self.assertTrue(response.json()["success"], msg="JW document failed")
+        print(response.content)
+
 
 
 if __name__ == "__main__":
