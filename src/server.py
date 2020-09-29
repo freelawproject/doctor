@@ -149,8 +149,6 @@ def pdf_to_text():
 
 
 # ------- Financial Disclosure Microservice requests ------- #
-
-
 @app.route("/financial_disclosure/single_image", methods=["POST"])
 def generate_pdf_from_image_url():
     """Take a single image tiff and convert it into a multipage PDF.
@@ -208,22 +206,18 @@ def financial_disclosure_extract():
     :return:
     """
     url = request.args.get("url")
-    f = request.files.get("file", None)
+    file = request.files.get("file", None)
     if url is not None:
-        download = requests.get(url, timeout=60 * 10)
-        with NamedTemporaryFile(suffix=".pdf") as tmp:
-            tmp.write(download.content)
-            fd = process_financial_document(file_path=tmp.name, show_logs=True)
-    elif request.files.get("file", None) is None:
-        return jsonify({"err": "No file posted"})
+        pdf = requests.get(url, timeout=60 * 10).content
+    elif file is not None:
+        pdf = file.read()
     else:
-        with NamedTemporaryFile(suffix=".pdf") as tmp:
-            f.save(tmp.name)
-            fd = process_financial_document(file_path=tmp.name, show_logs=True)
-    if fd["success"]:
+        return jsonify({"err": "No file posted"})
+
+    fd = process_financial_document(pdf_bytes=pdf, show_logs=True)
+    if fd["success"] is True:
         print_results(fd)
-        return jsonify(fd)
-    return jsonify({"err": "Failed to parse the document", "success": False})
+    return jsonify(fd)
 
 
 @app.route("/financial_disclosure/jw_extract", methods=["POST"])
@@ -233,21 +227,18 @@ def judical_watch_extract():
     :return: Disclosure information
     """
     url = request.args.get("url")
-    f = request.files.get("file", None)
+    file = request.files.get("file", None)
     if url is not None:
-        download = requests.get(url, timeout=60 * 10)
-        with NamedTemporaryFile(suffix=".pdf") as tmp:
-            tmp.write(download.content)
-            fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
-            print_results(fd)
-            return jsonify(fd)
-    elif f is not None:
-        with NamedTemporaryFile(suffix=".pdf") as tmp:
-            f.save(tmp.name)
-            fd = process_judicial_watch(file_path=tmp.name, show_logs=True)
-            return jsonify(fd)
+        pdf = requests.get(url, timeout=60 * 10).content
+    elif file is not None:
+        pdf = file.read()
     else:
         return jsonify({"err": "No file posted"})
+    fd = process_judicial_watch(pdf_bytes=pdf, show_logs=True)
+    if fd["success"] is True:
+        print_results(fd)
+
+    return jsonify(fd)
 
 
 if __name__ == "__main__":
