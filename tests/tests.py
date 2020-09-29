@@ -299,7 +299,6 @@ class PageCountTests(DockerTestBase):
 class FinancialDisclosureTests(DockerTestBase):
     """Test financial dislcosure conversion and extraction"""
 
-
     def test_financial_disclosure_extractor(self):
         """Test financial disclosure extraction"""
 
@@ -315,7 +314,6 @@ class FinancialDisclosureTests(DockerTestBase):
             response.json()["success"], msg="Disclosure extraction failed."
         )
 
-
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
         pdf_path = os.path.join(
@@ -327,9 +325,7 @@ class FinancialDisclosureTests(DockerTestBase):
         response = requests.post(
             "%s/financial_disclosure/jw_extract" % self.base_url,
             files={"file": (os.path.basename(pdf_path), f)},
-            params={
-                "url": None
-            },
+            params={"url": None},
             timeout=60 * 60,
         )
         self.assertTrue(
@@ -343,8 +339,8 @@ class FinancialDisclosureTests(DockerTestBase):
 # properly mocked them to avoid hitting AWS and testing properly. They do work
 # when called though.
 
-class AWSFinancialDisclosureTests(DockerTestBase):
 
+class AWSFinancialDisclosureTests(DockerTestBase):
     def test_image_url_to_pdf(self):
         """Test image at URL to PDF conversion"""
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
