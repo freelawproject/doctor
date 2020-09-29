@@ -280,6 +280,21 @@ class PageCountTests(DockerTestBase):
             )
             print("Successfully returned page count √")
 
+    def test_post_pdf_data(self):
+        """Can we send pdf as a file and get a response?"""
+        service = "%s/%s" % (self.base_url, "get_page_count")
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+
+        response = requests.post(
+            url=service,
+            files={"file": (os.path.basename(pdf_path), f)},
+            timeout=60,
+        ).json()
+        self.assertEqual(response["pg_count"], 6)
+
 
 # These tests aren't automatically triggered by github actions because I have not
 # properly mocked them to avoid hitting AWS and testing properly. They do work
