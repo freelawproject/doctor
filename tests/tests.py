@@ -296,11 +296,54 @@ class PageCountTests(DockerTestBase):
         self.assertEqual(response["pg_count"], 6)
 
 
+class FinancialDisclosureTests(DockerTestBase):
+    """Test financial dislcosure conversion and extraction"""
+
+
+    def test_financial_disclosure_extractor(self):
+        """Test financial disclosure extraction"""
+
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+        response = requests.post(
+            "%s/financial_disclosure/extract" % self.base_url,
+            files={"file": (os.path.basename(pdf_path), f)},
+            timeout=60 * 60,
+        )
+        self.assertTrue(
+            response.json()["success"], msg="Disclosure extraction failed."
+        )
+
+
+    def test_judicial_watch_document(self):
+        """Can we extract data from a judicial watch document?"""
+        pdf_path = os.path.join(
+            self.root, "test_assets", "fd", "2003-judicial-watch.pdf"
+        )
+        with open(pdf_path, "rb") as file:
+            f = file.read()
+
+        response = requests.post(
+            "%s/financial_disclosure/jw_extract" % self.base_url,
+            files={"file": (os.path.basename(pdf_path), f)},
+            params={
+                "url": None
+            },
+            timeout=60 * 60,
+        )
+        self.assertTrue(
+            response.json()["success"],
+            msg="Fiancial disclosure document parsing failed.",
+        )
+        print(response.json())
+
+
 # These tests aren't automatically triggered by github actions because I have not
 # properly mocked them to avoid hitting AWS and testing properly. They do work
 # when called though.
-class FinancialDisclosureTests(DockerTestBase):
-    """Test financial dislcosure conversion and extraction"""
+
+class AWSFinancialDisclosureTests(DockerTestBase):
 
     def test_image_url_to_pdf(self):
         """Test image at URL to PDF conversion"""
@@ -309,6 +352,7 @@ class FinancialDisclosureTests(DockerTestBase):
             answer = f.read()
 
         url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
+        # url = "http://com-courtlistener-storage.s3.amazonaws.com/financial-disclosures/2018/A%20-%20G/Barrett-AC.%20J3.%2007.%20SPE_R_18.tiff"
         response = requests.post(
             "%s/financial_disclosure/single_image" % self.base_url,
             params={"url": url},
@@ -329,57 +373,6 @@ class FinancialDisclosureTests(DockerTestBase):
         response = requests.post(service, params={"aws_path": test_key})
         self.assertEqual(response.content, answer, msg="Failed to split tiffs")
         print("Images combined correctly from AWS √")
-
-    def test_financial_disclosure_extractor(self):
-        """Test financial disclosure extraction"""
-
-        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-        with open(pdf_path, "rb") as file:
-            f = file.read()
-        response = requests.post(
-            "%s/financial_disclosure/extract" % self.base_url,
-            files={"file": (os.path.basename(pdf_path), f)},
-            timeout=60 * 60,
-        )
-        self.assertTrue(
-            response.json()["success"], msg="Disclosure extraction failed."
-        )
-
-    def test_extract_judicial_watch_fd(self):
-        """Can we extract a judicial watch document?"""
-
-        pdf_path = os.path.join(
-            self.root, "test_assets", "fd", "2003-judicial-watch.pdf"
-        )
-        # tests/test_assets/fd/2012-Straub-CJ.pdf
-        with open(pdf_path, "rb") as file:
-            f = file.read()
-
-        response = requests.post(
-            "%s/financial_disclosure/jw_extract" % self.base_url,
-            files={"file": (os.path.basename(pdf_path), f)},
-            params={"url": None},
-            timeout=60 * 60,
-        )
-        self.assertTrue(response.json()["success"], msg="JW document failed")
-        print(response.content)
-
-    def test_extract_large_fd_document(self):
-        """Can we extract a normal FD document?"""
-
-        response = requests.post(
-            "%s/financial_disclosure/jw_extract" % self.base_url,
-            files=None,
-            params={
-                "url": "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/A%20F%20Little%20Jr%20Financial%20Disclosure%20Report%20for%202003.pdf"
-            },
-            timeout=60 * 60,
-        )
-        self.assertTrue(
-            response.json()["success"],
-            msg="Fiancial disclosure document parsing failed.",
-        )
-        print(response.json())
 
 
 if __name__ == "__main__":
