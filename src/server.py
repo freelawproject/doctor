@@ -7,7 +7,7 @@ from disclosure_extractor import (
     process_judicial_watch,
     print_results,
 )
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify
 
 from src.utils.audio import convert_mp3
 from src.utils.financial_disclosures import query_thumbs_db, download_images
@@ -88,7 +88,7 @@ def extract_content():
             {
                 "content": content,
                 "err": str(err),
-                "returncode": str(returncode),
+                "error_code": str(returncode),
             }
         )
 
@@ -100,11 +100,16 @@ def convert_audio_file():
     :return: MP3 audio file
     :type: HTTPS response
     """
-    response = make_response()
     f = request.files["file"]
     with NamedTemporaryFile() as tmp:
         f.save(tmp.name)
-        return convert_mp3(tmp.name, response)
+        audio_file, err, error_code = convert_mp3(tmp.name)
+        response = {
+            "content": str(audio_file),
+            "error_code": error_code,
+            "err": err,
+        }
+        return jsonify(response)
 
 
 @app.route("/make_png_thumbnail", methods=["POST"])
@@ -114,14 +119,19 @@ def make_png_thumbnail():
     :return: A response containing our file and any errors
     :type: HTTPS response
     """
-    response = make_response()
     f = request.files["file"]
     max_dimension = int(request.args.get("max_dimension"))
     with NamedTemporaryFile(suffix=".%s" % "pdf") as tmp:
         f.save(tmp.name)
-        return make_png_thumbnail_for_instance(
-            tmp.name, max_dimension, response
+        thumbnail, err, error_code = make_png_thumbnail_for_instance(
+            tmp.name, max_dimension
         )
+        response = {
+            "content": str(thumbnail),
+            "error_code": error_code,
+            "err": err,
+        }
+        return jsonify(response)
 
 
 @app.route("/get_page_count", methods=["POST"])
@@ -162,13 +172,13 @@ def generate_pdf_from_image_url():
     :type aws_url: str
     :return: PDF
     """
-    response = make_response()
+    error_code = 0
+    err = ""
     url = request.args.get("url")
     try:
         img = Image.open(requests.get(url, stream=True).raw)
     except TimeoutError:
-        response.headers["err"] = "Timeout occurred"
-        return response
+        err = "Timeout occurred"
     width, height = img.size
     image_list = []
     i, page_width, page_height = 0, width, (1046 * (float(width) / 792))
@@ -178,12 +188,14 @@ def generate_pdf_from_image_url():
         )
         image_list.append(image)
         i += 1
-
     pdf_bytes = make_pdf_from_image_array(image_list)
     clean_pdf = strip_metadata(pdf_bytes)
-    response.data = clean_pdf
-    response.headers["err"] = ""
-    return response
+    response = {
+        "content": str(clean_pdf),
+        "err": err,
+        "error_code": error_code,
+    }
+    return jsonify(response)
 
 
 @app.route("/financial_disclosure/multi_image", methods=["POST"])
@@ -192,15 +204,30 @@ def make_pdf_from_images():
 
     :return: PDF
     """
-    aws_path = request.args.get("aws_path")
-    response = make_response()
-    sorted_urls, lookup = query_thumbs_db(aws_path)
-    image_list = download_images(sorted_urls)
-    pdf_content = make_pdf_from_image_array(image_list)
-    clean_pdf = strip_metadata(pdf_content)
-    response.data = clean_pdf
-    response.headers["lookup"] = lookup
-    return response
+    err = ""
+    error_code = 0
+    clean_pdf = ""
+    lookup = ""
+    try:
+        aws_path = request.args.get("aws_path")
+        sorted_urls, lookup = query_thumbs_db(aws_path)
+        image_list = download_images(sorted_urls)
+        pdf_content = make_pdf_from_image_array(image_list)
+        clean_pdf = strip_metadata(pdf_content)
+    except TimeoutError:
+        err = "Timeout Error"
+        error_code = 1
+    except Exception as e:
+        err = str(e)
+        error_code = 1
+
+    response = {
+        "content": str(clean_pdf),
+        "err": err,
+        "lookup": lookup,
+        "error_code": error_code,
+    }
+    return jsonify(response)
 
 
 @app.route("/financial_disclosure/extract", methods=["POST"])

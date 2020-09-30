@@ -121,6 +121,7 @@ def extract_from_txt(filepath):
     May we hope for a better world.
     """
     err = None
+    error_code = 0
     try:
         with open(filepath, mode="r") as f:
             data = f.read()
@@ -140,7 +141,8 @@ def extract_from_txt(filepath):
         except:
             err = "An error occurred extracting txt file."
             content = ""
-    return content, err
+            error_code = 1
+    return content, err, error_code
 
 
 def extract_from_wpd(path):
@@ -268,7 +270,7 @@ def extract_by_ocr(tmp):
     return True, txt
 
 
-def make_png_thumbnail_for_instance(filepath, max_dimension, response):
+def make_png_thumbnail_for_instance(filepath, max_dimension):
     """Abstract function for making a thumbnail for a PDF
 
     See helper functions below for how to use this in a simple way.
@@ -292,9 +294,7 @@ def make_png_thumbnail_for_instance(filepath, max_dimension, response):
         command, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = p.communicate()
-    response.data = stdout
-    response.headers["err"] = stderr
-    return response
+    return stdout, stderr.decode("utf-8"), str(p.returncode)
 
 
 def make_pdf_from_image_array(image_list):

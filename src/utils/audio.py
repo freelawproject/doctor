@@ -37,13 +37,14 @@ def get_audio_binary():
     return path_to_binary
 
 
-def convert_mp3(af_local_path, response):
+def convert_mp3(af_local_path):
     """Convert to MP3
 
     :param af_local_path:
-    :param response:
     :return:
     """
+    err = ""
+    error_code = 0
     av_path = get_audio_binary()
     tmp_path = os.path.join("/tmp", "audio_" + uuid.uuid4().hex + ".mp3")
     av_command = [
@@ -58,18 +59,17 @@ def convert_mp3(af_local_path, response):
     ]
     try:
         _ = subprocess.check_output(av_command, stderr=subprocess.STDOUT)
-        response.headers["err"] = None
+        # response.headers["err"] = None
         file_data = codecs.open(tmp_path, "rb").read()
     except subprocess.CalledProcessError as e:
         file_data = ""
-        response.headers[
-            "err"
-        ] = "%s failed command: %s\nerror code: %s\noutput: %s\n%s" % (
+        err = "%s failed command: %s\nerror code: %s\noutput: %s\n%s" % (
             av_path,
             av_command,
             e.returncode,
             e.output,
             traceback.format_exc(),
         )
-    response.data = file_data
-    return response
+        error_code = 1
+    # response.data = file_data
+    return file_data, err, error_code
