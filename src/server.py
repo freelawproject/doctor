@@ -69,7 +69,7 @@ def extract_content():
             else:
                 if len(content.strip()) == 0:
                     content, err = "", "Failure"
-            return jsonify({"content": content, "err": "err"})
+            return jsonify({"content": content, "err": err})
         elif extension == "doc":
             content, err = extract_from_doc(tmp.name)
         elif extension == "docx":
