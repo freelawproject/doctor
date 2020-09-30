@@ -85,7 +85,11 @@ def extract_content():
             err = "Unable to extract content due to unknown extension"
             returncode = 1
         return jsonify(
-            {"content": content, "err": str(err), "returncode": str(returncode)}
+            {
+                "content": content,
+                "err": str(err),
+                "returncode": str(returncode),
+            }
         )
 
 

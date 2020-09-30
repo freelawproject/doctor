@@ -115,7 +115,9 @@ class DocumentConversionTests(DockerTestBase):
 
     def test_convert_pdf_to_txt(self):
         """Can we convert an image pdf to txt?"""
-        for filepath in iglob(os.path.join(self.assets_dir, "opinion_pdf_image_based.pdf")):
+        for filepath in iglob(
+            os.path.join(self.assets_dir, "opinion_pdf_image_based.pdf")
+        ):
             response = self.send_file_to_bte(filepath, do_ocr=True)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
