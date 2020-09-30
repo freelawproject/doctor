@@ -50,7 +50,7 @@ def extract_from_doc(path):
         stderr=DEVNULL,
     )
     content, err = process.communicate()
-    return content.decode("utf-8"), err
+    return content.decode("utf-8"), err, process.returncode
 
 
 def extract_from_docx(path):
@@ -65,7 +65,7 @@ def extract_from_docx(path):
         stderr=DEVNULL,
     )
     content, err = process.communicate()
-    return content.decode("utf-8"), err
+    return content.decode("utf-8"), err, process.returncode
 
 
 def extract_from_html(path):
@@ -81,14 +81,12 @@ def extract_from_html(path):
             try:
                 content = force_text(content, encoding=encoding)
             except BTEUnicodeDecodeError:
-                continue
-            else:
-                return content, False
+                return content, "BTE Unicode Decode Error", 1
 
         # Fell through, therefore unable to decode the string.
-        return "", True
+        return content, "", 0
     except Exception as e:
-        return "", True
+        return "", str(e), 1
 
 
 def extract_from_pdf(tmp_tiff):
@@ -96,9 +94,7 @@ def extract_from_pdf(tmp_tiff):
     tesseract_cmd = ["tesseract", tmp_tiff.name, "stdout", "-l", "eng"]
     process = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
     content, err = process.communicate()
-    if err == None:
-        err = ""
-    return content.decode("utf-8"), err
+    return content.decode("utf-8"), err, process.returncode
 
 
 def make_pdftotext_process(path):
@@ -110,7 +106,7 @@ def make_pdftotext_process(path):
         stderr=DEVNULL,
     )
     content, err = process.communicate()
-    return content.decode("utf-8"), err
+    return content.decode("utf-8"), err, process.returncode
 
 
 def extract_from_txt(filepath):
@@ -160,15 +156,16 @@ def extract_from_wpd(path):
     content, err = process.communicate()
     content = get_clean_body_content(content)
 
-    return content.decode("utf-8"), err
+    return content.decode("utf-8"), err, process.returncode
 
 
 def convert_file_to_txt(path):
     tesseract_command = ["tesseract", path, "stdout", "-l", "eng"]
-    p = subprocess.Popen(
+    process = subprocess.Popen(
         tesseract_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
-    return p.communicate()[0].decode("utf-8")
+    content, err = process.communicate()
+    return content.decode("utf-8"), err, process.returncode
 
 
 def get_page_count(path, extension):
@@ -195,7 +192,7 @@ def get_page_count(path, extension):
             # TypeError: NumberObject has no attribute '__getitem__'. Ugh.
             # KeyError, AssertionError: assert xrefstream["/Type"] == "/XRef". WTF?
             # PdfReadError: Something else. I have no words.
-            return None, "Error"
+            return None, "Error", 1
             pass
     elif extension == "wpd":
         # Best solution appears to be to dig into the binary format
@@ -204,7 +201,7 @@ def get_page_count(path, extension):
         # Best solution appears to be to dig into the XML of the file
         # itself: http://stackoverflow.com/a/12972502/64911
         pass
-    return pg_count, None
+    return pg_count, None, 0
 
 
 def rasterize_pdf(path, destination):

@@ -56,38 +56,37 @@ def extract_content():
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
         if extension == "pdf":
-            content, err = make_pdftotext_process(tmp.name)
+            content, err, returncode = make_pdftotext_process(tmp.name)
             if do_ocr and len(content.strip()) == 0:
                 with NamedTemporaryFile(suffix=".tiff") as tmp_tiff:
                     _, _, _ = rasterize_pdf(tmp.name, tmp_tiff.name)
-                    content, err = extract_from_pdf(tmp_tiff)
+                    content, err, returncode = extract_from_pdf(tmp_tiff)
                     if content == "":
-                        content, err = (
+                        content, err, returncode = (
                             "",
                             "Unable to extract document content",
+                            1,
                         )
             else:
                 if len(content.strip()) == 0:
-                    content, err = "", "No content detected"
+                    content, err, returncode = "", "No content detected", 1
         elif extension == "doc":
-            content, err = extract_from_doc(tmp.name)
+            content, err, returncode = extract_from_doc(tmp.name)
         elif extension == "docx":
-            content, err = extract_from_docx(tmp.name)
+            content, err, returncode = extract_from_docx(tmp.name)
         elif extension == "html":
-            content, err = extract_from_html(tmp.name)
+            content, err, returncode = extract_from_html(tmp.name)
         elif extension == "txt":
-            content, err = extract_from_txt(tmp.name)
+            content, err, returncode = extract_from_txt(tmp.name)
         elif extension == "wpd":
-            content, err = extract_from_wpd(tmp.name)
+            content, err, returncode = extract_from_wpd(tmp.name)
         else:
-            print(
-                "*****Unable to extract content due to unknown extension: %s "
-                "on opinion: %s****" % (extension, "opinion_pk")
-            )
-            return
-        if err == None:
-            err = ""
-        return jsonify({"content": content, "err": str(err)})
+            content = ""
+            err = "Unable to extract content due to unknown extension"
+            returncode = 1
+        return jsonify(
+            {"content": content, "err": str(err), "returncode": str(returncode)}
+        )
 
 
 @app.route("/convert_audio_file", methods=["POST"])
