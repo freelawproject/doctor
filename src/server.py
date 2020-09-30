@@ -69,7 +69,6 @@ def extract_content():
             else:
                 if len(content.strip()) == 0:
                     content, err = "", "Failure"
-            return jsonify({"content": content, "err": err})
         elif extension == "doc":
             content, err = extract_from_doc(tmp.name)
         elif extension == "docx":
@@ -86,7 +85,8 @@ def extract_content():
                 "on opinion: %s****" % (extension, "opinion_pk")
             )
             return
-        return jsonify({"content": content, "err": err})
+        if err == None: err = ""
+        return jsonify({"content": content, "err": str(err)})
 
 
 @app.route("/convert_audio_file", methods=["POST"])
