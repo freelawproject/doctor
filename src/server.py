@@ -63,12 +63,12 @@ def extract_content():
                     content, err = extract_from_pdf(tmp_tiff)
                     if content == "":
                         content, err = (
-                            "Unable to extract document content.",
-                            "Failure",
+                            "",
+                            "Unable to extract document content",
                         )
             else:
                 if len(content.strip()) == 0:
-                    content, err = "", "Failure"
+                    content, err = "", "No content detected"
         elif extension == "doc":
             content, err = extract_from_doc(tmp.name)
         elif extension == "docx":
@@ -85,7 +85,8 @@ def extract_content():
                 "on opinion: %s****" % (extension, "opinion_pk")
             )
             return
-        if err == None: err = ""
+        if err == None:
+            err = ""
         return jsonify({"content": content, "err": str(err)})
 
 

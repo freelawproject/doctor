@@ -208,7 +208,6 @@ class DocumentConversionTests(DockerTestBase):
         ):
             response = self.send_file_to_bte(filepath)
             success = response["err"]
-
             self.assertFalse(
                 success,
                 "Error reported while extracting text from %s" % filepath,

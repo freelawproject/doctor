@@ -96,6 +96,8 @@ def extract_from_pdf(tmp_tiff):
     tesseract_cmd = ["tesseract", tmp_tiff.name, "stdout", "-l", "eng"]
     process = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
     content, err = process.communicate()
+    if err == None:
+        err = ""
     return content.decode("utf-8"), err
 
 
@@ -122,8 +124,8 @@ def extract_from_txt(filepath):
 
     May we hope for a better world.
     """
+    err = None
     try:
-        err = False
         with open(filepath, mode="r") as f:
             data = f.read()
         try:
@@ -140,7 +142,7 @@ def extract_from_txt(filepath):
                 data = f.read()
             content = smart_text(data, encoding=encoding, errors="ignore")
         except:
-            err = True
+            err = "An error occurred extracting txt file."
             content = ""
     return content, err
 
