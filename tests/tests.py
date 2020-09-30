@@ -10,6 +10,7 @@ import json
 import os
 import time
 import unittest
+from ast import literal_eval
 from glob import iglob
 from unittest import TestCase
 
@@ -127,20 +128,6 @@ class DocumentConversionTests(DockerTestBase):
             )
             print("Extracted content from .pdf successfully")
 
-    def test_direct_text_based_pdf_extraction(self):
-        """Can we extract text from a text based pdf?"""
-        for filepath in iglob(
-            os.path.join(self.assets_dir, "opinion_pdf*.pdf")
-        ):
-            response = self.send_file_to_pdftotext(filepath)
-            answer = self.doc_answers[filepath.split("/")[-1]]
-            self.assertEqual(
-                answer,
-                response["content"],
-                msg="Failed to extract content from image pdf.",
-            )
-            print("Extracted content from .pdf successfully")
-
     def test_convert_docx_to_txt(self):
         """Can we convert docx file to txt?"""
         for filepath in iglob(os.path.join(self.assets_dir, "*.docx")):
@@ -193,6 +180,7 @@ class DocumentConversionTests(DockerTestBase):
         """Can we extract text from a txt document?"""
         for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
+            print(response)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -207,7 +195,7 @@ class DocumentConversionTests(DockerTestBase):
             os.path.join(self.assets_dir, "txt_file_with_no_encoding*.txt")
         ):
             response = self.send_file_to_bte(filepath)
-            success = response["err"]
+            success = int(response["error_code"])
             self.assertFalse(
                 success,
                 "Error reported while extracting text from %s" % filepath,
@@ -218,6 +206,22 @@ class DocumentConversionTests(DockerTestBase):
                 "Issue extracting/encoding text from file at: %s" % filepath,
             )
 
+    def test_large_file(self):
+
+        # file = requests.post(
+        #     "%s/test/file/large" % self.base_url,
+        # )
+        filepath = os.path.join(self.assets_dir, "ander_v._leo.mp3")
+        with open(filepath, "rb") as file:
+            f = file.read()
+
+        resp = requests.post(
+            "%s/test/file/large" % self.base_url,
+            files={"file": (os.path.basename(filepath), f)},
+        )
+
+        # print(resp.content)
+
 
 class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
@@ -227,9 +231,11 @@ class AudioConversionTests(DockerTestBase):
         with open(os.path.join(self.assets_dir, "1.mp3"), "rb") as mp3:
             test_mp3 = mp3.read()
         for filepath in iglob(os.path.join(self.assets_dir, "*.wma")):
-            r = self.send_file_to_convert_audio(filepath)
+            response = self.send_file_to_convert_audio(filepath).json()
             self.assertEqual(
-                test_mp3, r.content, msg="Audio conversion failed"
+                test_mp3,
+                literal_eval(response["content"]),
+                msg="Audio conversion failed",
             )
             print("\nWMA successfully converted to MP3 √\n")
 
@@ -239,14 +245,16 @@ class ThumbnailGenerationTests(DockerTestBase):
 
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate a pdf to thumbnail?"""
-        for filepath in iglob(os.path.join(self.assets_dir, "*.pdf")):
-            if "tiff_to_pdf.pdf" in filepath:
-                continue
-            thumb_path = filepath.replace(".pdf", "_thumbnail.png")
+        for thumb_path in iglob(os.path.join(self.assets_dir, "*thumbnail*")):
+            filepath = thumb_path.replace("_thumbnail.png", ".pdf")
             with open(thumb_path, "rb") as f:
                 test_thumbnail = f.read()
-            response = self.send_file_to_thumbnail_generation(filepath)
-            self.assertEqual(response.content, test_thumbnail)
+            response = self.send_file_to_thumbnail_generation(filepath).json()
+            self.assertEqual(
+                literal_eval(response["content"]),
+                test_thumbnail,
+                msg="Thumbnail failed.",
+            )
             print("Generated thumbnail from .pdf successfully")
 
 
@@ -337,8 +345,6 @@ class FinancialDisclosureTests(DockerTestBase):
 # These tests aren't automatically triggered by github actions because I have not
 # properly mocked them to avoid hitting AWS and testing properly. They do work
 # when called though.
-
-
 class AWSFinancialDisclosureTests(DockerTestBase):
     def test_image_url_to_pdf(self):
         """Test image at URL to PDF conversion"""
@@ -351,22 +357,28 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         response = requests.post(
             "%s/financial_disclosure/single_image" % self.base_url,
             params={"url": url},
-        )
+        ).json()
         self.assertEqual(
-            response.content, answer, msg="Image to PDF conversion failed."
+            literal_eval(response["content"]),
+            answer,
+            msg="Image to PDF conversion failed.",
         )
 
     def test_combine_images_into_pdf(self):
         """Can we post and combine multiple images into a pdf?"""
         test_file = os.path.join(
-            self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
+            self.root, "test_assets", "fd", "2012-2012-Straub-CJ.pdf"
         )
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:
             answer = f.read()
         service = "%s/financial_disclosure/multi_image" % self.base_url
-        response = requests.post(service, params={"aws_path": test_key})
-        self.assertEqual(response.content, answer, msg="Failed to split tiffs")
+        response = requests.post(service, params={"aws_path": test_key}).json()
+        self.assertEqual(
+            literal_eval(response["content"]),
+            answer,
+            msg="Failed to merge split PDFs.",
+        )
         print("Images combined correctly from AWS √")
 
 
