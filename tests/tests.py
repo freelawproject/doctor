@@ -32,10 +32,6 @@ class DockerTestBase(TestCase):
 
     def setUp(self):
         client = docker.from_env()
-        # client.images.build(
-        #     path="../",
-        #     tag="freelawproject/binary-transformers-and-extractors:test",
-        # )
         client.containers.run(
             "freelawproject/binary-transformers-and-extractors:latest",
             ports={"80/tcp": ("0.0.0.0", 5011)},
@@ -123,7 +119,6 @@ class DocumentConversionTests(DockerTestBase):
             if "tiff_to_pdf.pdf" in filepath:
                 continue
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            print(response)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,

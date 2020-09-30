@@ -85,8 +85,7 @@ def extract_content():
                 "on opinion: %s****" % (extension, "opinion_pk")
             )
             return
-        if err == None:
-            err = ""
+        if err == None: err = ""
         return jsonify({"content": content, "err": str(err)})
 
 
