@@ -203,7 +203,7 @@ def get_page_count(path, extension):
         # Best solution appears to be to dig into the XML of the file
         # itself: http://stackoverflow.com/a/12972502/64911
         pass
-    return pg_count, None, 0
+    return pg_count, "", 0
 
 
 def rasterize_pdf(path, destination):

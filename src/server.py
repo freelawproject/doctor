@@ -144,8 +144,10 @@ def pg_count():
     extension = f.filename.split(".")[-1]
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         f.save(tmp.name)
-        content, err = get_page_count(tmp.name, extension)
-        return jsonify({"pg_count": content, "err": err})
+        content, err, error_code = get_page_count(tmp.name, extension)
+        return jsonify(
+            {"pg_count": content, "err": err, "error_code": error_code}
+        )
 
 
 @app.route("/make_pdftotext_process", methods=["POST"])
