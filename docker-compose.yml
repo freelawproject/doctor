@@ -1,10 +1,4 @@
-
 version: '3.7'
-
-networks:
-  cl_net_overlay:
-    external: true
-    driver: bridge
 
 volumes:
   cl-seal-rookery:
@@ -21,8 +15,6 @@ services:
     container_name: "cl-binary-transformers-and-extractors"
     ports:
       - "80:80"
-    networks:
-      - cl_net_overlay
     depends_on:
       - cl-seal-rookery
     volumes:
