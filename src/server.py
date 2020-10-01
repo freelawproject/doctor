@@ -95,7 +95,6 @@ def extract_content():
         )
 
 
-
 @app.route("/make_png_thumbnail", methods=["POST"])
 def make_png_thumbnail():
     """Make a thumbail of the first page of a PDF and return it.
@@ -257,8 +256,10 @@ def judical_watch_extract():
 
     return jsonify(fd)
 
+
 def audio_encoder(data):
     return namedtuple("AudioFile", data.keys())(*data.values())
+
 
 @app.route("/convert/audio", methods=["GET", "POST"])
 def audio_conversion():
@@ -283,7 +284,7 @@ def audio_conversion():
             "content": str(audio_bytes),
             "error_code": error_code,
             "err": err,
-            "duration": af.info.time_secs
+            "duration": af.info.time_secs,
         }
         return jsonify(response)
 
