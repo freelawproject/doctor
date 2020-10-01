@@ -19,3 +19,4 @@ services:
       - cl-seal-rookery
     volumes:
       - cl-seal-rookery:/usr/local/lib/python3.7/site-packages/seal_rookery
+      - cl-seal-rookery:/opt/hostedtoolcache/Python/3.7.9/x64/lib/python3.7/site-packages/seal_rookery
