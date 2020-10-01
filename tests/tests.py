@@ -8,18 +8,20 @@ from __future__ import (
 
 import json
 import os
+import time
 import unittest
 from ast import literal_eval
 from glob import iglob
 from unittest import TestCase
 
+import docker
 import requests
 
 
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    base_url = "http://0.0.0.0:80"
+    base_url = "http://0.0.0.0:5011"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -28,6 +30,22 @@ class DockerTestBase(TestCase):
         doc_json = json.load(f)
     for k, v in doc_json.items():
         doc_answers[k] = v
+
+    def setUp(self):
+        client = docker.from_env()
+        client.containers.run(
+            "freelawproject/binary-transformers-and-extractors:latest",
+            ports={"80/tcp": ("0.0.0.0", 5011)},
+            detach=True,
+            auto_remove=True,
+        )
+        time.sleep(2)
+
+    def tearDown(self):
+        """Tear down containers"""
+        client = docker.from_env()
+        for container in client.containers.list():
+            container.stop()
 
     def send_file_to_bte(self, filepath, do_ocr=False):
         """Send file to extract doc content method.

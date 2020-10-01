@@ -22,11 +22,10 @@ jobs:
         pip install -r requirements.txt
     - name: Build the dockerfile
       run: docker build . --file Dockerfile --tag freelawproject/binary-transformers-and-extractors:latest
-    - name: Run docker-compose file
-      run: docker-compose up --detach
     - name: Run tests
       run: |
         python tests/tests.py DocumentConversionTests
+        python tests/tests.py AudioConversionTests
         python tests/tests.py ThumbnailGenerationTests
         python tests/tests.py PageCountTests
         python tests/tests.py FinancialDisclosureTests
