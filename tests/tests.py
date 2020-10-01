@@ -19,7 +19,7 @@ import requests
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    base_url = "http://0.0.0.0:5011"
+    base_url = "http://0.0.0.0:80"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
