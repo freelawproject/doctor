@@ -26,3 +26,4 @@ services:
 networks:
   cl_net_overlay:
     external: true
+    driver: bridge
