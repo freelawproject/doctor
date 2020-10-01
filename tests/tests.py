@@ -21,7 +21,7 @@ import requests
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    base_url = "http://0.0.0.0:5011"
+    base_url = "http://0.0.0.0:80"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -34,10 +34,28 @@ class DockerTestBase(TestCase):
     def setUp(self):
         client = docker.from_env()
         client.containers.run(
-            "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"80/tcp": ("0.0.0.0", 5011)},
+            "freelawproject/seal-rookery:latest",
+            name="seal-rookery",
             detach=True,
             auto_remove=True,
+            volumes={
+                "seal-rookery": {
+                    "bind": "/usr/local/lib/python2.7/site-packages/seal_rookery",
+                    "mode": "ro",
+                }
+            },
+        )
+        client.containers.run(
+            "freelawproject/binary-transformers-and-extractors:latest",
+            ports={"80/tcp": ("0.0.0.0", 80)},
+            detach=True,
+            auto_remove=True,
+            volumes={
+                "seal-rookery": {
+                    "bind": "/usr/local/lib/python3.7/site-packages/seal_rookery",
+                    "mode": "ro",
+                }
+            },
         )
         time.sleep(2)
 
