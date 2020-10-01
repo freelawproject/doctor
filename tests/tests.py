@@ -8,13 +8,11 @@ from __future__ import (
 
 import json
 import os
-import time
 import unittest
 from ast import literal_eval
 from glob import iglob
 from unittest import TestCase
 
-import docker
 import requests
 
 
@@ -30,22 +28,6 @@ class DockerTestBase(TestCase):
         doc_json = json.load(f)
     for k, v in doc_json.items():
         doc_answers[k] = v
-
-    def setUp(self):
-        client = docker.from_env()
-        client.containers.run(
-            "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"80/tcp": ("0.0.0.0", 5011)},
-            detach=True,
-            auto_remove=True,
-        )
-        time.sleep(2)
-
-    def tearDown(self):
-        """Tear down containers"""
-        client = docker.from_env()
-        for container in client.containers.list():
-            container.stop()
 
     def send_file_to_bte(self, filepath, do_ocr=False):
         """Send file to extract doc content method.
@@ -227,17 +209,34 @@ class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
 
     def test_convert_wma_to_mp3(self):
-        """Can we convert WMA to mp3?"""
-        with open(os.path.join(self.assets_dir, "1.mp3"), "rb") as mp3:
+        """Can we convert wma to mp3 and add metadata"""
+        filepath = os.path.join(
+            self.assets_dir, "..", "fixtures", "test_audio_object.json"
+        )
+        wma_path = os.path.join(self.assets_dir, "1.wma")
+        with open(
+            os.path.join(self.assets_dir, "1_with_metadata.mp3"), "rb"
+        ) as mp3:
             test_mp3 = mp3.read()
-        for filepath in iglob(os.path.join(self.assets_dir, "*.wma")):
-            response = self.send_file_to_convert_audio(filepath).json()
-            self.assertEqual(
-                test_mp3,
-                literal_eval(response["content"]),
-                msg="Audio conversion failed",
-            )
-            print("\nWMA successfully converted to MP3 √\n")
+
+        with open(filepath, "rb") as file:
+            f = file.read()
+        with open(wma_path, "rb") as wma_file:
+            w = wma_file.read()
+        resp = requests.post(
+            "%s/convert/audio" % self.base_url,
+            files={
+                "af": (os.path.basename(filepath), f),
+                "file": (os.path.basename(wma_path), w),
+            },
+        )
+        content = literal_eval(resp.json()["content"])
+        self.assertEqual(
+            test_mp3,
+            content,
+            msg="Audio conversion failed",
+        )
+        print("\nWMA successfully converted to MP3 √\n")
 
 
 class ThumbnailGenerationTests(DockerTestBase):
@@ -367,7 +366,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
     def test_combine_images_into_pdf(self):
         """Can we post and combine multiple images into a pdf?"""
         test_file = os.path.join(
-            self.root, "test_assets", "fd", "2012-2012-Straub-CJ.pdf"
+            self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
         )
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:
