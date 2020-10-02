@@ -2,7 +2,7 @@ disclosure-extractor==0.0.6
 flask
 ipython
 requests
-eyeD3==0.7.11
+eyed3
 lxml~=4.0
 six
 Pillow

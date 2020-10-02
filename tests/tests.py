@@ -21,7 +21,7 @@ import requests
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    base_url = "http://0.0.0.0:5011"
+    base_url = "http://0.0.0.0:80"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -32,12 +32,37 @@ class DockerTestBase(TestCase):
         doc_answers[k] = v
 
     def setUp(self):
+        """Setup containers
+
+        Start seal-rookery docker image and set volume binding. Then link
+        seal rookery to BTE python site packages.
+
+        :return:
+        """
         client = docker.from_env()
         client.containers.run(
-            "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"80/tcp": ("0.0.0.0", 5011)},
+            "freelawproject/seal-rookery:latest",
+            name="seal-rookery",
             detach=True,
             auto_remove=True,
+            volumes={
+                "seal-rookery": {
+                    "bind": "/usr/local/lib/python2.7/site-packages/seal_rookery",
+                    "mode": "ro",
+                }
+            },
+        )
+        client.containers.run(
+            "freelawproject/binary-transformers-and-extractors:latest",
+            ports={"80/tcp": ("0.0.0.0", 80)},
+            detach=True,
+            auto_remove=True,
+            volumes={
+                "seal-rookery": {
+                    "bind": "/usr/local/lib/python3.7/site-packages/seal_rookery",
+                    "mode": "ro",
+                }
+            },
         )
         time.sleep(2)
 
@@ -206,38 +231,38 @@ class DocumentConversionTests(DockerTestBase):
                 "Issue extracting/encoding text from file at: %s" % filepath,
             )
 
-    def test_large_file(self):
-
-        # file = requests.post(
-        #     "%s/test/file/large" % self.base_url,
-        # )
-        filepath = os.path.join(self.assets_dir, "ander_v._leo.mp3")
-        with open(filepath, "rb") as file:
-            f = file.read()
-
-        resp = requests.post(
-            "%s/test/file/large" % self.base_url,
-            files={"file": (os.path.basename(filepath), f)},
-        )
-
-        # print(resp.content)
-
 
 class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
 
     def test_convert_wma_to_mp3(self):
-        """Can we convert WMA to mp3?"""
-        with open(os.path.join(self.assets_dir, "1.mp3"), "rb") as mp3:
+        """Can we convert wma to mp3 and add metadata"""
+        filepath = os.path.join(
+            self.assets_dir, "..", "fixtures", "test_audio_object.json"
+        )
+        wma_path = os.path.join(self.assets_dir, "1.wma")
+        with open(
+            os.path.join(self.assets_dir, "1_with_metadata.mp3"), "rb"
+        ) as mp3:
             test_mp3 = mp3.read()
-        for filepath in iglob(os.path.join(self.assets_dir, "*.wma")):
-            response = self.send_file_to_convert_audio(filepath).json()
-            self.assertEqual(
-                test_mp3,
-                literal_eval(response["content"]),
-                msg="Audio conversion failed",
-            )
-            print("\nWMA successfully converted to MP3 √\n")
+
+        with open(filepath, "rb") as file:
+            f = file.read()
+        with open(wma_path, "rb") as wma_file:
+            w = wma_file.read()
+        resp = requests.post(
+            "%s/convert/audio" % self.base_url,
+            files={
+                "af": (os.path.basename(filepath), f),
+                "file": (os.path.basename(wma_path), w),
+            },
+        )
+        self.assertEqual(
+            test_mp3,
+            literal_eval(resp.json()["content"]),
+            msg="Audio conversion failed",
+        )
+        print("\nWMA successfully converted to MP3 √\n")
 
 
 class ThumbnailGenerationTests(DockerTestBase):
@@ -367,7 +392,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
     def test_combine_images_into_pdf(self):
         """Can we post and combine multiple images into a pdf?"""
         test_file = os.path.join(
-            self.root, "test_assets", "fd", "2012-2012-Straub-CJ.pdf"
+            self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
         )
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:

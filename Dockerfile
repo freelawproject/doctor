@@ -40,7 +40,6 @@ COPY server-conf/supervisord.conf /etc/supervisor/
 COPY src /project/src
 
 WORKDIR /project
-EXPOSE 5011
 
 CMD ["/usr/bin/supervisord"]
 

@@ -1,3 +1,5 @@
+import json
+from collections import namedtuple
 from tempfile import NamedTemporaryFile
 
 import requests
@@ -9,7 +11,7 @@ from disclosure_extractor import (
 )
 from flask import Flask, request, jsonify
 
-from src.utils.audio import convert_mp3
+from src.utils.audio import convert_mp3, set_mp3_meta_data
 from src.utils.financial_disclosures import query_thumbs_db, download_images
 from src.utils.tasks import (
     extract_from_docx,
@@ -91,25 +93,6 @@ def extract_content():
                 "error_code": str(returncode),
             }
         )
-
-
-@app.route("/convert_audio_file", methods=["POST"])
-def convert_audio_file():
-    """Convert an audio file to MP3 and return it
-
-    :return: MP3 audio file
-    :type: HTTPS response
-    """
-    f = request.files["file"]
-    with NamedTemporaryFile() as tmp:
-        f.save(tmp.name)
-        audio_file, err, error_code = convert_mp3(tmp.name)
-        response = {
-            "content": str(audio_file),
-            "error_code": error_code,
-            "err": err,
-        }
-        return jsonify(response)
 
 
 @app.route("/make_png_thumbnail", methods=["POST"])
@@ -272,6 +255,38 @@ def judical_watch_extract():
         print_results(fd)
 
     return jsonify(fd)
+
+
+def audio_encoder(data):
+    return namedtuple("AudioFile", data.keys())(*data.values())
+
+
+@app.route("/convert/audio", methods=["GET", "POST"])
+def audio_conversion():
+    """
+
+    :return:
+    """
+    print("audio conversion called")
+    f = request.files["file"]
+    af_file = request.files["af"]
+    af = json.load(af_file, object_hook=audio_encoder)
+
+    with NamedTemporaryFile(suffix=".mp3") as tmp:
+        f.save(tmp.name)
+        audio_file, err, error_code, path = convert_mp3(tmp.name)
+        af = set_mp3_meta_data(af, path)
+
+        with open(af.path, "rb") as mp3:
+            audio_bytes = mp3.read()
+
+        response = {
+            "content": str(audio_bytes),
+            "error_code": error_code,
+            "err": err,
+            "duration": af.info.time_secs,
+        }
+        return jsonify(response)
 
 
 if __name__ == "__main__":

@@ -1,15 +1,22 @@
-
 version: '3.7'
+
+volumes:
+  cl-seal-rookery:
+
 services:
+  cl-seal-rookery:
+    image: freelawproject/seal-rookery:latest
+    container_name: "cl-seal-rookery"
+    volumes:
+      - cl-seal-rookery:/usr/local/lib/python2.7/site-packages/seal_rookery
+
   cl-binary-transformers-and-extractors:
     image: freelawproject/binary-transformers-and-extractors:latest
     container_name: "cl-binary-transformers-and-extractors"
-    expose:
-      - "5011"
     ports:
-      - "5011:80"
-    networks:
-      - cl_net_overlay
-networks:
-  cl_net_overlay:
-    external: true
+      - "80:80"
+    depends_on:
+      - cl-seal-rookery
+    volumes:
+      - cl-seal-rookery:/usr/local/lib/python3.7/site-packages/seal_rookery
+      - cl-seal-rookery:/opt/hostedtoolcache/Python/3.7.9/x64/lib/python3.7/site-packages/seal_rookery
