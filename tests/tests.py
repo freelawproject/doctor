@@ -32,7 +32,7 @@ class DockerTestBase(TestCase):
         doc_answers[k] = v
 
     def setUp(self):
-        """ Setup containers
+        """Setup containers
 
         Start seal-rookery docker image and set volume binding. Then link
         seal rookery to BTE python site packages.
