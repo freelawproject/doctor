@@ -224,22 +224,6 @@ class DocumentConversionTests(DockerTestBase):
                 "Issue extracting/encoding text from file at: %s" % filepath,
             )
 
-    def test_large_file(self):
-
-        # file = requests.post(
-        #     "%s/test/file/large" % self.base_url,
-        # )
-        filepath = os.path.join(self.assets_dir, "ander_v._leo.mp3")
-        with open(filepath, "rb") as file:
-            f = file.read()
-
-        resp = requests.post(
-            "%s/test/file/large" % self.base_url,
-            files={"file": (os.path.basename(filepath), f)},
-        )
-
-        # print(resp.content)
-
 
 class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
@@ -266,10 +250,9 @@ class AudioConversionTests(DockerTestBase):
                 "file": (os.path.basename(wma_path), w),
             },
         )
-        content = literal_eval(resp.json()["content"])
         self.assertEqual(
             test_mp3,
-            content,
+            literal_eval(resp.json()["content"]),
             msg="Audio conversion failed",
         )
         print("\nWMA successfully converted to MP3 √\n")
