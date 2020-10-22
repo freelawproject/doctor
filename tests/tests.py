@@ -47,7 +47,7 @@ class DockerTestBase(TestCase):
             auto_remove=True,
             volumes={
                 "seal-rookery": {
-                    "bind": "/usr/local/lib/python2.7/site-packages/seal_rookery",
+                    "bind": "/usr/local/lib/python3.8/site-packages/seal_rookery",
                     "mode": "ro",
                 }
             },
@@ -59,7 +59,7 @@ class DockerTestBase(TestCase):
             auto_remove=True,
             volumes={
                 "seal-rookery": {
-                    "bind": "/usr/local/lib/python3.7/site-packages/seal_rookery",
+                    "bind": "/usr/local/lib/python3.8/site-packages/seal_rookery",
                     "mode": "ro",
                 }
             },
