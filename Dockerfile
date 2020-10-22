@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.8-slim
 
 RUN apt-get update
 RUN apt-get install -y --no-install-recommends \
@@ -14,12 +14,11 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
         `# Document extraction and OCR tools` \
         antiword docx2txt ghostscript libwpd-tools poppler-utils \
         `# Audio extraction/manipulation tools` \
-         ffmpeg \
+         ffmpeg libmagic1 \
         `# Image & OCR tools` \
         imagemagick tesseract-ocr tesseract-ocr-eng \
         `# Other dependencies` \
         libffi-dev libxml2-dev libxslt-dev python-dev
-
 
 RUN pip install uwsgi
 
