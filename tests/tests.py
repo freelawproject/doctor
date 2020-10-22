@@ -407,5 +407,21 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         print("Images combined correctly from AWS √")
 
 
+class UtilityTests(DockerTestBase):
+    def test_file_type(self):
+        """Test Mime Type extraction"""
+        service = "%s/%s/%s" % (self.base_url, "utility", "mime_type")
+        file_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(file_path, "rb") as file:
+            f = file.read()
+        response = requests.post(
+            url=service,
+            params={"mime": True},
+            files={"file": (os.path.basename(file_path), f)},
+            timeout=60,
+        ).json()
+        self.assertEqual(response["mimetype"], "application/pdf")
+
+
 if __name__ == "__main__":
     unittest.main()
