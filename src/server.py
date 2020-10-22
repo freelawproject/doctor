@@ -2,6 +2,7 @@ import json
 from collections import namedtuple
 from tempfile import NamedTemporaryFile
 
+import magic
 import requests
 from PIL import Image
 from disclosure_extractor import (
@@ -223,6 +224,7 @@ def financial_disclosure_extract():
     """
     url = request.args.get("url")
     file = request.files.get("file", None)
+
     if url is not None:
         pdf = requests.get(url, timeout=60 * 10).content
     elif file is not None:
@@ -287,6 +289,24 @@ def audio_conversion():
             "duration": af.info.time_secs,
         }
         return jsonify(response)
+
+
+@app.route("/utility/mime_type", methods=["GET", "POST"])
+def extract_mime_type():
+    try:
+        file = request.files["file"]
+        mime = request.args.get("mime")
+
+        with NamedTemporaryFile() as tmp:
+            file.save(tmp.name)
+            return jsonify(
+                {
+                    "mimetype": magic.from_file(tmp.name, mime=mime),
+                    "error": False,
+                }
+            )
+    except Exception as e:
+        return jsonify({"error": True, "error_msg": str(e), "mimetype": ""})
 
 
 if __name__ == "__main__":
