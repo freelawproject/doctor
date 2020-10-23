@@ -199,10 +199,9 @@ class AudioConversionTests(DockerTestBase):
         resp = requests.post(
             "%s/convert/audio" % self.test_server,
             params={
-                "af": json.dumps(audio_obj),
+                "audio_obj": json.dumps(audio_obj),
             },
             files={
-                # "af": (os.path.basename(filepath), f),
                 "file": (os.path.basename(wma_path), w),
             },
         )

@@ -266,7 +266,7 @@ def audio_conversion():
     :return: Converted audio
     """
     wma_file = request.files["file"]
-    audio_obj = json.loads(request.args.get("af"), object_hook=audio_encoder)
+    audio_obj = json.loads(request.args.get("audio_obj"), object_hook=audio_encoder)
 
     with NamedTemporaryFile(suffix=".mp3") as tmp:
         wma_file.save(tmp.name)
