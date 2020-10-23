@@ -1,7 +1,7 @@
 import json
-from collections import namedtuple
 from tempfile import NamedTemporaryFile
 
+import magic
 import requests
 from PIL import Image
 from disclosure_extractor import (
@@ -12,6 +12,7 @@ from disclosure_extractor import (
 from flask import Flask, request, jsonify
 
 from src.utils.audio import convert_mp3, set_mp3_meta_data
+from src.utils.encoding_utils import audio_encoder
 from src.utils.financial_disclosures import query_thumbs_db, download_images
 from src.utils.tasks import (
     extract_from_docx,
@@ -223,6 +224,7 @@ def financial_disclosure_extract():
     """
     url = request.args.get("url")
     file = request.files.get("file", None)
+
     if url is not None:
         pdf = requests.get(url, timeout=60 * 10).content
     elif file is not None:
@@ -257,25 +259,21 @@ def judical_watch_extract():
     return jsonify(fd)
 
 
-def audio_encoder(data):
-    return namedtuple("AudioFile", data.keys())(*data.values())
-
-
 @app.route("/convert/audio", methods=["GET", "POST"])
 def audio_conversion():
-    """
+    """Can we convert to mp3 and add metadata.
 
-    :return:
+    :return: Converted audio
     """
-    print("audio conversion called")
-    f = request.files["file"]
-    af_file = request.files["af"]
-    af = json.load(af_file, object_hook=audio_encoder)
+    wma_file = request.files["file"]
+    audio_obj = json.loads(
+        request.args.get("audio_obj"), object_hook=audio_encoder
+    )
 
     with NamedTemporaryFile(suffix=".mp3") as tmp:
-        f.save(tmp.name)
+        wma_file.save(tmp.name)
         audio_file, err, error_code, path = convert_mp3(tmp.name)
-        af = set_mp3_meta_data(af, path)
+        af = set_mp3_meta_data(audio_obj, path)
 
         with open(af.path, "rb") as mp3:
             audio_bytes = mp3.read()
@@ -289,5 +287,23 @@ def audio_conversion():
         return jsonify(response)
 
 
+@app.route("/utility/mime_type", methods=["GET", "POST"])
+def extract_mime_type():
+    try:
+        file = request.files["file"]
+        mime = request.args.get("mime")
+
+        with NamedTemporaryFile() as tmp:
+            file.save(tmp.name)
+            return jsonify(
+                {
+                    "mimetype": magic.from_file(tmp.name, mime=mime),
+                    "error": False,
+                }
+            )
+    except Exception as e:
+        return jsonify({"error": True, "error_msg": str(e), "mimetype": ""})
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True)
+    app.run(host="0.0.0.0", port="5050", debug=True)

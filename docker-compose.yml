@@ -1,22 +1,21 @@
 version: '3.7'
 
 volumes:
-  cl-seal-rookery:
+  bte-seal-rookery:
 
 services:
-  cl-seal-rookery:
+  bte-seal-rookery:
     image: freelawproject/seal-rookery:latest
-    container_name: "cl-seal-rookery"
+    container_name: "bte-seal-rookery"
     volumes:
-      - cl-seal-rookery:/usr/local/lib/python2.7/site-packages/seal_rookery
+      - bte-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
 
-  cl-binary-transformers-and-extractors:
+  bte-binary-transformers-and-extractors:
     image: freelawproject/binary-transformers-and-extractors:latest
-    container_name: "cl-binary-transformers-and-extractors"
+    container_name: "bte-binary-transformers-and-extractors"
     ports:
-      - "80:80"
+      - "5050:80"
     depends_on:
-      - cl-seal-rookery
+      - bte-seal-rookery
     volumes:
-      - cl-seal-rookery:/usr/local/lib/python3.7/site-packages/seal_rookery
-      - cl-seal-rookery:/opt/hostedtoolcache/Python/3.7.9/x64/lib/python3.7/site-packages/seal_rookery
+      - bte-seal-rookery:${PYTHON_PACKAGES}/seal_rookery

@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import (
-    absolute_import,
-    division,
-    print_function,
-    unicode_literals,
-)
 
 import json
 import os
@@ -12,16 +6,18 @@ import time
 import unittest
 from ast import literal_eval
 from glob import iglob
+from tempfile import NamedTemporaryFile
 from unittest import TestCase
 
 import docker
+import eyed3
 import requests
 
 
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    base_url = "http://0.0.0.0:80"
+    test_server = "http://localhost:5050"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -47,19 +43,19 @@ class DockerTestBase(TestCase):
             auto_remove=True,
             volumes={
                 "seal-rookery": {
-                    "bind": "/usr/local/lib/python2.7/site-packages/seal_rookery",
+                    "bind": "/usr/local/lib/python3.8/site-packages/seal_rookery",
                     "mode": "ro",
                 }
             },
         )
         client.containers.run(
             "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"80/tcp": ("0.0.0.0", 80)},
+            ports={"80/tcp": ("0.0.0.0", 5050)},
             detach=True,
             auto_remove=True,
             volumes={
                 "seal-rookery": {
-                    "bind": "/usr/local/lib/python3.7/site-packages/seal_rookery",
+                    "bind": "/usr/local/lib/python3.8/site-packages/seal_rookery",
                     "mode": "ro",
                 }
             },
@@ -82,7 +78,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/extract_doc_content" % self.base_url,
+            "%s/extract_doc_content" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
             params={"do_ocr": do_ocr},
         ).json()
@@ -97,7 +93,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/make_pdftotext_process" % self.base_url,
+            "%s/make_pdftotext_process" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
         ).json()
 
@@ -110,7 +106,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/convert_audio_file" % self.base_url,
+            "%s/convert_audio_file" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
         )
 
@@ -124,16 +120,10 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/make_png_thumbnail" % self.base_url,
+            "%s/make_png_thumbnail" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
             params={"max_dimension": max_dimension},
         )
-
-    def test_heartbeat(self):
-        """Check heartbeat?"""
-        response = requests.get(self.base_url).json()
-        self.assertTrue(response["success"], msg="Failed heartbeat test.")
-        print(response)
 
 
 class DocumentConversionTests(DockerTestBase):
@@ -236,32 +226,45 @@ class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
 
     def test_convert_wma_to_mp3(self):
-        """Can we convert wma to mp3 and add metadata"""
+        """Can we convert wma to mp3 and add metadata?"""
         filepath = os.path.join(
             self.assets_dir, "..", "fixtures", "test_audio_object.json"
         )
         wma_path = os.path.join(self.assets_dir, "1.wma")
-        with open(
-            os.path.join(self.assets_dir, "1_with_metadata.mp3"), "rb"
-        ) as mp3:
-            test_mp3 = mp3.read()
 
-        with open(filepath, "rb") as file:
-            f = file.read()
+        with open(filepath, "r") as file:
+            audio_obj = json.load(file)
+
+        print(audio_obj)
         with open(wma_path, "rb") as wma_file:
             w = wma_file.read()
+
         resp = requests.post(
-            "%s/convert/audio" % self.base_url,
+            "%s/convert/audio" % self.test_server,
+            params={
+                "audio_obj": json.dumps(audio_obj),
+            },
             files={
-                "af": (os.path.basename(filepath), f),
                 "file": (os.path.basename(wma_path), w),
             },
         )
-        self.assertEqual(
-            test_mp3,
-            literal_eval(resp.json()["content"]),
-            msg="Audio conversion failed",
-        )
+
+        with NamedTemporaryFile(suffix="mp3") as tmp:
+            with open(tmp.name, "wb") as mp3b:
+                mp3b.write(literal_eval(resp.json()["content"]))
+                converted_file = eyed3.load(tmp.name)
+
+                self.assertEqual(
+                    converted_file.tag.title,
+                    "SEC v. Frank J. Custable, Jr.",
+                    msg="Audio conversion failed",
+                )
+                self.assertEqual(
+                    converted_file.tag.publisher,
+                    "Free Law Project",
+                    msg="Audio conversion failed",
+                )
+
         print("\nWMA successfully converted to MP3 √\n")
 
 
@@ -283,8 +286,13 @@ class ThumbnailGenerationTests(DockerTestBase):
             print("Generated thumbnail from .pdf successfully")
 
 
-class PageCountTests(DockerTestBase):
-    """Can we get page counts?"""
+class UtilityTests(DockerTestBase):
+    """Can we do basic operations?"""
+
+    def test_heartbeat(self):
+        """Check heartbeat?"""
+        response = requests.get(self.test_server).json()
+        self.assertTrue(response["success"], msg="Failed heartbeat test.")
 
     def send_file_to_pg_count(self, filepath):
         """Send file to extract page count.
@@ -295,7 +303,7 @@ class PageCountTests(DockerTestBase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/get_page_count" % self.base_url,
+            "%s/get_page_count" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
         ).json()
 
@@ -314,7 +322,7 @@ class PageCountTests(DockerTestBase):
 
     def test_post_pdf_data(self):
         """Can we send pdf as a file and get a response?"""
-        service = "%s/%s" % (self.base_url, "get_page_count")
+        service = "%s/%s" % (self.test_server, "get_page_count")
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
 
         with open(pdf_path, "rb") as file:
@@ -327,6 +335,20 @@ class PageCountTests(DockerTestBase):
         ).json()
         self.assertEqual(response["pg_count"], 6)
 
+    def test_file_type(self):
+        """Test Mime Type extraction"""
+        service = "%s/%s/%s" % (self.test_server, "utility", "mime_type")
+        file_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(file_path, "rb") as file:
+            f = file.read()
+        response = requests.post(
+            url=service,
+            params={"mime": True},
+            files={"file": (os.path.basename(file_path), f)},
+            timeout=60,
+        ).json()
+        self.assertEqual(response["mimetype"], "application/pdf")
+
 
 class FinancialDisclosureTests(DockerTestBase):
     """Test financial dislcosure conversion and extraction"""
@@ -338,7 +360,7 @@ class FinancialDisclosureTests(DockerTestBase):
         with open(pdf_path, "rb") as file:
             f = file.read()
         response = requests.post(
-            "%s/financial_disclosure/extract" % self.base_url,
+            "%s/financial_disclosure/extract" % self.test_server,
             files={"file": (os.path.basename(pdf_path), f)},
             timeout=60 * 60,
         )
@@ -355,7 +377,7 @@ class FinancialDisclosureTests(DockerTestBase):
             f = file.read()
 
         response = requests.post(
-            "%s/financial_disclosure/jw_extract" % self.base_url,
+            "%s/financial_disclosure/jw_extract" % self.test_server,
             files={"file": (os.path.basename(pdf_path), f)},
             params={"url": None},
             timeout=60 * 60,
@@ -380,7 +402,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
         # url = "http://com-courtlistener-storage.s3.amazonaws.com/financial-disclosures/2018/A%20-%20G/Barrett-AC.%20J3.%2007.%20SPE_R_18.tiff"
         response = requests.post(
-            "%s/financial_disclosure/single_image" % self.base_url,
+            "%s/financial_disclosure/single_image" % self.test_server,
             params={"url": url},
         ).json()
         self.assertEqual(
@@ -397,7 +419,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:
             answer = f.read()
-        service = "%s/financial_disclosure/multi_image" % self.base_url
+        service = "%s/financial_disclosure/multi_image" % self.test_server
         response = requests.post(service, params={"aws_path": test_key}).json()
         self.assertEqual(
             literal_eval(response["content"]),

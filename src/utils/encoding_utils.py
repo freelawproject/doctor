@@ -1,4 +1,5 @@
 import datetime
+from collections import namedtuple
 from decimal import Decimal
 
 import six
@@ -140,3 +141,7 @@ def is_protected_type(obj):
     force_text(strings_only=True).
     """
     return isinstance(obj, _PROTECTED_TYPES)
+
+
+def audio_encoder(data):
+    return namedtuple("AudioFile", data.keys())(*data.values())

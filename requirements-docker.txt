@@ -1,11 +1,12 @@
-disclosure-extractor==0.0.6
+boto3==1.9.38
+disclosure-extractor
+eyed3
 flask
 ipython
-requests
-eyed3
 lxml~=4.0
-six
 Pillow
 PyPDF2==1.26.0
 python-magic
-boto3==1.9.38
+requests
+six
+uwsgi
