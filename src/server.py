@@ -1,5 +1,4 @@
 import json
-from collections import namedtuple
 from tempfile import NamedTemporaryFile
 
 import magic
@@ -13,6 +12,7 @@ from disclosure_extractor import (
 from flask import Flask, request, jsonify
 
 from src.utils.audio import convert_mp3, set_mp3_meta_data
+from src.utils.encoding_utils import audio_encoder
 from src.utils.financial_disclosures import query_thumbs_db, download_images
 from src.utils.tasks import (
     extract_from_docx,
@@ -259,24 +259,19 @@ def judical_watch_extract():
     return jsonify(fd)
 
 
-def audio_encoder(data):
-    return namedtuple("AudioFile", data.keys())(*data.values())
-
-
 @app.route("/convert/audio", methods=["GET", "POST"])
 def audio_conversion():
-    """
+    """Can we convert to mp3 and add metadata.
 
-    :return:
+    :return: Converted audio
     """
-    f = request.files["file"]
-    af_file = request.files["af"]
-    af = json.load(af_file, object_hook=audio_encoder)
+    wma_file = request.files["file"]
+    audio_obj = json.loads(request.args.get("af"), object_hook=audio_encoder)
 
     with NamedTemporaryFile(suffix=".mp3") as tmp:
-        f.save(tmp.name)
+        wma_file.save(tmp.name)
         audio_file, err, error_code, path = convert_mp3(tmp.name)
-        af = set_mp3_meta_data(af, path)
+        af = set_mp3_meta_data(audio_obj, path)
 
         with open(af.path, "rb") as mp3:
             audio_bytes = mp3.read()
