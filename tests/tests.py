@@ -80,12 +80,6 @@ class DockerTestBase(TestCase):
             params={"max_dimension": max_dimension},
         )
 
-    def test_heartbeat(self):
-        """Check heartbeat?"""
-        response = requests.get(self.test_server).json()
-        self.assertTrue(response["success"], msg="Failed heartbeat test.")
-        print(response)
-
 
 class DocumentConversionTests(DockerTestBase):
     """Test document conversion"""
@@ -235,7 +229,12 @@ class ThumbnailGenerationTests(DockerTestBase):
 
 
 class UtilityTests(DockerTestBase):
-    """Can we get page counts?"""
+    """Can we do basic operations?"""
+
+    def test_heartbeat(self):
+        """Check heartbeat?"""
+        response = requests.get(self.test_server).json()
+        self.assertTrue(response["success"], msg="Failed heartbeat test.")
 
     def send_file_to_pg_count(self, filepath):
         """Send file to extract page count.
