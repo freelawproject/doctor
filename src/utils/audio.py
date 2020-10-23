@@ -103,21 +103,21 @@ def set_mp3_meta_data(audio_obj, mp3_path):
     date_argued = datetime.datetime.strptime(
         audio_obj.docket.date_argued, "%Y-%m-%d"
     )
-    audio_file.tag.album = u"{court}, {year}".format(
+    audio_file.tag.album = "{court}, {year}".format(
         court=court.full_name, year=date_argued.year
     )
     audio_file.tag.artist = court.full_name
     audio_file.tag.artist_url = court.url
     audio_file.tag.audio_source_url = audio_obj.download_url
     audio_file.tag.comments.set(
-        u"Argued: {date_argued}. Docket number: {docket_number}".format(
+        "Argued: {date_argued}. Docket number: {docket_number}".format(
             date_argued=date_argued,
             docket_number=audio_obj.docket.docket_number,
         )
     )
-    audio_file.tag.genre = u"Speech"
-    audio_file.tag.publisher = u"Free Law Project"
-    audio_file.tag.publisher_url = u"https://free.law"
+    audio_file.tag.genre = "Speech"
+    audio_file.tag.publisher = "Free Law Project"
+    audio_file.tag.publisher_url = "https://free.law"
     audio_file.tag.recording_date = audio_obj.docket.date_argued
 
     # Add images to the mp3. If it has a seal, use that for the Front Cover
@@ -141,7 +141,7 @@ def set_mp3_meta_data(audio_obj, mp3_path):
             os.path.join(seals_root, "512", "%s.png" % court.pk), "rb"
         ) as f:
             audio_file.tag.images.set(
-                3, f.read(), "image/png", u"Seal for %s" % court.short_name
+                3, f.read(), "image/png", "Seal for %s" % court.short_name
             )
         flp_image_frames.remove(3)
 
@@ -157,7 +157,7 @@ def set_mp3_meta_data(audio_obj, mp3_path):
                 frame,
                 f.read(),
                 "image/png",
-                u"Created for the public domain by Free Law Project",
+                "Created for the public domain by Free Law Project",
             )
 
     audio_file.tag.save()
