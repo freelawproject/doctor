@@ -29,3 +29,4 @@ jobs:
         python tests/tests.py ThumbnailGenerationTests
         python tests/tests.py PageCountTests
         python tests/tests.py FinancialDisclosureTests
+        python tests/tests.py UtilityTests
