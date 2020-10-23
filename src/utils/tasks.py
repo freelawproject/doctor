@@ -12,6 +12,7 @@ from src.utils.encoding_utils import *
 
 DEVNULL = open("/dev/null", "w")
 
+
 class THUMBNAIL_STATUSES(object):
     NEEDED = 0
     COMPLETE = 1
