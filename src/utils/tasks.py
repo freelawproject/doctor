@@ -8,7 +8,12 @@ from PyPDF2.utils import PdfReadError
 from lxml.etree import XMLSyntaxError
 from lxml.html.clean import Cleaner
 
-from src.utils.encoding_utils import *
+from src.utils.encoding_utils import (
+    force_text,
+    BTEUnicodeDecodeError,
+    smart_text,
+    force_bytes,
+)
 
 DEVNULL = open("/dev/null", "w")
 
@@ -254,8 +259,8 @@ def cleanup_ocr_text(txt):
     :return: Txt output, cleaned up.
     """
     simple_replacements = (
-        (u"Fi|ed", u"Filed"),
-        (u" Il ", u" II "),
+        ("Fi|ed", "Filed"),
+        (" Il ", " II "),
     )
     for replacement in simple_replacements:
         txt = txt.replace(replacement[0], replacement[1])
