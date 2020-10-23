@@ -23,7 +23,7 @@ jobs:
     - name: Build the dockerfile
       run: docker build . --file Dockerfile --tag freelawproject/binary-transformers-and-extractors:latest
     - name: Run Docker-compose File
-      run: docker-compose up
+      run: docker-compose up -d
     - name: Run tests
       run: |
         python tests/tests.py DocumentConversionTests
