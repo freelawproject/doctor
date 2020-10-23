@@ -1,20 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import (
-    absolute_import,
-    division,
-    print_function,
-    unicode_literals,
-)
 
 import json
 import os
-import time
 import unittest
 from ast import literal_eval
 from glob import iglob
 from unittest import TestCase
 
-import docker
 import requests
 
 
@@ -30,47 +22,6 @@ class DockerTestBase(TestCase):
         doc_json = json.load(f)
     for k, v in doc_json.items():
         doc_answers[k] = v
-
-    def setUp(self):
-        """Setup containers
-
-        Start seal-rookery docker image and set volume binding. Then link
-        seal rookery to BTE python site packages.
-
-        :return:
-        """
-        client = docker.from_env()
-        client.containers.run(
-            "freelawproject/seal-rookery:latest",
-            name="seal-rookery",
-            detach=True,
-            auto_remove=True,
-            volumes={
-                "seal-rookery": {
-                    "bind": "/usr/local/lib/python3.8/site-packages/seal_rookery",
-                    "mode": "ro",
-                }
-            },
-        )
-        client.containers.run(
-            "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"80/tcp": ("0.0.0.0", 80)},
-            detach=True,
-            auto_remove=True,
-            volumes={
-                "seal-rookery": {
-                    "bind": "/usr/local/lib/python3.8/site-packages/seal_rookery",
-                    "mode": "ro",
-                }
-            },
-        )
-        time.sleep(2)
-
-    def tearDown(self):
-        """Tear down containers"""
-        client = docker.from_env()
-        for container in client.containers.list():
-            container.stop()
 
     def send_file_to_bte(self, filepath, do_ocr=False):
         """Send file to extract doc content method.
@@ -419,21 +370,6 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         )
         print("Images combined correctly from AWS √")
 
-
-class UtilityTests(DockerTestBase):
-    def test_file_type(self):
-        """Test Mime Type extraction"""
-        service = "%s/%s/%s" % (self.base_url, "utility", "mime_type")
-        file_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-        with open(file_path, "rb") as file:
-            f = file.read()
-        response = requests.post(
-            url=service,
-            params={"mime": True},
-            files={"file": (os.path.basename(file_path), f)},
-            timeout=60,
-        ).json()
-        self.assertEqual(response["mimetype"], "application/pdf")
 
 
 if __name__ == "__main__":
