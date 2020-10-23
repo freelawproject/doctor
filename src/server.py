@@ -269,7 +269,6 @@ def audio_conversion():
 
     :return:
     """
-    print("audio conversion called")
     f = request.files["file"]
     af_file = request.files["af"]
     af = json.load(af_file, object_hook=audio_encoder)
@@ -310,4 +309,4 @@ def extract_mime_type():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True)
+    app.run(host="0.0.0.0", port='5050', debug=True)

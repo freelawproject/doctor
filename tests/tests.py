@@ -21,7 +21,7 @@ import requests
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    base_url = "http://0.0.0.0:80"
+    test_server = "http://localhost:5050"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -82,7 +82,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/extract_doc_content" % self.base_url,
+            "%s/extract_doc_content" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
             params={"do_ocr": do_ocr},
         ).json()
@@ -97,7 +97,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/make_pdftotext_process" % self.base_url,
+            "%s/make_pdftotext_process" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
         ).json()
 
@@ -110,7 +110,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/convert_audio_file" % self.base_url,
+            "%s/convert_audio_file" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
         )
 
@@ -124,14 +124,14 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/make_png_thumbnail" % self.base_url,
+            "%s/make_png_thumbnail" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
             params={"max_dimension": max_dimension},
         )
 
     def test_heartbeat(self):
         """Check heartbeat?"""
-        response = requests.get(self.base_url).json()
+        response = requests.get(self.test_server).json()
         self.assertTrue(response["success"], msg="Failed heartbeat test.")
         print(response)
 
@@ -251,7 +251,7 @@ class AudioConversionTests(DockerTestBase):
         with open(wma_path, "rb") as wma_file:
             w = wma_file.read()
         resp = requests.post(
-            "%s/convert/audio" % self.base_url,
+            "%s/convert/audio" % self.test_server,
             files={
                 "af": (os.path.basename(filepath), f),
                 "file": (os.path.basename(wma_path), w),
@@ -295,7 +295,7 @@ class PageCountTests(DockerTestBase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/get_page_count" % self.base_url,
+            "%s/get_page_count" % self.test_server,
             files={"file": (os.path.basename(filepath), f)},
         ).json()
 
@@ -314,7 +314,7 @@ class PageCountTests(DockerTestBase):
 
     def test_post_pdf_data(self):
         """Can we send pdf as a file and get a response?"""
-        service = "%s/%s" % (self.base_url, "get_page_count")
+        service = "%s/%s" % (self.test_server, "get_page_count")
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
 
         with open(pdf_path, "rb") as file:
@@ -338,7 +338,7 @@ class FinancialDisclosureTests(DockerTestBase):
         with open(pdf_path, "rb") as file:
             f = file.read()
         response = requests.post(
-            "%s/financial_disclosure/extract" % self.base_url,
+            "%s/financial_disclosure/extract" % self.test_server,
             files={"file": (os.path.basename(pdf_path), f)},
             timeout=60 * 60,
         )
@@ -355,7 +355,7 @@ class FinancialDisclosureTests(DockerTestBase):
             f = file.read()
 
         response = requests.post(
-            "%s/financial_disclosure/jw_extract" % self.base_url,
+            "%s/financial_disclosure/jw_extract" % self.test_server,
             files={"file": (os.path.basename(pdf_path), f)},
             params={"url": None},
             timeout=60 * 60,
@@ -380,7 +380,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
         # url = "http://com-courtlistener-storage.s3.amazonaws.com/financial-disclosures/2018/A%20-%20G/Barrett-AC.%20J3.%2007.%20SPE_R_18.tiff"
         response = requests.post(
-            "%s/financial_disclosure/single_image" % self.base_url,
+            "%s/financial_disclosure/single_image" % self.test_server,
             params={"url": url},
         ).json()
         self.assertEqual(
@@ -397,7 +397,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
         with open(test_file, "rb") as f:
             answer = f.read()
-        service = "%s/financial_disclosure/multi_image" % self.base_url
+        service = "%s/financial_disclosure/multi_image" % self.test_server
         response = requests.post(service, params={"aws_path": test_key}).json()
         self.assertEqual(
             literal_eval(response["content"]),
