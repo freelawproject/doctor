@@ -20,8 +20,6 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
         `# Other dependencies` \
         libffi-dev libxml2-dev libxslt-dev python-dev
 
-RUN pip install uwsgi
-
 COPY ./requirements-docker.txt /project/requirements.txt
 
 RUN pip install -r /project/requirements.txt
