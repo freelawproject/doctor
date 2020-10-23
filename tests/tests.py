@@ -292,6 +292,7 @@ class UtilityTests(DockerTestBase):
         ).json()
         self.assertEqual(response["mimetype"], "application/pdf")
 
+
 class FinancialDisclosureTests(DockerTestBase):
     """Test financial dislcosure conversion and extraction"""
 
@@ -369,7 +370,6 @@ class AWSFinancialDisclosureTests(DockerTestBase):
             msg="Failed to merge split PDFs.",
         )
         print("Images combined correctly from AWS √")
-
 
 
 if __name__ == "__main__":
