@@ -5,8 +5,10 @@ import os
 import unittest
 from ast import literal_eval
 from glob import iglob
+from tempfile import NamedTemporaryFile
 from unittest import TestCase
 
+import eyed3
 import requests
 
 
@@ -181,32 +183,46 @@ class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
 
     def test_convert_wma_to_mp3(self):
-        """Can we convert wma to mp3 and add metadata"""
+        """Can we convert wma to mp3 and add metadata?"""
         filepath = os.path.join(
             self.assets_dir, "..", "fixtures", "test_audio_object.json"
         )
         wma_path = os.path.join(self.assets_dir, "1.wma")
-        with open(
-            os.path.join(self.assets_dir, "1_with_metadata.mp3"), "rb"
-        ) as mp3:
-            test_mp3 = mp3.read()
 
-        with open(filepath, "rb") as file:
-            f = file.read()
+        with open(filepath, "r") as file:
+            audio_obj = json.load(file)
+
+        print(audio_obj)
         with open(wma_path, "rb") as wma_file:
             w = wma_file.read()
+
         resp = requests.post(
             "%s/convert/audio" % self.test_server,
+            params={
+                "af": json.dumps(audio_obj),
+            },
             files={
-                "af": (os.path.basename(filepath), f),
+                # "af": (os.path.basename(filepath), f),
                 "file": (os.path.basename(wma_path), w),
             },
         )
-        self.assertEqual(
-            test_mp3,
-            literal_eval(resp.json()["content"]),
-            msg="Audio conversion failed",
-        )
+
+        with NamedTemporaryFile(suffix="mp3") as tmp:
+            with open(tmp.name, "wb") as mp3b:
+                mp3b.write(literal_eval(resp.json()["content"]))
+                converted_file = eyed3.load(tmp.name)
+
+                self.assertEqual(
+                    converted_file.tag.title,
+                    "SEC v. Frank J. Custable, Jr.",
+                    msg="Audio conversion failed",
+                )
+                self.assertEqual(
+                    converted_file.tag.publisher,
+                    "Free Law Project",
+                    msg="Audio conversion failed",
+                )
+
         print("\nWMA successfully converted to MP3 √\n")
 
 
