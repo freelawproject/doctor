@@ -283,7 +283,7 @@ class ThumbnailGenerationTests(DockerTestBase):
             print("Generated thumbnail from .pdf successfully")
 
 
-class PageCountTests(DockerTestBase):
+class UtilityTests(DockerTestBase):
     """Can we get page counts?"""
 
     def send_file_to_pg_count(self, filepath):
@@ -327,6 +327,19 @@ class PageCountTests(DockerTestBase):
         ).json()
         self.assertEqual(response["pg_count"], 6)
 
+    def test_file_type(self):
+        """Test Mime Type extraction"""
+        service = "%s/%s/%s" % (self.test_server, "utility", "mime_type")
+        file_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(file_path, "rb") as file:
+            f = file.read()
+        response = requests.post(
+            url=service,
+            params={"mime": True},
+            files={"file": (os.path.basename(file_path), f)},
+            timeout=60,
+        ).json()
+        self.assertEqual(response["mimetype"], "application/pdf")
 
 class FinancialDisclosureTests(DockerTestBase):
     """Test financial dislcosure conversion and extraction"""
