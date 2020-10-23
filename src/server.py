@@ -292,6 +292,8 @@ def extract_mime_type():
     try:
         file = request.files["file"]
         mime = request.args.get("mime")
+        if mime == "False":
+            mime = False
 
         with NamedTemporaryFile() as tmp:
             file.save(tmp.name)
