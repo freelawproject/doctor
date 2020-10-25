@@ -14,7 +14,7 @@ services:
     image: freelawproject/binary-transformers-and-extractors:latest
     container_name: "bte-binary-transformers-and-extractors"
     ports:
-      - "5050:80"
+      - "5050:5050"
     depends_on:
       - bte-seal-rookery
     volumes:
