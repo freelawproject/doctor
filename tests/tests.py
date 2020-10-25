@@ -50,7 +50,7 @@ class DockerTestBase(TestCase):
         )
         client.containers.run(
             "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"80/tcp": ("0.0.0.0", 5050)},
+            ports={"5050/tcp": ("0.0.0.0", 5050)},
             detach=True,
             auto_remove=True,
             volumes={
