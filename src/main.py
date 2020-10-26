@@ -226,7 +226,10 @@ def financial_disclosure_extract():
     file = request.files.get("file", None)
 
     if url is not None:
-        pdf = requests.get(url, timeout=60 * 10).content
+        try:
+            pdf = requests.get(url, timeout=60 * 10).content
+        except:
+            return jsonify({"err": "Timeout"})
     elif file is not None:
         pdf = file.read()
     else:
@@ -247,7 +250,10 @@ def judical_watch_extract():
     url = request.args.get("url")
     file = request.files.get("file", None)
     if url is not None:
-        pdf = requests.get(url, timeout=60 * 10).content
+        try:
+            pdf = requests.get(url, timeout=60 * 10).content
+        except:
+            return jsonify({"err": "Timeout"})
     elif file is not None:
         pdf = file.read()
     else:
