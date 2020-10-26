@@ -58,7 +58,5 @@ def download_images(sorted_urls):
     image_list = []
     for link in sorted_urls:
         image = requests.get(link, stream=True, timeout=60 * 10).raw
-        image_list.append(
-            Image.open(image).convert("RGB")
-        )
+        image_list.append(Image.open(image).convert("RGB"))
     return image_list
