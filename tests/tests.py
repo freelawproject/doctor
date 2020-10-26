@@ -61,12 +61,14 @@ class DockerTestBase(TestCase):
             },
         )
         time.sleep(2)
+        client.close()
 
     def tearDown(self):
         """Tear down containers"""
         client = docker.from_env()
         for container in client.containers.list():
             container.stop()
+        client.close()
 
     def send_file_to_bte(self, filepath, do_ocr=False):
         """Send file to extract doc content method.
