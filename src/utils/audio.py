@@ -174,9 +174,9 @@ def best_case_name(audio_dict: Dict) -> AnyStr:
 
     Assumes that the object passed in has all of those attributes.
     """
-    if obj.case_name:
-        return obj.case_name
-    elif obj.case_name_full:
-        return obj.case_name_full
+    if audio_dict["case_name"]:
+        return audio_dict["case_name"]
+    elif audio_dict["case_name_full"]:
+        return audio_dict["case_name_full"]
     else:
-        return obj.case_name_short
+        return audio_dict["case_name_short"]
