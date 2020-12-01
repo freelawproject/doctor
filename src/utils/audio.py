@@ -5,6 +5,7 @@ import subprocess
 import traceback
 import uuid
 from distutils.spawn import find_executable
+from typing import AnyStr, ByteString, NoReturn, Dict
 
 import eyed3
 from eyed3 import id3
@@ -14,7 +15,7 @@ root = os.path.dirname(os.path.realpath(__file__))
 assets_dir = os.path.join(root, "..", "assets")
 
 
-def get_audio_binary():
+def get_audio_binary() -> AnyStr:
     """Get the path to the installed binary for doing audio conversions
 
     Ah, Linux. Land where ffmpeg can fork into avconv, where avconv can be the
@@ -45,40 +46,29 @@ def get_audio_binary():
     return path_to_binary
 
 
-def convert_mp3(af_local_path):
-    """Convert to MP3
+def convert_mp3(audio_bytes: ByteString, tmp_path: AnyStr) -> NoReturn:
+    """Convert audio bytes to mp3 at temporary path
 
-    :param af_local_path:
+    :param audio_bytes: Audio file bytes sent to BTE
+    :param tmp_path: Temporary filepath for output of audioprocess
     :return:
     """
-    err = ""
-    error_code = 0
-    av_path = get_audio_binary()
-    tmp_path = os.path.join("/tmp", "audio_" + uuid.uuid4().hex + ".mp3")
     av_command = [
-        av_path,
+        get_audio_binary(),
         "-i",
-        af_local_path,
+        "/dev/stdin",
         "-ar",
-        "22050",  # sample rate (audio samples/s) of 22050Hz
+        "22050",
         "-ab",
-        "48k",  # constant bit rate (sample resolution) of 48kbps
+        "48k",
+        "-f",
+        "mp3",
         tmp_path,
     ]
-    try:
-        _ = subprocess.check_output(av_command, stderr=subprocess.STDOUT)
-        file_data = codecs.open(tmp_path, "rb").read()
-    except subprocess.CalledProcessError as e:
-        file_data = ""
-        err = "%s failed command: %s\nerror code: %s\noutput: %s\n%s" % (
-            av_path,
-            av_command,
-            e.returncode,
-            e.output,
-            traceback.format_exc(),
-        )
-        error_code = 1
-    return file_data, err, error_code, tmp_path
+    ffmpeg_cmd = subprocess.Popen(
+        av_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False
+    )
+    ffmpeg_cmd.communicate(audio_bytes)
 
 
 def set_mp3_meta_data(audio_obj, mp3_path):
