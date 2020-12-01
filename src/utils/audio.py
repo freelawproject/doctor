@@ -43,7 +43,7 @@ def get_audio_binary() -> AnyStr:
     return path_to_binary
 
 
-def convert_mp3(audio_bytes: ByteString, tmp_path: AnyStr) -> NoReturn:
+def convert_to_mp3(audio_bytes: ByteString, tmp_path: AnyStr) -> NoReturn:
     """Convert audio bytes to mp3 at temporary path
 
     :param audio_bytes: Audio file bytes sent to BTE
