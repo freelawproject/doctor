@@ -1,7 +1,6 @@
 import base64
 import os
 import subprocess
-from distutils.spawn import find_executable
 from typing import AnyStr, ByteString, NoReturn, Dict
 
 import eyed3
@@ -12,37 +11,6 @@ root = os.path.dirname(os.path.realpath(__file__))
 assets_dir = os.path.join(root, "..", "assets")
 
 
-def get_audio_binary() -> AnyStr:
-    """Get the path to the installed binary for doing audio conversions
-
-    Ah, Linux. Land where ffmpeg can fork into avconv, where avconv can be the
-    correct binary for years and years, and where much later, the fork can be
-    merged again and avconv can disappear.
-
-    Yes, the above is what happened, and yes, avconv and ffmpeg are pretty much
-    API compatible despite forking and them merging back together. From the
-    outside, this appears to be an entirely worthless fork that they embarked
-    upon, but what do we know.
-
-    In any case, this program finds whichever one is available and then
-    provides it to the user. ffmpeg was the winner of the above history, but we
-    stick with avconv as our default because it was the one that was winning
-    when we originally wrote our code. One day, we'll want to switch to ffmpeg,
-    once avconv is but dust in the bin of history.
-
-    :returns path to the winning binary
-    """
-    path_to_binary = find_executable("avconv")
-    if path_to_binary is None:
-        path_to_binary = find_executable("ffmpeg")
-        if path_to_binary is None:
-            raise Exception(
-                "Unable to find avconv or ffmpeg for doing "
-                "audio conversions."
-            )
-    return path_to_binary
-
-
 def convert_to_mp3(audio_bytes: ByteString, tmp_path: AnyStr) -> NoReturn:
     """Convert audio bytes to mp3 at temporary path
 
@@ -51,7 +19,7 @@ def convert_to_mp3(audio_bytes: ByteString, tmp_path: AnyStr) -> NoReturn:
     :return:
     """
     av_command = [
-        get_audio_binary(),
+        "ffmpeg",
         "-i",
         "/dev/stdin",
         "-ar",
