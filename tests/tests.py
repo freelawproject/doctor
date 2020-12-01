@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import base64
 import json
 import os
 import time
@@ -227,21 +227,71 @@ class DocumentConversionTests(DockerTestBase):
 class AudioConversionTests(DockerTestBase):
     """Test Audio Conversion"""
 
-    def test_convert_wma_to_mp3(self):
-        """Can we convert wma to mp3 and add metadata?"""
+    def test_wma_to_mp3(self):
+        """Can we convert to mp3 with metadata"""
+
+        wma_path = os.path.join(self.assets_dir, "1.wma")
+        with open(wma_path, "rb") as wma_file:
+            w = wma_file.read()
         filepath = os.path.join(
             self.assets_dir, "..", "fixtures", "test_audio_object.json"
         )
-        wma_path = os.path.join(self.assets_dir, "1.wma")
 
         with open(filepath, "r") as file:
-            audio_obj = json.load(file)
+            audio_details = json.load(file)
 
-        print(audio_obj)
+        audio_resp = requests.post(
+            "%s/convert/audio" % self.test_server,
+            params={"audio_data": json.dumps(audio_details)},
+            files={
+                "audio_file": (os.path.basename(wma_path), w),
+            },
+        )
+
+        # Check test returns 200.
+        self.assertEqual(
+            audio_resp.status_code,
+            200,
+            msg=f"Status code not 200; {audio_resp.json()['msg']}",
+        )
+
+        # Validate some metadata in the MP3.
+        with NamedTemporaryFile(suffix="mp3") as tmp:
+            with open(tmp.name, "wb") as mp3_data:
+                mp3_data.write(
+                    base64.b64decode(audio_resp.json()["audio_b64"])
+                )
+                mp3_file = eyed3.load(tmp.name)
+
+            self.assertEqual(
+                mp3_file.tag.publisher,
+                "Free Law Project",
+                msg="Publisher metadata failed.",
+            )
+            self.assertEqual(
+                mp3_file.tag.title,
+                "SEC v. Custable",
+                msg="Title metadata failed.",
+            )
+
+            self.assertEqual(
+                mp3_file.type,
+                eyed3.core.AUDIO_MP3,
+                msg="Audio conversion to mp3 failed.",
+            )
+
+    def test_failing_audio_conversion(self):
+        """Can we convert wma to mp3 and add metadata?"""
+
+        filepath = os.path.join(
+            self.assets_dir, "..", "fixtures", "test_audio_object.json"
+        )
+        wma_path = os.path.join(self.assets_dir, "opinion_text.txt")
+        with open(filepath, "r") as file:
+            audio_obj = json.load(file)
         with open(wma_path, "rb") as wma_file:
             w = wma_file.read()
-
-        resp = requests.post(
+        audio_resp = requests.post(
             "%s/convert/audio" % self.test_server,
             params={
                 "audio_obj": json.dumps(audio_obj),
@@ -251,23 +301,9 @@ class AudioConversionTests(DockerTestBase):
             },
         )
 
-        with NamedTemporaryFile(suffix="mp3") as tmp:
-            with open(tmp.name, "wb") as mp3b:
-                mp3b.write(literal_eval(resp.json()["content"]))
-                converted_file = eyed3.load(tmp.name)
-
-                self.assertEqual(
-                    converted_file.tag.title,
-                    "SEC v. Frank J. Custable, Jr.",
-                    msg="Audio conversion failed",
-                )
-                self.assertEqual(
-                    converted_file.tag.publisher,
-                    "Free Law Project",
-                    msg="Audio conversion failed",
-                )
-
-        print("\nWMA successfully converted to MP3 √\n")
+        self.assertEqual(
+            audio_resp.status_code, 422, msg="Status code not 422"
+        )
 
 
 class ThumbnailGenerationTests(DockerTestBase):

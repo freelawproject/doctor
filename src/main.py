@@ -1,4 +1,6 @@
 import json
+import os
+import uuid
 from tempfile import NamedTemporaryFile
 
 import magic
@@ -11,8 +13,11 @@ from disclosure_extractor import (
 )
 from flask import Flask, request, jsonify
 
-from src.utils.audio import convert_mp3, set_mp3_meta_data
-from src.utils.encoding_utils import audio_encoder
+from src.utils.audio import (
+    set_mp3_meta_data,
+    convert_to_mp3,
+    convert_to_base64,
+)
 from src.utils.financial_disclosures import query_thumbs_db, download_images
 from src.utils.tasks import (
     extract_from_docx,
@@ -267,30 +272,32 @@ def judical_watch_extract():
 
 @app.route("/convert/audio", methods=["GET", "POST"])
 def audio_conversion():
-    """Can we convert to mp3 and add metadata.
+    """Convert audio file to MP3 and update metadata on mp3.
 
     :return: Converted audio
     """
-    wma_file = request.files["file"]
-    audio_obj = json.loads(
-        request.args.get("audio_obj"), object_hook=audio_encoder
-    )
+    # For whatever reason temporary file was workable with subprocess.
+    tmp_path = os.path.join("/tmp", "audio_" + uuid.uuid4().hex + ".mp3")
+    try:
+        audio_bytes = request.files["audio_file"].read()
+        audio_data = json.loads(request.args.get("audio_data"))
+        convert_to_mp3(audio_bytes, tmp_path)
+        audio_file = set_mp3_meta_data(audio_data, tmp_path)
+        audio_b64 = convert_to_base64(tmp_path)
+        os.remove(tmp_path)
 
-    with NamedTemporaryFile(suffix=".mp3") as tmp:
-        wma_file.save(tmp.name)
-        audio_file, err, error_code, path = convert_mp3(tmp.name)
-        af = set_mp3_meta_data(audio_obj, path)
-
-        with open(af.path, "rb") as mp3:
-            audio_bytes = mp3.read()
-
-        response = {
-            "content": str(audio_bytes),
-            "error_code": error_code,
-            "err": err,
-            "duration": af.info.time_secs,
-        }
-        return jsonify(response)
+        return jsonify(
+            {
+                "audio_b64": audio_b64,
+                "duration": audio_file.info.time_secs,
+                "msg": "Success",
+            }
+        )
+    except Exception as e:
+        # Handle file cleanup and return a 422
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        return jsonify({"msg": str(e)}), 422
 
 
 @app.route("/utility/mime_type", methods=["GET", "POST"])
