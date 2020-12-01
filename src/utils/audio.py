@@ -1,9 +1,6 @@
-import codecs
-import datetime
+import base64
 import os
 import subprocess
-import traceback
-import uuid
 from distutils.spawn import find_executable
 from typing import AnyStr, ByteString, NoReturn, Dict
 
@@ -154,7 +151,19 @@ def set_mp3_meta_data(audio_obj, mp3_path):
     return audio_file
 
 
-def best_case_name(obj):
+def convert_to_base64(tmp_path: AnyStr) -> AnyStr:
+    """Convert file base64 and decode it.
+
+    This allows us to safely return the file in json to CL.
+
+    :param tmp_path:
+    :return: Audio file encoded in base64 as a string
+    """
+    with open(tmp_path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+def best_case_name(audio_dict: Dict) -> AnyStr:
     """Take an object and return the highest quality case name possible.
 
     In general, this means returning the fields in an order like:
