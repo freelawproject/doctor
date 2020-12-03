@@ -18,27 +18,17 @@ AWS_S3_CUSTOM_DOMAIN = "https://%s.s3-%s.amazonaws.com/" % (
 )
 
 
-def query_thumbs_db(aws_url):
-    """Query the indiviual image pages of a PDF based on the thumbs.db path.
+def build_and_sort_urls(urls: list) -> List[str]:
+    """Build complete urls and sort them numerically
 
-    The function queries aws and sorts files that may not have leading zeroes
-    correctly by page number.
-    :param aws_url: URL of image file we want to process
-    :type aws_url: str
-    :return: Sorted urls for document & the first response key
-    :type return: tuple
+    :param urls: URL for each page sorted
+    :return: List of ordered urls
     """
-    kwargs = {"Bucket": AWS_STORAGE_BUCKET_NAME, "Prefix": aws_url[:-10]}
-    thumbs_db_query = s3.list_objects_v2(**kwargs)
-    # Filter out the proper url_paths excluding paths without Page in them
-    url_paths = [
-        x["Key"]
-        for x in thumbs_db_query["Contents"]
-        if ".db" not in x["Key"] and "Page" in x["Key"]
-    ]
-    lookup_key = url_paths[0]
-    download_urls = [AWS_S3_CUSTOM_DOMAIN + path for path in url_paths]
 
+    url_paths = [
+        x["Key"] for x in urls if ".db" not in x["Key"] and "Page" in x["Key"]
+    ]
+    download_urls = [AWS_S3_CUSTOM_DOMAIN + path for path in url_paths]
     page_regex = re.compile(r"(.*Page_)(.*)(\.tif)")
 
     def key(item):
@@ -46,11 +36,34 @@ def query_thumbs_db(aws_url):
         return int(m.group(2))
 
     download_urls.sort(key=key)
-    return download_urls, lookup_key
+    return download_urls
 
 
-def download_images(sorted_urls):
-    """Download and save images data.
+def find_and_sort_image_urls(aws_key: str) -> List[str]:
+    """Query aws, filter and build list of image urls to download.
+
+    All of our multiple single page splitt tiffs have a thumbnail file.
+    We use the thumbs.db to find all associated files and combine them
+    into a single pdf file.
+
+    The function queries aws and sorts files that may not have leading zeroes
+    correctly by page number.
+    :param aws_key: URL of image file we want to process
+    :type aws_key: str
+    :return: Sorted urls for document & the first response key
+    :type return: list
+    """
+
+    query_response = s3.list_objects_v2(
+        **{"Bucket": AWS_STORAGE_BUCKET_NAME, "Prefix": aws_key[:-10]}
+    )
+    return build_and_sort_urls(urls=query_response["Contents"])
+
+
+def download_images(sorted_urls) -> List:
+    """Download images and convert to list of PIL images
+
+    Once in an array of PIL.images we can easily convert this to a PDF.
 
     :param sorted_urls: List of sortedd URLs for split financial disclsosure
     :return: image_list
