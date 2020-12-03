@@ -1,5 +1,5 @@
 import io
-from typing import List
+from typing import ByteString
 
 
 def pdf_bytes_from_images(image_list):
@@ -23,7 +23,7 @@ def pdf_bytes_from_images(image_list):
     return pdf_data
 
 
-def convert_tiff_to_pdf_bytes(single_tiff_image) -> List:
+def convert_tiff_to_pdf_bytes(single_tiff_image) -> ByteString:
     """Split long tiff into page sized image
 
     :param single_tiff_image: One long tiff file
