@@ -21,6 +21,7 @@ def pdf_bytes_from_images(image_list):
 
     return pdf_data
 
+
 def convert_tiff_to_pdf_bytes(single_tiff_image):
     """
 
