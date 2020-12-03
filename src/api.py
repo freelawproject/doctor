@@ -298,27 +298,3 @@ def audio_conversion():
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
         return jsonify({"msg": str(e)}), 422
-
-
-@app.route("/utility/mime_type", methods=["GET", "POST"])
-def extract_mime_type():
-    try:
-        file = request.files["file"]
-        mime = request.args.get("mime")
-        if mime == "False":
-            mime = False
-
-        with NamedTemporaryFile() as tmp:
-            file.save(tmp.name)
-            return jsonify(
-                {
-                    "mimetype": magic.from_file(tmp.name, mime=mime),
-                    "error": False,
-                }
-            )
-    except Exception as e:
-        return jsonify({"error": True, "error_msg": str(e), "mimetype": ""})
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True, port=5050)
