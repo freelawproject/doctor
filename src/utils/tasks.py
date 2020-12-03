@@ -272,14 +272,6 @@ def cleanup_ocr_text(txt) -> AnyStr:
     return txt
 
 
-def extract_by_ocr(tmp):
-    with NamedTemporaryFile(suffix=".tiff") as tmp_tiff:
-        out, err, returncode = rasterize_pdf(tmp.name, tmp_tiff.name)
-        txt = convert_file_to_txt(tmp_tiff)
-        txt = cleanup_ocr_text(txt)
-    return True, txt
-
-
 def make_png_thumbnail_for_instance(filepath, max_dimension):
     """Abstract function for making a thumbnail for a PDF
 
