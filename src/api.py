@@ -9,16 +9,19 @@ from PIL import Image
 from disclosure_extractor import (
     process_financial_document,
     process_judicial_watch,
-    print_results,
 )
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 
 from src.utils.audio import (
     set_mp3_meta_data,
     convert_to_mp3,
     convert_to_base64,
 )
-from src.utils.financial_disclosures import query_thumbs_db, download_images
+from src.utils.financial_disclosures import (
+    find_and_sort_image_urls,
+    download_images,
+)
+from src.utils.image_processing import convert_tiff_to_pdf_bytes
 from src.utils.tasks import (
     extract_from_docx,
     extract_from_doc,
@@ -30,8 +33,8 @@ from src.utils.tasks import (
     rasterize_pdf,
     make_png_thumbnail_for_instance,
     get_page_count,
-    make_pdf_from_image_array,
-    strip_metadata,
+    pdf_bytes_from_image_array,
+    strip_metadata_from_bytes,
 )
 
 app = Flask(__name__)
@@ -47,7 +50,7 @@ def heartbeat():
     return jsonify({"success": True, "msg": "Docker container running."})
 
 
-@app.route("/extract_doc_content", methods=["POST"])
+@app.route("/document/extract_text", methods=["POST"])
 def extract_content():
     """Extract txt from different document types.
 
@@ -101,7 +104,7 @@ def extract_content():
         )
 
 
-@app.route("/make_png_thumbnail", methods=["POST"])
+@app.route("/document/thumbnail", methods=["POST"])
 def make_png_thumbnail():
     """Make a thumbail of the first page of a PDF and return it.
 
@@ -123,11 +126,11 @@ def make_png_thumbnail():
         return jsonify(response)
 
 
-@app.route("/get_page_count", methods=["POST"])
-def pg_count():
+@app.route("/document/page_count", methods=["POST"])
+def page_count():
     """Get page count form PDF
 
-    :return:
+    :return: Page count
     """
     f = request.files["file"]
     extension = f.filename.split(".")[-1]
@@ -153,15 +156,32 @@ def pdf_to_text():
         return jsonify({"content": content, "err": err})
 
 
-# ------- Financial Disclosure Microservice requests ------- #
-@app.route("/financial_disclosure/single_image", methods=["POST"])
-def generate_pdf_from_image_url():
-    """Take a single image tiff and convert it into a multipage PDF.
+@app.route("/document/mime_type", methods=["GET", "POST"])
+def extract_mime_type():
+    """Identify the mime type of a document
 
-    Download a single image and split it into its component pages.
-    :param aws_url: URL of image file we want to process
-    :type aws_url: str
-    :return: PDF
+    :return: Mime type
+    """
+
+    file = request.files["file"]
+    mime = request.args.get("mime")
+    try:
+        if mime == "False":
+            mime = False
+        with NamedTemporaryFile() as tmp:
+            file.save(tmp.name)
+            mimetype = magic.from_file(tmp.name, mime=mime)
+        return jsonify({"mimetype": mimetype})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 422
+
+
+# ------- Financial Disclosure Microservice requests ------- #
+@app.route("/financial_disclosure/tiff_to_pdf", methods=["POST"])
+def split_single_tiff_into_pdf_from_url():
+    """Convert financial disclosure image url to PDF
+
+    :return: PDF content
     """
     error_code = 0
     err = ""
@@ -189,11 +209,14 @@ def generate_pdf_from_image_url():
     return jsonify(response)
 
 
-@app.route("/financial_disclosure/multi_image", methods=["POST"])
-def make_pdf_from_images():
-    """Query, download and combine multiple images into a PDF
 
-    :return: PDF
+@app.route("/financial_disclosure/tiffs_to_pdf", methods=["POST"])
+def make_pdf_from_images():
+    """Convert split financial disclosure images into single PDF
+
+    Using a single image url find other pages and combine into a single PDF
+
+    :return: PDF content
     """
     err = ""
     error_code = 0
@@ -223,9 +246,9 @@ def make_pdf_from_images():
 
 @app.route("/financial_disclosure/extract", methods=["POST"])
 def financial_disclosure_extract():
-    """Extract content from a financial disclosure.
+    """Extract contents from a judicial financial disclosure.
 
-    :return:
+    :return: Extracted financial records
     """
     url = request.args.get("url")
     file = request.files.get("file", None)
@@ -245,10 +268,12 @@ def financial_disclosure_extract():
         print_results(fd)
     return jsonify(fd)
 
-
-@app.route("/financial_disclosure/jw_extract", methods=["POST"])
+@app.route("/financial_disclosure/extract_jw", methods=["POST"])
 def judical_watch_extract():
-    """Extract content from an older JW financial disclosure.
+    """Extract content from a judicial watch financial disclosure.
+
+    Technically this works on non-judicial watch PDFs but it is much slower.
+    Can/should be used if financial_disclosure_extract fails
 
     :return: Disclosure information
     """
@@ -267,9 +292,8 @@ def judical_watch_extract():
     if fd["success"] is True:
         print_results(fd)
 
-    return jsonify(fd)
 
-
+# ------- Process Audio Files ------- #
 @app.route("/convert/audio", methods=["GET", "POST"])
 def audio_conversion():
     """Convert audio file to MP3 and update metadata on mp3.
