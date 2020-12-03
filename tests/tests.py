@@ -4,7 +4,6 @@ import json
 import os
 import time
 import unittest
-from ast import literal_eval
 from glob import iglob
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -17,7 +16,7 @@ import requests
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    test_server = "http://localhost:5050"
+    BTE_HOST = "http://localhost:5050"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -26,6 +25,26 @@ class DockerTestBase(TestCase):
         doc_json = json.load(f)
     for k, v in doc_json.items():
         doc_answers[k] = v
+
+    BTE_URLS = {
+        # Testing
+        "heartbeat": f"{BTE_HOST}",
+        # Audio Processing
+        # this should change but currently in a PR so will alter later
+        "convert-audio": f"{BTE_HOST}/convert/audio",
+        # Document processing
+        "pdf-to-text": f"{BTE_HOST}/document/pdf_to_text",
+        "document-extract": f"{BTE_HOST}/document/extract_text",
+        "page-count": f"{BTE_HOST}/document/page_count",
+        "thumbnail": f"{BTE_HOST}/document/thumbnail",
+        "mime-type": f"{BTE_HOST}/document/mime_type",
+        # Financial Disclosures
+        # Image conversion and extraction
+        "image-to-pdf": f"{BTE_HOST}/financial_disclosure/tiff_to_pdf",
+        "images-to-pdf": f"{BTE_HOST}/financial_disclosure/tiffs_to_pdf",
+        "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract",
+        "extract-disclosure-jw": f"{BTE_HOST}/financial_disclosure/extract_jw",
+    }
 
     def setUp(self):
         """Setup containers
@@ -80,7 +99,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/extract_doc_content" % self.test_server,
+            self.BTE_URLS["document-extract"],
             files={"file": (os.path.basename(filepath), f)},
             params={"do_ocr": do_ocr},
         ).json()
@@ -95,7 +114,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/make_pdftotext_process" % self.test_server,
+            self.BTE_URLS["pdf-to-text"],
             files={"file": (os.path.basename(filepath), f)},
         ).json()
 
@@ -108,7 +127,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/convert_audio_file" % self.test_server,
+            self.BTE_URLS["convert-audio"],
             files={"file": (os.path.basename(filepath), f)},
         )
 
@@ -122,7 +141,7 @@ class DockerTestBase(TestCase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/make_png_thumbnail" % self.test_server,
+            self.BTE_URLS["thumbnail"],
             files={"file": (os.path.basename(filepath), f)},
             params={"max_dimension": max_dimension},
         )
@@ -197,7 +216,6 @@ class DocumentConversionTests(DockerTestBase):
         """Can we extract text from a txt document?"""
         for filepath in iglob(os.path.join(self.assets_dir, "opinion*.txt")):
             response = self.send_file_to_bte(filepath, do_ocr=True)
-            print(response)
             answer = self.doc_answers[filepath.split("/")[-1]]
             self.assertEqual(
                 answer,
@@ -233,15 +251,23 @@ class AudioConversionTests(DockerTestBase):
         wma_path = os.path.join(self.assets_dir, "1.wma")
         with open(wma_path, "rb") as wma_file:
             w = wma_file.read()
-        filepath = os.path.join(
-            self.assets_dir, "..", "fixtures", "test_audio_object.json"
-        )
 
-        with open(filepath, "r") as file:
-            audio_details = json.load(file)
+        audio_details = {
+            "court_full_name": "Testing Supreme Court",
+            "court_short_name": "Testing Supreme Court",
+            "court_pk": "test",
+            "court_url": "http://www.example.com/",
+            "docket_number": "docket number 1 005",
+            "date_argued": "2020-01-01",
+            "date_argued_year": "2020",
+            "case_name": "SEC v. Frank J. Custable, Jr.",
+            "case_name_full": "case name full",
+            "case_name_short": "short",
+            "download_url": "http://media.ca7.uscourts.gov/sound/external/gw.15-1442.15-1442_07_08_2015.mp3",
+        }
 
         audio_resp = requests.post(
-            "%s/convert/audio" % self.test_server,
+            self.BTE_URLS["convert-audio"],
             params={"audio_data": json.dumps(audio_details)},
             files={
                 "audio_file": (os.path.basename(wma_path), w),
@@ -270,7 +296,7 @@ class AudioConversionTests(DockerTestBase):
             )
             self.assertEqual(
                 mp3_file.tag.title,
-                "SEC v. Custable",
+                "SEC v. Frank J. Custable, Jr.",
                 msg="Title metadata failed.",
             )
 
@@ -292,7 +318,7 @@ class AudioConversionTests(DockerTestBase):
         with open(wma_path, "rb") as wma_file:
             w = wma_file.read()
         audio_resp = requests.post(
-            "%s/convert/audio" % self.test_server,
+            self.BTE_URLS["convert-audio"],
             params={
                 "audio_obj": json.dumps(audio_obj),
             },
@@ -315,13 +341,13 @@ class ThumbnailGenerationTests(DockerTestBase):
             filepath = thumb_path.replace("_thumbnail.png", ".pdf")
             with open(thumb_path, "rb") as f:
                 test_thumbnail = f.read()
-            response = self.send_file_to_thumbnail_generation(filepath).json()
+            bte_response = self.send_file_to_thumbnail_generation(filepath)
             self.assertEqual(
-                literal_eval(response["content"]),
+                bte_response.content,
                 test_thumbnail,
                 msg="Thumbnail failed.",
             )
-            print("Generated thumbnail from .pdf successfully")
+        print("Generated thumbnails from .pdf successfully")
 
 
 class UtilityTests(DockerTestBase):
@@ -329,7 +355,7 @@ class UtilityTests(DockerTestBase):
 
     def test_heartbeat(self):
         """Check heartbeat?"""
-        response = requests.get(self.test_server).json()
+        response = requests.get(self.BTE_HOST).json()
         self.assertTrue(response["success"], msg="Failed heartbeat test.")
 
     def send_file_to_pg_count(self, filepath):
@@ -341,9 +367,9 @@ class UtilityTests(DockerTestBase):
         with open(filepath, "rb") as file:
             f = file.read()
         return requests.post(
-            "%s/get_page_count" % self.test_server,
+            self.BTE_URLS["page-count"],
             files={"file": (os.path.basename(filepath), f)},
-        ).json()
+        )
 
     def test_pdf_page_count_extractor(self):
         """Can we extract page counts properly?"""
@@ -352,35 +378,31 @@ class UtilityTests(DockerTestBase):
         for count, filepath in zip(
             counts, sorted(iglob(os.path.join(self.assets_dir, "*.pdf")))
         ):
-            response = self.send_file_to_pg_count(filepath)
+            response = self.send_file_to_pg_count(filepath).json()
             self.assertEqual(
-                response["pg_count"], count, msg="Page count failed"
+                response["pg_count"], count, msg="Failed page count"
             )
-            print("Successfully returned page count √")
+        print("Successfully returned page count √")
 
     def test_post_pdf_data(self):
         """Can we send pdf as a file and get a response?"""
-        service = "%s/%s" % (self.test_server, "get_page_count")
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-
         with open(pdf_path, "rb") as file:
             f = file.read()
-
         response = requests.post(
-            url=service,
+            url=self.BTE_URLS["page-count"],
             files={"file": (os.path.basename(pdf_path), f)},
             timeout=60,
-        ).json()
-        self.assertEqual(response["pg_count"], 6)
+        )
+        self.assertEqual(200, response.status_code, msg="Failed to post data")
 
     def test_file_type(self):
         """Test Mime Type extraction"""
-        service = "%s/%s/%s" % (self.test_server, "utility", "mime_type")
         file_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
         with open(file_path, "rb") as file:
             f = file.read()
         response = requests.post(
-            url=service,
+            url=self.BTE_URLS["mime-type"],
             params={"mime": True},
             files={"file": (os.path.basename(file_path), f)},
             timeout=60,
@@ -389,7 +411,7 @@ class UtilityTests(DockerTestBase):
 
 
 class FinancialDisclosureTests(DockerTestBase):
-    """Test financial dislcosure conversion and extraction"""
+    """Test financial disclosure extraction"""
 
     def test_financial_disclosure_extractor(self):
         """Test financial disclosure extraction"""
@@ -397,13 +419,14 @@ class FinancialDisclosureTests(DockerTestBase):
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
         with open(pdf_path, "rb") as file:
             f = file.read()
-        response = requests.post(
-            "%s/financial_disclosure/extract" % self.test_server,
+        extractor_response = requests.post(
+            self.BTE_URLS["extract-disclosure"],
             files={"file": (os.path.basename(pdf_path), f)},
             timeout=60 * 60,
         )
         self.assertTrue(
-            response.json()["success"], msg="Disclosure extraction failed."
+            extractor_response.json()["success"],
+            msg="Disclosure extraction failed.",
         )
 
     def test_judicial_watch_document(self):
@@ -412,59 +435,65 @@ class FinancialDisclosureTests(DockerTestBase):
             self.root, "test_assets", "fd", "2003-judicial-watch.pdf"
         )
         with open(pdf_path, "rb") as file:
-            f = file.read()
+            pdf_bytes = file.read()
 
-        response = requests.post(
-            "%s/financial_disclosure/jw_extract" % self.test_server,
-            files={"file": (os.path.basename(pdf_path), f)},
-            params={"url": None},
+        extractor_response = requests.post(
+            self.BTE_URLS["extract-disclosure-jw"],
+            files={"file": (os.path.basename(pdf_path), pdf_bytes)},
             timeout=60 * 60,
         )
         self.assertTrue(
-            response.json()["success"],
+            extractor_response.json()["success"],
             msg="Fiancial disclosure document parsing failed.",
         )
-        print(response.json())
 
 
 # These tests aren't automatically triggered by github actions because I have not
 # properly mocked them to avoid hitting AWS and testing properly. They do work
 # when called though.
 class AWSFinancialDisclosureTests(DockerTestBase):
+    """Convert Images to PDFs """
+
     def test_image_url_to_pdf(self):
         """Test image at URL to PDF conversion"""
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
         with open(pdf_path, "rb") as f:
             answer = f.read()
 
-        url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Abel-MR.%20M.%2006.%20OHS.tiff"
-        # url = "http://com-courtlistener-storage.s3.amazonaws.com/financial-disclosures/2018/A%20-%20G/Barrett-AC.%20J3.%2007.%20SPE_R_18.tiff"
-        response = requests.post(
-            "%s/financial_disclosure/single_image" % self.test_server,
-            params={"url": url},
-        ).json()
-        self.assertEqual(
-            literal_eval(response["content"]),
-            answer,
-            msg="Image to PDF conversion failed.",
+        aws_url = "com-courtlistener-storage.s3-us-west-2.amazonaws.com"
+        path_AE_2011 = "financial-disclosures/2011/A-E"
+        judge = "Abel-MR.%20M.%2006.%20OHS"
+        tiff_url = f"https://{aws_url}/{path_AE_2011}/{judge}.tiff"
+
+        pdf_response = requests.post(
+            self.BTE_URLS["image-to-pdf"],
+            params={"tiff_url": tiff_url},
         )
+
+        self.assertEqual(200, pdf_response.status_code, msg="Server failed")
+        self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
 
     def test_combine_images_into_pdf(self):
         """Can we post and combine multiple images into a pdf?"""
+
+        # Given a single url path for a single page in a split pdf/tiff
+        # can we find all associated pages, sort and combine into a pdf?
+
         test_file = os.path.join(
             self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
         )
+        # This key is used to idenitify all the associated pages to organize and combine into one PDF
         test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
+
         with open(test_file, "rb") as f:
             answer = f.read()
-        service = "%s/financial_disclosure/multi_image" % self.test_server
-        response = requests.post(service, params={"aws_path": test_key}).json()
-        self.assertEqual(
-            literal_eval(response["content"]),
-            answer,
-            msg="Failed to merge split PDFs.",
+
+        pdf_response = requests.post(
+            self.BTE_URLS["images-to-pdf"], params={"aws_path": test_key}
         )
-        print("Images combined correctly from AWS √")
+
+        self.assertEqual(200, pdf_response.status_code, msg="Server failed")
+        self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
 
 
 if __name__ == "__main__":
