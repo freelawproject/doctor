@@ -1,6 +1,6 @@
 import io
 import subprocess
-from tempfile import NamedTemporaryFile
+from typing import AnyStr
 
 import magic
 from PyPDF2 import PdfFileReader, PdfFileMerger
@@ -103,7 +103,12 @@ def extract_from_pdf(tmp_tiff):
 
 
 def make_pdftotext_process(path):
-    """Make a subprocess to hand to higher-level code."""
+    """Make a subprocess to hand to higher-level code.
+
+    :param path: File location
+    :return: Subprocess results
+    """
+
     process = subprocess.Popen(
         ["pdftotext", "-layout", "-enc", "UTF-8", path, "-"],
         shell=False,
@@ -250,7 +255,7 @@ def rasterize_pdf(path, destination):
     return stdout, stderr, p.returncode
 
 
-def cleanup_ocr_text(txt):
+def cleanup_ocr_text(txt) -> AnyStr:
     """Do some basic cleanup to make OCR text better.
 
     Err on the side of safety. Don't make fixes that could cause other issues.
@@ -302,7 +307,7 @@ def make_png_thumbnail_for_instance(filepath, max_dimension):
     return stdout, stderr.decode("utf-8"), str(p.returncode)
 
 
-def make_pdf_from_image_array(image_list):
+def pdf_bytes_from_image_array(image_list):
     """Make a pdf given an array of Image files
 
     :param image_list: List of images
@@ -323,7 +328,14 @@ def make_pdf_from_image_array(image_list):
     return pdf_data
 
 
-def strip_metadata(pdf_content):
+def strip_metadata_from_bytes(pdf_bytes):
+    """Convert PDF bytes into PDF and remove metadata from it
+
+    Stripping the metadata allows us to hash the PDFs
+
+    :param pdf_bytes: PDF as binary content
+    :return: PDF bytes with metadata removed.
+    """
     pdf_merger = PdfFileMerger()
     pdf_merger.append(io.BytesIO(pdf_content))
     pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
