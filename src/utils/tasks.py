@@ -329,7 +329,7 @@ def strip_metadata_from_bytes(pdf_bytes):
     :return: PDF bytes with metadata removed.
     """
     pdf_merger = PdfFileMerger()
-    pdf_merger.append(io.BytesIO(pdf_content))
+    pdf_merger.append(io.BytesIO(pdf_bytes))
     pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
     byte_writer = io.BytesIO()
     pdf_merger.write(byte_writer)
