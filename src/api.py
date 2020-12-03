@@ -111,19 +111,14 @@ def make_png_thumbnail():
     :return: A response containing our file and any errors
     :type: HTTPS response
     """
-    f = request.files["file"]
+    pdf_file = request.files["file"]
     max_dimension = int(request.args.get("max_dimension"))
     with NamedTemporaryFile(suffix=".%s" % "pdf") as tmp:
-        f.save(tmp.name)
-        thumbnail, err, error_code = make_png_thumbnail_for_instance(
+        pdf_file.save(tmp.name)
+        thumbnail, _, _ = make_png_thumbnail_for_instance(
             tmp.name, max_dimension
         )
-        response = {
-            "content": str(thumbnail),
-            "error_code": error_code,
-            "err": err,
-        }
-        return jsonify(response)
+        return thumbnail
 
 
 @app.route("/document/page_count", methods=["POST"])
@@ -132,17 +127,15 @@ def page_count():
 
     :return: Page count
     """
-    f = request.files["file"]
-    extension = f.filename.split(".")[-1]
+    file = request.files["file"]
+    extension = file.filename.split(".")[-1]
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
-        f.save(tmp.name)
-        content, err, error_code = get_page_count(tmp.name, extension)
-        return jsonify(
-            {"pg_count": content, "err": err, "error_code": error_code}
-        )
+        file.save(tmp.name)
+        pg_count = get_page_count(tmp.name, extension)
+        return jsonify({"pg_count": pg_count}), 200
 
 
-@app.route("/make_pdftotext_process", methods=["POST"])
+@app.route("/document/pdf_to_text", methods=["POST"])
 def pdf_to_text():
     """Extract text from text based PDFs immediately.
 
@@ -183,31 +176,17 @@ def split_single_tiff_into_pdf_from_url():
 
     :return: PDF content
     """
-    error_code = 0
-    err = ""
-    url = request.args.get("url")
+    aws_url = request.args.get("tiff_url")
     try:
-        img = Image.open(requests.get(url, stream=True).raw)
-    except TimeoutError:
-        err = "Timeout occurred"
-    width, height = img.size
-    image_list = []
-    i, page_width, page_height = 0, width, (1046 * (float(width) / 792))
-    while i < (height / page_height):
-        image = img.crop(
-            (0, (i * page_height), page_width, (i + 1) * page_height)
+        tiff_bytes = Image.open(
+            requests.get(aws_url, stream=True, timeout=5 * 60).raw
         )
-        image_list.append(image)
-        i += 1
-    pdf_bytes = make_pdf_from_image_array(image_list)
-    clean_pdf = strip_metadata(pdf_bytes)
-    response = {
-        "content": str(clean_pdf),
-        "err": err,
-        "error_code": error_code,
-    }
-    return jsonify(response)
+    except TimeoutError:
+        return jsonify({"aws_error": "aws timeout"}), 408
 
+    pdf_bytes = convert_tiff_to_pdf_bytes(tiff_bytes)
+    cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
+    return cleaned_pdf_bytes, 200
 
 
 @app.route("/financial_disclosure/tiffs_to_pdf", methods=["POST"])
@@ -218,30 +197,15 @@ def make_pdf_from_images():
 
     :return: PDF content
     """
-    err = ""
-    error_code = 0
-    clean_pdf = ""
-    lookup = ""
     try:
         aws_path = request.args.get("aws_path")
-        sorted_urls, lookup = query_thumbs_db(aws_path)
+        sorted_urls = find_and_sort_image_urls(aws_path)
         image_list = download_images(sorted_urls)
-        pdf_content = make_pdf_from_image_array(image_list)
-        clean_pdf = strip_metadata(pdf_content)
-    except TimeoutError:
-        err = "Timeout Error"
-        error_code = 1
-    except Exception as e:
-        err = str(e)
-        error_code = 1
-
-    response = {
-        "content": str(clean_pdf),
-        "err": err,
-        "lookup": lookup,
-        "error_code": error_code,
-    }
-    return jsonify(response)
+        pdf_bytes = pdf_bytes_from_image_array(image_list)
+        cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
+        return cleaned_pdf_bytes, 200
+    except:
+        return 422
 
 
 @app.route("/financial_disclosure/extract", methods=["POST"])
@@ -250,23 +214,11 @@ def financial_disclosure_extract():
 
     :return: Extracted financial records
     """
-    url = request.args.get("url")
-    file = request.files.get("file", None)
+    financial_record_data = process_financial_document(
+        pdf_bytes=request.files.get("file", None).read()
+    )
+    return jsonify(financial_record_data)
 
-    if url is not None:
-        try:
-            pdf = requests.get(url, timeout=60 * 10).content
-        except:
-            return jsonify({"err": "Timeout"})
-    elif file is not None:
-        pdf = file.read()
-    else:
-        return jsonify({"err": "No file posted"})
-
-    fd = process_financial_document(pdf_bytes=pdf, show_logs=True)
-    if fd["success"] is True:
-        print_results(fd)
-    return jsonify(fd)
 
 @app.route("/financial_disclosure/extract_jw", methods=["POST"])
 def judical_watch_extract():
@@ -277,20 +229,10 @@ def judical_watch_extract():
 
     :return: Disclosure information
     """
-    url = request.args.get("url")
-    file = request.files.get("file", None)
-    if url is not None:
-        try:
-            pdf = requests.get(url, timeout=60 * 10).content
-        except:
-            return jsonify({"err": "Timeout"})
-    elif file is not None:
-        pdf = file.read()
-    else:
-        return jsonify({"err": "No file posted"})
-    fd = process_judicial_watch(pdf_bytes=pdf, show_logs=True)
-    if fd["success"] is True:
-        print_results(fd)
+    financial_record_data = process_judicial_watch(
+        pdf_bytes=request.files.get("file", None).read()
+    )
+    return jsonify(financial_record_data)
 
 
 # ------- Process Audio Files ------- #
