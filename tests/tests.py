@@ -418,7 +418,6 @@ class FinancialDisclosureTests(DockerTestBase):
         """Test financial disclosure extraction"""
 
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-        pdf_path = "/Users/Palin/Desktop/wood_total.pdf"
         with open(pdf_path, "rb") as file:
             f = file.read()
         extractor_response = requests.post(
