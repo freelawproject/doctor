@@ -42,6 +42,7 @@ class DockerTestBase(TestCase):
         # Image conversion and extraction
         "image-to-pdf": f"{BTE_HOST}/financial_disclosure/tiff_to_pdf",
         "images-to-pdf": f"{BTE_HOST}/financial_disclosure/tiffs_to_pdf",
+        "urls-to-pdf": f"{BTE_HOST}/financial_disclosure/urls_to_pdf",
         "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract",
         "extract-disclosure-jw": f"{BTE_HOST}/financial_disclosure/extract_jw",
     }
@@ -417,6 +418,7 @@ class FinancialDisclosureTests(DockerTestBase):
         """Test financial disclosure extraction"""
 
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        pdf_path = "/Users/Palin/Desktop/wood_total.pdf"
         with open(pdf_path, "rb") as file:
             f = file.read()
         extractor_response = requests.post(
@@ -428,6 +430,8 @@ class FinancialDisclosureTests(DockerTestBase):
             extractor_response.json()["success"],
             msg="Disclosure extraction failed.",
         )
+
+        print(extractor_response.json())
 
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
@@ -470,6 +474,35 @@ class AWSFinancialDisclosureTests(DockerTestBase):
             params={"tiff_url": tiff_url},
         )
 
+        self.assertEqual(200, pdf_response.status_code, msg="Server failed")
+        self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
+
+    def test_image_urls_to_pdf(self):
+        """Test image converion from multiple urls to PDF"""
+        pdf_path = os.path.join(self.root, "test_assets", "fd", "test_url.pdf")
+        with open(pdf_path, "rb") as f:
+            answer = f.read()
+
+        aws_url = "com-courtlistener-storage.s3-us-west-2.amazonaws.com"
+        test_fd = {
+            "paths": [
+                "Armstrong-SB J3. 09. CAN_R_11_Page_1.tiff",
+                "Armstrong-SB J3. 09. CAN_R_11_Page_2.tiff",
+                "Armstrong-SB J3. 09. CAN_R_11_Page_3.tiff",
+                "Armstrong-SB J3. 09. CAN_R_11_Page_4.tiff",
+                "Armstrong-SB J3. 09. CAN_R_11_Page_5.tiff",
+                "Armstrong-SB J3. 09. CAN_R_11_Page_6.tiff",
+            ],
+            "key": "financial-disclosures/2011/A-E/Armstrong-SB J3. 09. CAN_R_11",
+            "person_id": "126",
+        }
+        urls = []
+        for page in test_fd["paths"]:
+            urls.append(f"https://{aws_url}/{test_fd['key']}/{page}")
+        pdf_response = requests.post(
+            self.BTE_URLS["urls-to-pdf"],
+            json=json.dumps({"urls": urls}),
+        )
         self.assertEqual(200, pdf_response.status_code, msg="Server failed")
         self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
 

@@ -208,6 +208,22 @@ def make_pdf_from_images():
         return 422
 
 
+@app.route("/financial_disclosure/urls_to_pdf", methods=["POST"])
+def make_pdf_from_urls():
+    """Create PDF from multiple image URLs.
+
+    :return: PDF content
+    """
+    try:
+        sorted_urls = json.loads(request.get_json())["urls"]
+        image_list = download_images(sorted_urls)
+        pdf_bytes = pdf_bytes_from_image_array(image_list)
+        cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
+        return cleaned_pdf_bytes, 200
+    except:
+        return 422
+
+
 @app.route("/financial_disclosure/extract", methods=["POST"])
 def financial_disclosure_extract():
     """Extract contents from a judicial financial disclosure.
