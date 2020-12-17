@@ -204,8 +204,8 @@ def get_page_count(path, extension):
             # TypeError: NumberObject has no attribute '__getitem__'. Ugh.
             # KeyError, AssertionError: assert xrefstream["/Type"] == "/XRef". WTF?
             # PdfReadError: Something else. I have no words.
-            return None, "Error", 1
-            pass
+            return 0
+
     elif extension == "wpd":
         # Best solution appears to be to dig into the binary format
         pass
