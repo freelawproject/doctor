@@ -16,7 +16,7 @@ import requests
 class DockerTestBase(TestCase):
     """ Base class for docker testing."""
 
-    BTE_HOST = "http://localhost:5050"
+    BTE_HOST = "http://localhost:5051"
     root = os.path.dirname(os.path.realpath(__file__))
     assets_dir = os.path.join(root, "test_assets")
     answer_path = os.path.join(root, "test_assets", "test_answers.json")
@@ -29,9 +29,12 @@ class DockerTestBase(TestCase):
     BTE_URLS = {
         # Testing
         "heartbeat": f"{BTE_HOST}",
+        "large-heartbeat": f"{BTE_HOST}/large_file_test",
         # Audio Processing
         # this should change but currently in a PR so will alter later
         "convert-audio": f"{BTE_HOST}/convert/audio",
+        "audio-to-mp3": f"{BTE_HOST}/audio/convert_to_mp3",
+        "audio-length": f"{BTE_HOST}/audio/length",
         # Document processing
         "pdf-to-text": f"{BTE_HOST}/document/pdf_to_text",
         "document-extract": f"{BTE_HOST}/document/extract_text",
@@ -43,7 +46,7 @@ class DockerTestBase(TestCase):
         "image-to-pdf": f"{BTE_HOST}/financial_disclosure/tiff_to_pdf",
         "images-to-pdf": f"{BTE_HOST}/financial_disclosure/tiffs_to_pdf",
         "urls-to-pdf": f"{BTE_HOST}/financial_disclosure/urls_to_pdf",
-        "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract",
+        "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract_record",
         "extract-disclosure-jw": f"{BTE_HOST}/financial_disclosure/extract_jw",
     }
 
@@ -70,7 +73,7 @@ class DockerTestBase(TestCase):
         )
         client.containers.run(
             "freelawproject/binary-transformers-and-extractors:latest",
-            ports={"5050/tcp": ("0.0.0.0", 5050)},
+            ports={"5050/tcp": ("0.0.0.0", 5051)},
             detach=True,
             auto_remove=True,
             volumes={
@@ -356,7 +359,7 @@ class UtilityTests(DockerTestBase):
 
     def test_heartbeat(self):
         """Check heartbeat?"""
-        response = requests.get(self.BTE_HOST).json()
+        response = requests.get(self.BTE_URLS["heartbeat"]).json()
         self.assertTrue(response["success"], msg="Failed heartbeat test.")
 
     def send_file_to_pg_count(self, filepath):
@@ -379,9 +382,14 @@ class UtilityTests(DockerTestBase):
         for count, filepath in zip(
             counts, sorted(iglob(os.path.join(self.assets_dir, "*.pdf")))
         ):
-            response = self.send_file_to_pg_count(filepath).json()
+            with open(filepath, "rb") as file:
+                f = file.read()
+            pg_count_response = requests.post(
+                self.BTE_URLS["page-count"],
+                files={"file": (os.path.basename(filepath), f)},
+            )
             self.assertEqual(
-                response["pg_count"], count, msg="Failed page count"
+                int(pg_count_response.content), count, msg="Failed page count"
             )
         print("Successfully returned page count √")
 
@@ -419,18 +427,16 @@ class FinancialDisclosureTests(DockerTestBase):
 
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
         with open(pdf_path, "rb") as file:
-            f = file.read()
-        extractor_response = requests.post(
-            self.BTE_URLS["extract-disclosure"],
-            files={"file": (os.path.basename(pdf_path), f)},
-            timeout=60 * 60,
-        )
+            extractor_response = requests.post(
+                self.BTE_URLS["extract-disclosure"],
+                files={"pdf_document": ("file.pdf", file)},
+                timeout=60 * 60,
+            )
         self.assertTrue(
             extractor_response.json()["success"],
             msg="Disclosure extraction failed.",
         )
 
-        print(extractor_response.json())
 
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
