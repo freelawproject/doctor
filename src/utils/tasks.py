@@ -299,7 +299,7 @@ def make_png_thumbnail_for_instance(filepath, max_dimension):
     return stdout, stderr.decode("utf-8"), str(p.returncode)
 
 
-def pdf_bytes_from_image_array(image_list):
+def pdf_bytes_from_image_array(image_list, output_path) -> None:
     """Make a pdf given an array of Image files
 
     :param image_list: List of images
@@ -307,15 +307,15 @@ def pdf_bytes_from_image_array(image_list):
     :return: pdf_data
     :type pdf_data: PDF as bytes
     """
-    with io.BytesIO() as output:
-        image_list[0].save(
-            output,
-            "PDF",
-            resolution=100.0,
-            save_all=True,
-            append_images=image_list[1:],
-        )
-        pdf_data = output.getvalue()
+    image_list[0].save(
+        output_path,
+        "PDF",
+        resolution=100.0,
+        save_all=True,
+        append_images=image_list[1:],
+    )
+    del image_list
+
 
     return pdf_data
 
