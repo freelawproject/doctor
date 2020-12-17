@@ -317,8 +317,22 @@ def pdf_bytes_from_image_array(image_list, output_path) -> None:
     del image_list
 
 
-    return pdf_data
 
+def strip_metadata_from_path(file_path):
+    """Convert PDF file into PDF and remove metadata from it
+
+    Stripping the metadata allows us to hash the PDFs
+
+    :param pdf_bytes: PDF as binary content
+    :return: PDF bytes with metadata removed.
+    """
+    with open(file_path, "rb") as f:
+        pdf_merger = PdfFileMerger()
+        pdf_merger.append(io.BytesIO(f.read()))
+        pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
+        byte_writer = io.BytesIO()
+        pdf_merger.write(byte_writer)
+        return force_bytes(byte_writer.getvalue())
 
 def strip_metadata_from_bytes(pdf_bytes):
     """Convert PDF bytes into PDF and remove metadata from it
