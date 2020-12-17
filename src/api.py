@@ -42,7 +42,8 @@ from src.utils.tasks import (
     make_png_thumbnail_for_instance,
     get_page_count,
     pdf_bytes_from_image_array,
-    strip_metadata_from_bytes, strip_metadata_from_path,
+    strip_metadata_from_bytes,
+    strip_metadata_from_path,
 )
 
 app = Flask(__name__)
@@ -130,7 +131,7 @@ def extract_content():
         )
 
 
-@app.route("/document/thumbnail", methods=["POST"])
+@app.route("/document/thumbnail", methods=["GET", "POST"])
 def make_png_thumbnail():
     """Make a thumbail of the first page of a PDF and return it.
 
@@ -147,9 +148,9 @@ def make_png_thumbnail():
         return thumbnail
 
 
-@app.route("/document/page_count", methods=["POST"])
+@app.route("/document/page_count", methods=["GET", "POST"])
 def page_count():
-    """Get page count form PDF
+    """Get page count from PDF
 
     :return: Page count
     """
@@ -158,10 +159,10 @@ def page_count():
     with NamedTemporaryFile(suffix=".%s" % extension) as tmp:
         file.save(tmp.name)
         pg_count = get_page_count(tmp.name, extension)
-        return jsonify({"pg_count": pg_count}), 200
+        return str(pg_count)
 
 
-@app.route("/document/pdf_to_text", methods=["POST"])
+@app.route("/document/pdf_to_text", methods=["GET", "POST"])
 def pdf_to_text():
     """Extract text from text based PDFs immediately.
 
@@ -196,7 +197,7 @@ def extract_mime_type():
 
 
 # ------- Financial Disclosure Microservice requests ------- #
-@app.route("/financial_disclosure/tiff_to_pdf", methods=["POST"])
+@app.route("/financial_disclosure/tiff_to_pdf", methods=["GET", "POST"])
 def split_single_tiff_into_pdf_from_url():
     """Convert financial disclosure image url to PDF
 
@@ -208,14 +209,14 @@ def split_single_tiff_into_pdf_from_url():
             requests.get(aws_url, stream=True, timeout=5 * 60).raw
         )
     except TimeoutError:
-        return jsonify({"aws_error": "aws timeout"}), 408
+        abort(408, description=str("Timeout"))
 
     pdf_bytes = convert_tiff_to_pdf_bytes(tiff_bytes)
     cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
     return cleaned_pdf_bytes, 200
 
 
-@app.route("/financial_disclosure/tiffs_to_pdf", methods=["POST"])
+@app.route("/financial_disclosure/tiffs_to_pdf", methods=["GET", "POST"])
 def make_pdf_from_images():
     """Convert split financial disclosure images into single PDF
 
@@ -227,14 +228,15 @@ def make_pdf_from_images():
         aws_path = request.args.get("aws_path")
         sorted_urls = find_and_sort_image_urls(aws_path)
         image_list = download_images(sorted_urls)
-        pdf_bytes = pdf_bytes_from_image_array(image_list)
-        cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
-        return cleaned_pdf_bytes, 200
+        with NamedTemporaryFile(suffix="pdf") as tmp:
+            pdf_bytes_from_image_array(image_list, tmp.name)
+            cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
+            return cleaned_pdf_bytes, 200
     except:
         return 422
 
 
-@app.route("/financial_disclosure/urls_to_pdf", methods=["POST"])
+@app.route("/financial_disclosure/urls_to_pdf", methods=["GET", "POST"])
 def make_pdf_from_urls():
     """Create PDF from multiple image URLs.
 
@@ -243,26 +245,28 @@ def make_pdf_from_urls():
     try:
         sorted_urls = json.loads(request.get_json())["urls"]
         image_list = download_images(sorted_urls)
-        pdf_bytes = pdf_bytes_from_image_array(image_list)
-        cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
-        return cleaned_pdf_bytes, 200
-    except:
-        return 422
+        with NamedTemporaryFile(suffix=".pdf") as tmp:
+            pdf_bytes_from_image_array(image_list, tmp.name)
+            cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
+            return cleaned_pdf_bytes
+    except Exception as e:
+        abort(422, description=str(e))
 
 
-@app.route("/financial_disclosure/extract", methods=["POST"])
+@app.route("/financial_disclosure/extract", methods=["GET", "POST"])
 def financial_disclosure_extract():
     """Extract contents from a judicial financial disclosure.
 
     :return: Extracted financial records
     """
+    pdf_bytes = request.files.get("file", None).read()
     financial_record_data = process_financial_document(
-        pdf_bytes=request.files.get("file", None).read()
+        pdf_bytes=pdf_bytes, resize_pdf=True
     )
     return jsonify(financial_record_data)
 
 
-@app.route("/financial_disclosure/extract_jw", methods=["POST"])
+@app.route("/financial_disclosure/extract_jw", methods=["GET", "POST"])
 def judical_watch_extract():
     """Extract content from a judicial watch financial disclosure.
 
@@ -273,6 +277,19 @@ def judical_watch_extract():
     """
     financial_record_data = process_judicial_watch(
         pdf_bytes=request.files.get("file", None).read()
+    )
+    return jsonify(financial_record_data)
+
+
+@app.route("/financial_disclosure/extract_record", methods=["GET", "POST"])
+def financial_disclosure_extract_record():
+    """Extract contents from a judicial financial disclosure.
+
+    :return: Extracted financial records
+    """
+    pdf_bytes = request.files.get("pdf_document", None).read()
+    financial_record_data = extract_financial_document(
+        pdf_bytes=pdf_bytes, show_logs=True, resize=True
     )
     return jsonify(financial_record_data)
 
