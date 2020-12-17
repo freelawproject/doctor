@@ -317,7 +317,6 @@ def pdf_bytes_from_image_array(image_list, output_path) -> None:
     del image_list
 
 
-
 def strip_metadata_from_path(file_path):
     """Convert PDF file into PDF and remove metadata from it
 
@@ -333,6 +332,7 @@ def strip_metadata_from_path(file_path):
         byte_writer = io.BytesIO()
         pdf_merger.write(byte_writer)
         return force_bytes(byte_writer.getvalue())
+
 
 def strip_metadata_from_bytes(pdf_bytes):
     """Convert PDF bytes into PDF and remove metadata from it

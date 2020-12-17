@@ -79,7 +79,8 @@ def download_images(sorted_urls) -> List:
         ]
         for response in await asyncio.gather(*futures):
             image_list.append(
-                Image.open(io.BytesIO(response.content)).convert("RGB"))
+                Image.open(io.BytesIO(response.content)).convert("RGB")
+            )
         return image_list
 
     loop = asyncio.get_event_loop()

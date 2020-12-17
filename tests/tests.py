@@ -437,7 +437,6 @@ class FinancialDisclosureTests(DockerTestBase):
             msg="Disclosure extraction failed.",
         )
 
-
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
         pdf_path = os.path.join(
