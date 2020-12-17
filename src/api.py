@@ -9,8 +9,16 @@ from PIL import Image
 from disclosure_extractor import (
     process_financial_document,
     process_judicial_watch,
+    extract_financial_document,
 )
-from flask import Flask, request, jsonify, send_file
+
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_file,
+    abort,
+)
 
 from src.utils.audio import (
     set_mp3_meta_data,
@@ -34,7 +42,7 @@ from src.utils.tasks import (
     make_png_thumbnail_for_instance,
     get_page_count,
     pdf_bytes_from_image_array,
-    strip_metadata_from_bytes,
+    strip_metadata_from_bytes, strip_metadata_from_path,
 )
 
 app = Flask(__name__)
@@ -50,7 +58,25 @@ def heartbeat():
     return jsonify({"success": True, "msg": "Docker container running."})
 
 
-@app.route("/document/extract_text", methods=["POST"])
+@app.route("/large_file_test", methods=["GET", "POST"])
+def large_heartbeat():
+    """Heartbeat
+
+    :return: success response
+    :type: dict
+    """
+
+    data = {"1": "1"}
+    with NamedTemporaryFile(suffix=".json") as tmp:
+        with open(tmp.name, "w") as f:
+            json.dump(data, f, indent=4)
+        print(tmp.name)
+        print(data)
+
+        return send_file(tmp.name)
+
+
+@app.route("/document/extract_text", methods=["GET", "POST"])
 def extract_content():
     """Extract txt from different document types.
 
