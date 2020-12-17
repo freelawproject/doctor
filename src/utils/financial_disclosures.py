@@ -1,3 +1,5 @@
+import asyncio
+import io
 import re
 from typing import List
 
@@ -6,7 +8,6 @@ import requests
 from PIL import Image
 from botocore import UNSIGNED
 from botocore.client import Config
-
 
 s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
 # We use the non-development bucket to test even though we eventually
@@ -66,11 +67,22 @@ def download_images(sorted_urls) -> List:
 
     Once in an array of PIL.images we can easily convert this to a PDF.
 
-    :param sorted_urls: List of sortedd URLs for split financial disclsosure
+    :param sorted_urls: List of sorted URLs for split financial disclosure
     :return: image_list
     """
-    image_list = []
-    for link in sorted_urls:
-        image = requests.get(link, stream=True, timeout=60 * 10).raw
-        image_list.append(Image.open(image).convert("RGB"))
+
+    async def main(urls):
+        image_list = []
+        loop = asyncio.get_event_loop()
+        futures = [
+            loop.run_in_executor(None, requests.get, url) for url in urls
+        ]
+        for response in await asyncio.gather(*futures):
+            image_list.append(
+                Image.open(io.BytesIO(response.content)).convert("RGB"))
+        return image_list
+
+    loop = asyncio.get_event_loop()
+    image_list = loop.run_until_complete(main(sorted_urls))
+
     return image_list
