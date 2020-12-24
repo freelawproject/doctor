@@ -11,6 +11,7 @@ from unittest import TestCase
 import docker
 import eyed3
 import requests
+from disclosure_extractor import display_table
 
 
 class DockerTestBase(TestCase):
@@ -436,6 +437,8 @@ class FinancialDisclosureTests(DockerTestBase):
             extractor_response.json()["success"],
             msg="Disclosure extraction failed.",
         )
+
+        display_table(extractor_response.json())
 
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
