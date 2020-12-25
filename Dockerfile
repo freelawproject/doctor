@@ -1,4 +1,4 @@
-FROM python:3.8-slim
+FROM flooie/tesseract-5.0.0
 
 RUN apt-get update
 RUN apt-get install -y --no-install-recommends \
@@ -12,37 +12,13 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
         --assume-yes \
         --quiet=2 \
         `# Document extraction and OCR tools` \
-        antiword docx2txt ghostscript libwpd-tools poppler-utils \
+        antiword docx2txt ghostscript libwpd-tools \
         `# Audio extraction/manipulation tools` \
          ffmpeg libmagic1 \
         `# Image & OCR tools` \
         imagemagick \
         `# Other dependencies` \
         libffi-dev libxml2-dev libxslt-dev python-dev
-
-# Update and install depedencies
-RUN apt-get update && \
-    apt-get install -y wget unzip bc vim python3-pip libleptonica-dev git
-
-# Packages to complie Tesseract
-RUN apt-get install -y --reinstall make && \
-    apt-get install -y g++ autoconf automake libtool pkg-config \
-     libpng-dev libjpeg62-turbo-dev libtiff5-dev libicu-dev \
-     libpango1.0-dev autoconf-archive
-
-WORKDIR /tess
-
-RUN mkdir src && cd /tess/src && \
-    wget https://github.com/tesseract-ocr/tesseract/archive/4.1.1.zip && \
-	unzip 4.1.1.zip && \
-    cd /tess/src/tesseract-4.1.1 && ./autogen.sh && ./configure && make && make install && ldconfig && \
-    make training && make training-install && \
-    cd /usr/local/share/tessdata && wget https://github.com/tesseract-ocr/tessdata_best/raw/master/eng.traineddata
-
-# Setting the data prefix
-ENV TESSDATA_PREFIX=/usr/local/share/tessdata
-
-RUN tesseract --version
 
 COPY ./requirements-docker.txt /project/requirements.txt
 
@@ -61,8 +37,6 @@ COPY server-conf/supervisord.conf /etc/supervisor/
 COPY src /project/src
 
 WORKDIR /project
-
-RUN rm -rf /tess
 
 CMD ["/usr/bin/supervisord"]
 
