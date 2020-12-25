@@ -1,4 +1,5 @@
 coverage
+disclosure-extractor==0.0.32
 docker
 eyed3
 pytest
