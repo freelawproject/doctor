@@ -14,13 +14,14 @@ services:
     image: freelawproject/binary-transformers-and-extractors:latest
     container_name: "bte-binary-transformers-and-extractors"
     ports:
-      - "5050:5050"
+      - "5051:5050"
     depends_on:
       - bte-seal-rookery
     volumes:
       - bte-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
     networks:
       - cl_net_overlay
+    cpuset: "0-7"
 
 networks:
     cl_net_overlay:
