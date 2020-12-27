@@ -276,7 +276,9 @@ def judical_watch_extract():
     :return: Disclosure information
     """
     financial_record_data = process_judicial_watch(
-        pdf_bytes=request.files.get("file", None).read()
+        pdf_bytes=request.files.get("file", None).read(),
+        show_logs=True,
+        threaded=True,
     )
     return jsonify(financial_record_data)
 
@@ -289,7 +291,7 @@ def financial_disclosure_extract_record():
     """
     pdf_bytes = request.files.get("pdf_document", None).read()
     financial_record_data = extract_financial_document(
-        pdf_bytes=pdf_bytes, show_logs=True, resize=True
+        pdf_bytes=pdf_bytes, show_logs=True, resize=True, threaded=True
     )
     return jsonify(financial_record_data)
 
