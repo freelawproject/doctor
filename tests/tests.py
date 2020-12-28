@@ -470,7 +470,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
     def test_images_to_pdf(self):
         """Test image conversion from multiple image urls to PDF"""
 
-        pdf_path = os.path.join(self.root, "test_assets", "fd", "test_url.pdf")
+        pdf_path = os.path.join(self.assets_dir, "fd", "test_url.pdf")
         with open(pdf_path, "rb") as f:
             answer = f.read()
 
@@ -501,7 +501,7 @@ class AWSFinancialDisclosureTests(DockerTestBase):
 
     def test_image_to_pdf(self):
         """Test image conversion from a single image url to PDF"""
-        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        pdf_path = os.path.join(self.assets_dir, "tiff_to_pdf.pdf")
         with open(pdf_path, "rb") as f:
             answer = f.read()
 

@@ -26,7 +26,6 @@ from src.utils.audio import (
     convert_to_base64,
 )
 from src.utils.financial_disclosures import (
-    find_and_sort_image_urls,
     download_images,
 )
 from src.utils.image_processing import convert_tiff_to_pdf_bytes
