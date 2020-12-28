@@ -460,38 +460,21 @@ class FinancialDisclosureTests(DockerTestBase):
         )
 
 
-# These tests aren't automatically triggered by github actions because I have not
-# properly mocked them to avoid hitting AWS and testing properly. They do work
-# when called though.
+# These tests aren't automatically triggered by github actions because I
+# have not properly mocked them to avoid hitting AWS and
+# testing properly. They do work when called though.
 class AWSFinancialDisclosureTests(DockerTestBase):
     """Convert Images to PDFs """
 
-    def test_image_url_to_pdf(self):
-        """Test image at URL to PDF conversion"""
-        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
-        with open(pdf_path, "rb") as f:
-            answer = f.read()
+    aws_url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com"
 
-        aws_url = "com-courtlistener-storage.s3-us-west-2.amazonaws.com"
-        path_AE_2011 = "financial-disclosures/2011/A-E"
-        judge = "Abel-MR.%20M.%2006.%20OHS"
-        tiff_url = f"https://{aws_url}/{path_AE_2011}/{judge}.tiff"
+    def test_images_to_pdf(self):
+        """Test image conversion from multiple image urls to PDF"""
 
-        pdf_response = requests.post(
-            self.BTE_URLS["image-to-pdf"],
-            params={"tiff_url": tiff_url},
-        )
-
-        self.assertEqual(200, pdf_response.status_code, msg="Server failed")
-        self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
-
-    def test_image_urls_to_pdf(self):
-        """Test image converion from multiple urls to PDF"""
         pdf_path = os.path.join(self.root, "test_assets", "fd", "test_url.pdf")
         with open(pdf_path, "rb") as f:
             answer = f.read()
 
-        aws_url = "com-courtlistener-storage.s3-us-west-2.amazonaws.com"
         test_fd = {
             "paths": [
                 "Armstrong-SB J3. 09. CAN_R_11_Page_1.tiff",
@@ -501,40 +484,39 @@ class AWSFinancialDisclosureTests(DockerTestBase):
                 "Armstrong-SB J3. 09. CAN_R_11_Page_5.tiff",
                 "Armstrong-SB J3. 09. CAN_R_11_Page_6.tiff",
             ],
-            "key": "financial-disclosures/2011/A-E/Armstrong-SB J3. 09. CAN_R_11",
-            "person_id": "126",
+            "key": "2011/A-E/Armstrong-SB J3. 09. CAN_R_11",
         }
         urls = []
         for page in test_fd["paths"]:
-            urls.append(f"https://{aws_url}/{test_fd['key']}/{page}")
-        pdf_response = requests.post(
-            self.BTE_URLS["urls-to-pdf"],
+            urls.append(
+                f"{self.aws_url}/financial-disclosures/{test_fd['key']}/{page}"
+            )
+
+        bte_response = requests.post(
+            self.BTE_URLS["images-to-pdf"],
             json=json.dumps({"urls": urls}),
+            timeout=60 * 60,
         )
-        self.assertEqual(200, pdf_response.status_code, msg="Server failed")
-        self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
+        self.assertEqual(200, bte_response.status_code, msg="Server failed")
+        self.assertEqual(bte_response.content, answer, msg="Conversion failed")
 
-    def test_combine_images_into_pdf(self):
-        """Can we post and combine multiple images into a pdf?"""
-
-        # Given a single url path for a single page in a split pdf/tiff
-        # can we find all associated pages, sort and combine into a pdf?
-
-        test_file = os.path.join(
-            self.root, "test_assets", "fd", "2012-Straub-CJ.pdf"
-        )
-        # This key is used to idenitify all the associated pages to organize and combine into one PDF
-        test_key = "financial-disclosures/2011/R - Z/Straub-CJ.J3.02_R_11/Straub-CJ.J3.02_R_11_Page_16.tiff"
-
-        with open(test_file, "rb") as f:
+    def test_image_to_pdf(self):
+        """Test image conversion from a single image url to PDF"""
+        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        with open(pdf_path, "rb") as f:
             answer = f.read()
 
-        pdf_response = requests.post(
-            self.BTE_URLS["images-to-pdf"], params={"aws_path": test_key}
-        )
+        path_AE_2011 = "financial-disclosures/2011/A-E"
+        judge = "Abel-MR.%20M.%2006.%20OHS"
+        urls = [f"{self.aws_url}/{path_AE_2011}/{judge}.tiff"]
 
-        self.assertEqual(200, pdf_response.status_code, msg="Server failed")
-        self.assertEqual(pdf_response.content, answer, msg="Conversion failed")
+        bte_response = requests.post(
+            self.BTE_URLS["images-to-pdf"],
+            json=json.dumps({"urls": urls}),
+            timeout=60 * 60,
+        )
+        self.assertEqual(200, bte_response.status_code, msg="Server failed")
+        self.assertEqual(bte_response.content, answer, msg="Conversion failed")
 
 
 if __name__ == "__main__":
