@@ -114,7 +114,6 @@ class DockerTestBase(TestCase):
         """Send file to pdftotext method.
 
         :param filepath:
-        :param do_ocr:
         :return:
         """
         with open(filepath, "rb") as file:
@@ -141,7 +140,7 @@ class DockerTestBase(TestCase):
         """Send file to extract doc content
 
         :param filepath:
-        :param do_ocr:
+        :param max_dimension:
         :return:
         """
         with open(filepath, "rb") as file:
