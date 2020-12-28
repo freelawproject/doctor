@@ -197,62 +197,28 @@ def extract_mime_type():
 
 
 # ------- Financial Disclosure Microservice requests ------- #
-@app.route("/financial_disclosure/tiff_to_pdf", methods=["GET", "POST"])
-def split_single_tiff_into_pdf_from_url():
-    """Convert financial disclosure image url to PDF
+@app.route("/financial_disclosure/images_to_pdf", methods=["GET", "POST"])
+def images_to_pdf():
+    """Create PDF from image url or urls.
 
     :return: PDF content
     """
-    aws_url = request.args.get("tiff_url")
-    try:
-        tiff_bytes = Image.open(
-            requests.get(aws_url, stream=True, timeout=5 * 60).raw
-        )
-    except TimeoutError:
-        abort(408, description=str("Timeout"))
-
-    pdf_bytes = convert_tiff_to_pdf_bytes(tiff_bytes)
-    cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
-    return cleaned_pdf_bytes, 200
-
-
-@app.route("/financial_disclosure/tiffs_to_pdf", methods=["GET", "POST"])
-def make_pdf_from_images():
-    """Convert split financial disclosure images into single PDF
-
-    Using a single image url find other pages and combine into a single PDF
-
-    :return: PDF content
-    """
-    try:
-        aws_path = request.args.get("aws_path")
-        sorted_urls = find_and_sort_image_urls(aws_path)
-        image_list = download_images(sorted_urls)
-        with NamedTemporaryFile(suffix="pdf") as tmp:
-            pdf_bytes_from_image_array(image_list, tmp.name)
-            cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
-            return cleaned_pdf_bytes, 200
-    except:
-        return 422
-
-
-@app.route("/financial_disclosure/urls_to_pdf", methods=["GET", "POST"])
-def make_pdf_from_urls():
-    """Create PDF from multiple image URLs.
-
-    :return: PDF content
-    """
-    try:
-        sorted_urls = json.loads(request.get_json())["urls"]
+    sorted_urls = json.loads(request.get_json())["urls"]
+    if len(sorted_urls) > 1:
         image_list = download_images(sorted_urls)
         with NamedTemporaryFile(suffix=".pdf") as tmp:
             pdf_bytes_from_image_array(image_list, tmp.name)
             cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
-            return cleaned_pdf_bytes
-    except Exception as e:
-        abort(422, description=str(e))
+    else:
+        tiff_image = Image.open(
+            requests.get(sorted_urls[0], stream=True, timeout=60 * 5).raw
+        )
+        pdf_bytes = convert_tiff_to_pdf_bytes(tiff_image)
+        cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
+    return cleaned_pdf_bytes, 200
 
 
+# ------------- Financial Disclosure Extractor --------
 @app.route("/financial_disclosure/extract", methods=["GET", "POST"])
 def financial_disclosure_extract():
     """Extract contents from a judicial financial disclosure.
