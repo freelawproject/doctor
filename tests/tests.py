@@ -44,11 +44,11 @@ class DockerTestBase(TestCase):
         "mime-type": f"{BTE_HOST}/document/mime_type",
         # Financial Disclosures
         # Image conversion and extraction
-        "image-to-pdf": f"{BTE_HOST}/financial_disclosure/tiff_to_pdf",
-        "images-to-pdf": f"{BTE_HOST}/financial_disclosure/tiffs_to_pdf",
-        "urls-to-pdf": f"{BTE_HOST}/financial_disclosure/urls_to_pdf",
+        "images-to-pdf": f"{BTE_HOST}/financial_disclosure/images_to_pdf",
+        # Disclosure Extractor
         "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract_record",
         "extract-disclosure-jw": f"{BTE_HOST}/financial_disclosure/extract_jw",
+        # Deprecated APIs
     }
 
     def setUp(self):
