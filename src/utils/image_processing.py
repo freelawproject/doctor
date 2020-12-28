@@ -1,8 +1,10 @@
 import io
-from typing import ByteString
+from typing import ByteString, List
+
+from PIL import Image
 
 
-def pdf_bytes_from_images(image_list):
+def pdf_bytes_from_images(image_list: List[Image]):
     """Make a pdf given an array of Image files
 
     :param image_list: List of images
@@ -23,7 +25,7 @@ def pdf_bytes_from_images(image_list):
     return pdf_data
 
 
-def convert_tiff_to_pdf_bytes(single_tiff_image) -> ByteString:
+def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
     """Split long tiff into page sized image
 
     :param single_tiff_image: One long tiff file
