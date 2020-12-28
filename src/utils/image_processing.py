@@ -1,7 +1,7 @@
 import io
 from typing import ByteString, List
 
-from PIL import Image
+from PIL.Image import Image
 
 
 def pdf_bytes_from_images(image_list: List[Image]):
