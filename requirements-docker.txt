@@ -1,7 +1,7 @@
 boto3==1.9.38
 certifi==2020.6.20
 chardet==3.0.4
-disclosure-extractor==0.0.40
+disclosure-extractor==0.0.41
 eyed3
 flask
 ipython
