@@ -33,7 +33,7 @@ COPY server-conf/nginx.conf /etc/nginx/
 COPY server-conf/flask-site-nginx.conf /etc/nginx/conf.d/
 COPY server-conf/uwsgi.ini /etc/uwsgi/
 COPY server-conf/supervisord.conf /etc/supervisor/
-
+COPY error /var/www/json/
 COPY src /project/src
 
 WORKDIR /project
