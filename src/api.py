@@ -255,7 +255,9 @@ def financial_disclosure_extract_record():
     """
     pdf_bytes = request.files.get("pdf_document", None).read()
     financial_record_data = extract_financial_document(
-        pdf_bytes=pdf_bytes, show_logs=True, resize=True,
+        pdf_bytes=pdf_bytes,
+        show_logs=True,
+        resize=True,
     )
     return jsonify(financial_record_data)
 
