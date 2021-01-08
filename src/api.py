@@ -293,23 +293,23 @@ def audio_conversion():
         return jsonify({"msg": str(e)}), 422
 
 
-@app.route("/audio/convert_to_mp3", methods=["GET", "POST"])
-def convert_to_mp3():
-    """Convert audio file to MP3 and update metadata on mp3.
-
-    :return: Converted audio
-    """
-    # For whatever reason temporary file was workable with subprocess.
-    tmp_path = os.path.join("/tmp", "audio_" + uuid.uuid4().hex + ".mp3")
-    try:
-        audio_bytes = request.files["audio_file"].read()
-        audio_data = json.loads(request.args.get("audio_data"))
-        convert_to_mp3(audio_bytes, tmp_path)
-        audio_file = set_mp3_meta_data(audio_data, tmp_path)
-        # audio_b64 = convert_to_base64(tmp_path)
-        # os.remove(tmp_path)
-        return send_file(tmp_path)
-    except Exception as e:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        abort(422, description=str(e))
+# @app.route("/audio/convert_to_mp3", methods=["GET", "POST"])
+# def convert_to_mp3():
+#     """Convert audio file to MP3 and update metadata on mp3.
+#
+#     :return: Converted audio
+#     """
+#     # For whatever reason temporary file was workable with subprocess.
+#     tmp_path = os.path.join("/tmp", "audio_" + uuid.uuid4().hex + ".mp3")
+#     try:
+#         audio_bytes = request.files["audio_file"].read()
+#         audio_data = json.loads(request.args.get("audio_data"))
+#         convert_to_mp3(audio_bytes, tmp_path)
+#         audio_file = set_mp3_meta_data(audio_data, tmp_path)
+#         # audio_b64 = convert_to_base64(tmp_path)
+#         # os.remove(tmp_path)
+#         return send_file(tmp_path)
+#     except Exception as e:
+#         if os.path.exists(tmp_path):
+#             os.remove(tmp_path)
+#         abort(422, description=str(e))
