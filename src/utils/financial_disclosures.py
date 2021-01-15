@@ -78,9 +78,7 @@ def download_images(sorted_urls) -> List:
             loop.run_in_executor(None, requests.get, url) for url in urls
         ]
         for response in await asyncio.gather(*futures):
-            image_list.append(
-                response.content
-            )
+            image_list.append(response.content)
         return image_list
 
     loop = asyncio.get_event_loop()

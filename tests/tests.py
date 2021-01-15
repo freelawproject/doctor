@@ -628,5 +628,6 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         self.assertEqual(200, bte_response.status_code, msg="Server failed")
         self.assertEqual(bte_response.content, answer, msg="Conversion failed")
 
+
 if __name__ == "__main__":
     unittest.main()
