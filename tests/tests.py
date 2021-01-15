@@ -485,7 +485,7 @@ class UtilityTests(DockerTestBase):
 
     def test_post_pdf_data(self):
         """Can we send pdf as a file and get a response?"""
-        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        pdf_path = os.path.join(self.assets_dir, "fd", "tiff_to_pdf.pdf")
         with open(pdf_path, "rb") as file:
             f = file.read()
         response = requests.post(
@@ -497,7 +497,7 @@ class UtilityTests(DockerTestBase):
 
     def test_file_type(self):
         """Test Mime Type extraction"""
-        file_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        pdf_path = os.path.join(self.assets_dir, "fd", "tiff_to_pdf.pdf")
         with open(file_path, "rb") as file:
             f = file.read()
         response = requests.post(
@@ -521,7 +521,7 @@ class FinancialDisclosureTests(DockerTestBase):
         #                                  show_logs=True, resize=True)
         # display_table(res)
 
-        pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+        pdf_path = os.path.join(self.assets_dir, "fd", "tiff_to_pdf.pdf")
 
         with open(pdf_path, "rb") as file:
             t1 = time.time()
