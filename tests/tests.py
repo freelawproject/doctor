@@ -311,66 +311,6 @@ class AudioConversionTests(DockerTestBase):
                 msg="Audio conversion to mp3 failed.",
             )
 
-    # def test_audio_to_mp3(self):
-    #     """Can we convert to mp3 with metadata"""
-    #
-    #     wma_path = os.path.join(self.assets_dir, "1.wma")
-    #     with open(wma_path, "rb") as wma_file:
-    #         w = wma_file.read()
-    #
-    #     audio_details = {
-    #         "court_full_name": "Testing Supreme Court",
-    #         "court_short_name": "Testing Supreme Court",
-    #         "court_pk": "test",
-    #         "court_url": "http://www.example.com/",
-    #         "docket_number": "docket number 1 005",
-    #         "date_argued": "2020-01-01",
-    #         "date_argued_year": "2020",
-    #         "case_name": "SEC v. Frank J. Custable, Jr.",
-    #         "case_name_full": "case name full",
-    #         "case_name_short": "short",
-    #         "download_url": "http://media.ca7.uscourts.gov/sound/external/gw.15-1442.15-1442_07_08_2015.mp3",
-    #     }
-    #
-    #     audio_resp = requests.post(
-    #         self.BTE_URLS["audio-to-mp3"],
-    #         params={"audio_data": json.dumps(audio_details)},
-    #         files={
-    #             "audio_file": (os.path.basename(wma_path), w),
-    #         },
-    #     )
-    #
-    #     print(audio_resp)
-    #     # Check test returns 200.
-    #     self.assertEqual(
-    #         audio_resp.status_code,
-    #         200,
-    #         msg=f"Status code not 200",
-    #     )
-    #
-    #     # Validate some metadata in the MP3.
-    #     with NamedTemporaryFile(suffix="mp3") as tmp:
-    #         with open(tmp.name, "wb") as mp3_data:
-    #             mp3_data.write(audio_resp.content)
-    #             mp3_file = eyed3.load(tmp.name)
-    #
-    #         self.assertEqual(
-    #             mp3_file.tag.publisher,
-    #             "Free Law Project",
-    #             msg="Publisher metadata failed.",
-    #         )
-    #         self.assertEqual(
-    #             mp3_file.tag.title,
-    #             "SEC v. Frank J. Custable, Jr.",
-    #             msg="Title metadata failed.",
-    #         )
-    #
-    #         self.assertEqual(
-    #             mp3_file.type,
-    #             eyed3.core.AUDIO_MP3,
-    #             msg="Audio conversion to mp3 failed.",
-    #         )
-
     def test_failing_audio_conversion(self):
         """Can we convert wma to mp3 and add metadata?"""
 
@@ -395,27 +335,6 @@ class AudioConversionTests(DockerTestBase):
         self.assertEqual(
             audio_resp.status_code, 422, msg="Status code not 422"
         )
-
-    # def test_audio_duration(self):
-    #     "Get audio duration "
-    #     wma_path = os.path.join(self.assets_dir, "1.mp3")
-    #     with open(wma_path, "rb") as wma_file:
-    #         w = wma_file.read()
-    #
-    #     duration_response = requests.post(
-    #         self.BTE_URLS["audio-length"],
-    #         files={
-    #             "mp3_file": (os.path.basename(wma_path), w),
-    #         },
-    #     )
-    #     self.assertEqual(
-    #         duration_response.status_code, 200, "Failed audio duration"
-    #     )
-    #     self.assertEqual(
-    #         duration_response.content,
-    #         b"51.64773161867487",
-    #         "Failed audio duration",
-    #     )
 
 
 class ThumbnailGenerationTests(DockerTestBase):
@@ -498,12 +417,12 @@ class UtilityTests(DockerTestBase):
     def test_file_type(self):
         """Test Mime Type extraction"""
         pdf_path = os.path.join(self.assets_dir, "fd", "tiff_to_pdf.pdf")
-        with open(file_path, "rb") as file:
+        with open(pdf_path, "rb") as file:
             f = file.read()
         response = requests.post(
             url=self.BTE_URLS["mime-type"],
             params={"mime": True},
-            files={"file": (os.path.basename(file_path), f)},
+            files={"file": (os.path.basename(pdf_path), f)},
             timeout=60,
         ).json()
         self.assertEqual(response["mimetype"], "application/pdf")
@@ -515,36 +434,19 @@ class FinancialDisclosureTests(DockerTestBase):
     def test_financial_disclosure_extractor(self):
         """Test financial disclosure extraction"""
 
-        # u = 'https://dev-com-courtlistener-storage.s3.amazonaws.com/us/federal/judicial/financial-disclosures/1/william-palin-disclosure.2018_4.pdf'
-        # r = requests.get(u).content
-        # res = extract_financial_document(pdf_bytes=r.content, threaded=True,
-        #                                  show_logs=True, resize=True)
-        # display_table(res)
-
         pdf_path = os.path.join(self.assets_dir, "fd", "tiff_to_pdf.pdf")
 
         with open(pdf_path, "rb") as file:
-            t1 = time.time()
             extractor_response = requests.post(
                 self.BTE_URLS["extract-disclosure"],
                 files={"pdf_document": ("file.pdf", file)},
                 timeout=60 * 60,
             )
-            t2 = time.time()
-            print(t2 - t1)
-        print(extractor_response.status_code)
-        print(extractor_response.json())
-        extractor_response = requests.get(
-            self.BTE_URLS["heartbeat"], timeout=20
+
+        self.assertTrue(
+            extractor_response.json()["success"],
+            msg="Disclosure extraction failed.",
         )
-
-        # self.assertTrue(
-        #     extractor_response.json()["success"],
-        #     msg="Disclosure extraction failed.",
-        # )
-
-        # display_table(extractor_response.json())
-        # print(f"{t2-t1} seconds.")
 
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
