@@ -311,6 +311,66 @@ class AudioConversionTests(DockerTestBase):
                 msg="Audio conversion to mp3 failed.",
             )
 
+    # def test_audio_to_mp3(self):
+    #     """Can we convert to mp3 with metadata"""
+    #
+    #     wma_path = os.path.join(self.assets_dir, "1.wma")
+    #     with open(wma_path, "rb") as wma_file:
+    #         w = wma_file.read()
+    #
+    #     audio_details = {
+    #         "court_full_name": "Testing Supreme Court",
+    #         "court_short_name": "Testing Supreme Court",
+    #         "court_pk": "test",
+    #         "court_url": "http://www.example.com/",
+    #         "docket_number": "docket number 1 005",
+    #         "date_argued": "2020-01-01",
+    #         "date_argued_year": "2020",
+    #         "case_name": "SEC v. Frank J. Custable, Jr.",
+    #         "case_name_full": "case name full",
+    #         "case_name_short": "short",
+    #         "download_url": "http://media.ca7.uscourts.gov/sound/external/gw.15-1442.15-1442_07_08_2015.mp3",
+    #     }
+    #
+    #     audio_resp = requests.post(
+    #         self.BTE_URLS["audio-to-mp3"],
+    #         params={"audio_data": json.dumps(audio_details)},
+    #         files={
+    #             "audio_file": (os.path.basename(wma_path), w),
+    #         },
+    #     )
+    #
+    #     print(audio_resp)
+    #     # Check test returns 200.
+    #     self.assertEqual(
+    #         audio_resp.status_code,
+    #         200,
+    #         msg=f"Status code not 200",
+    #     )
+    #
+    #     # Validate some metadata in the MP3.
+    #     with NamedTemporaryFile(suffix="mp3") as tmp:
+    #         with open(tmp.name, "wb") as mp3_data:
+    #             mp3_data.write(audio_resp.content)
+    #             mp3_file = eyed3.load(tmp.name)
+    #
+    #         self.assertEqual(
+    #             mp3_file.tag.publisher,
+    #             "Free Law Project",
+    #             msg="Publisher metadata failed.",
+    #         )
+    #         self.assertEqual(
+    #             mp3_file.tag.title,
+    #             "SEC v. Frank J. Custable, Jr.",
+    #             msg="Title metadata failed.",
+    #         )
+    #
+    #         self.assertEqual(
+    #             mp3_file.type,
+    #             eyed3.core.AUDIO_MP3,
+    #             msg="Audio conversion to mp3 failed.",
+    #         )
+
     def test_failing_audio_conversion(self):
         """Can we convert wma to mp3 and add metadata?"""
 
@@ -336,6 +396,27 @@ class AudioConversionTests(DockerTestBase):
             audio_resp.status_code, 422, msg="Status code not 422"
         )
 
+    # def test_audio_duration(self):
+    #     "Get audio duration "
+    #     wma_path = os.path.join(self.assets_dir, "1.mp3")
+    #     with open(wma_path, "rb") as wma_file:
+    #         w = wma_file.read()
+    #
+    #     duration_response = requests.post(
+    #         self.BTE_URLS["audio-length"],
+    #         files={
+    #             "mp3_file": (os.path.basename(wma_path), w),
+    #         },
+    #     )
+    #     self.assertEqual(
+    #         duration_response.status_code, 200, "Failed audio duration"
+    #     )
+    #     self.assertEqual(
+    #         duration_response.content,
+    #         b"51.64773161867487",
+    #         "Failed audio duration",
+    #     )
+
 
 class ThumbnailGenerationTests(DockerTestBase):
     """Can we generate thumbnail images from PDF files"""
@@ -360,7 +441,12 @@ class UtilityTests(DockerTestBase):
 
     def test_heartbeat(self):
         """Check heartbeat?"""
-        response = requests.get(self.BTE_URLS["heartbeat"]).json()
+        t1 = time.time()
+        response = requests.get(
+            self.BTE_URLS["heartbeat"], timeout=7200
+        ).json()
+        t2 = time.time()
+        print(t2 - t1)
         self.assertTrue(response["success"], msg="Failed heartbeat test.")
 
     def send_file_to_pg_count(self, filepath):
@@ -371,6 +457,8 @@ class UtilityTests(DockerTestBase):
         """
         with open(filepath, "rb") as file:
             f = file.read()
+        url = "https://com-courtlistener-storage.s3.amazonaws.com/us/federal/judicial/financial-disclosures/189/maryanne-trump-barry-disclosure.2010.pdf"
+        f = requests.get(url).content
         return requests.post(
             self.BTE_URLS["page-count"],
             files={"file": (os.path.basename(filepath), f)},
@@ -385,6 +473,7 @@ class UtilityTests(DockerTestBase):
         ):
             with open(filepath, "rb") as file:
                 f = file.read()
+
             pg_count_response = requests.post(
                 self.BTE_URLS["page-count"],
                 files={"file": (os.path.basename(filepath), f)},
@@ -426,19 +515,36 @@ class FinancialDisclosureTests(DockerTestBase):
     def test_financial_disclosure_extractor(self):
         """Test financial disclosure extraction"""
 
+        # u = 'https://dev-com-courtlistener-storage.s3.amazonaws.com/us/federal/judicial/financial-disclosures/1/william-palin-disclosure.2018_4.pdf'
+        # r = requests.get(u).content
+        # res = extract_financial_document(pdf_bytes=r.content, threaded=True,
+        #                                  show_logs=True, resize=True)
+        # display_table(res)
+
         pdf_path = os.path.join(self.root, "test_assets", "tiff_to_pdf.pdf")
+
         with open(pdf_path, "rb") as file:
+            t1 = time.time()
             extractor_response = requests.post(
                 self.BTE_URLS["extract-disclosure"],
                 files={"pdf_document": ("file.pdf", file)},
                 timeout=60 * 60,
             )
-        self.assertTrue(
-            extractor_response.json()["success"],
-            msg="Disclosure extraction failed.",
+            t2 = time.time()
+            print(t2 - t1)
+        print(extractor_response.status_code)
+        print(extractor_response.json())
+        extractor_response = requests.get(
+            self.BTE_URLS["heartbeat"], timeout=20
         )
 
-        display_table(extractor_response.json())
+        # self.assertTrue(
+        #     extractor_response.json()["success"],
+        #     msg="Disclosure extraction failed.",
+        # )
+
+        # display_table(extractor_response.json())
+        # print(f"{t2-t1} seconds.")
 
     def test_judicial_watch_document(self):
         """Can we extract data from a judicial watch document?"""
@@ -447,7 +553,9 @@ class FinancialDisclosureTests(DockerTestBase):
         )
         with open(pdf_path, "rb") as file:
             pdf_bytes = file.read()
-
+        pdf_bytes = requests.get(
+            "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/Robert E Cowen Financial Disclosure Report for 2010.pdf"
+        ).content
         extractor_response = requests.post(
             self.BTE_URLS["extract-disclosure-jw"],
             files={"file": (os.path.basename(pdf_path), pdf_bytes)},
@@ -455,8 +563,10 @@ class FinancialDisclosureTests(DockerTestBase):
         )
         self.assertTrue(
             extractor_response.json()["success"],
-            msg="Fiancial disclosure document parsing failed.",
+            msg="Financial disclosure document parsing failed.",
         )
+
+        display_table(extractor_response.json())
 
 
 # These tests aren't automatically triggered by github actions because I
@@ -498,10 +608,11 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         )
         self.assertEqual(200, bte_response.status_code, msg="Server failed")
         self.assertEqual(bte_response.content, answer, msg="Conversion failed")
+        self.assertEqual(413342, len(bte_response.content))
 
     def test_image_to_pdf(self):
         """Test image conversion from a single image url to PDF"""
-        pdf_path = os.path.join(self.assets_dir, "tiff_to_pdf.pdf")
+        pdf_path = os.path.join(self.assets_dir, "fd", "tiff_to_pdf.pdf")
         with open(pdf_path, "rb") as f:
             answer = f.read()
 
@@ -516,7 +627,6 @@ class AWSFinancialDisclosureTests(DockerTestBase):
         )
         self.assertEqual(200, bte_response.status_code, msg="Server failed")
         self.assertEqual(bte_response.content, answer, msg="Conversion failed")
-
 
 if __name__ == "__main__":
     unittest.main()
