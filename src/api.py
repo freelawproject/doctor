@@ -3,6 +3,7 @@ import os
 import uuid
 from tempfile import NamedTemporaryFile
 
+import img2pdf
 import magic
 import requests
 from PIL import Image
@@ -206,7 +207,8 @@ def images_to_pdf():
     if len(sorted_urls) > 1:
         image_list = download_images(sorted_urls)
         with NamedTemporaryFile(suffix=".pdf") as tmp:
-            pdf_bytes_from_image_array(image_list, tmp.name)
+            with open(tmp.name, "wb") as f:
+                f.write(img2pdf.convert(image_list))
             cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
     else:
         tiff_image = Image.open(
