@@ -6,6 +6,8 @@ from tempfile import NamedTemporaryFile
 import img2pdf
 import magic
 import requests
+import sentry_sdk
+
 from PIL import Image
 from disclosure_extractor import (
     process_financial_document,
@@ -20,6 +22,8 @@ from flask import (
     send_file,
     abort,
 )
+from sentry_sdk.integrations.flask import FlaskIntegration
+
 
 from src.utils.audio import (
     set_mp3_meta_data,
@@ -46,7 +50,14 @@ from src.utils.tasks import (
     strip_metadata_from_path,
 )
 
+
 app = Flask(__name__)
+
+sentry_sdk.init(
+    dsn="https://67af0f7119714d98b40745a4472aeee1@o399720.ingest.sentry.io/5635264",
+    integrations=[FlaskIntegration()],
+    traces_sample_rate=0.0
+)
 
 
 @app.route("/")
