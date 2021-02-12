@@ -4,3 +4,4 @@ docker
 eyed3
 pytest
 requests
+sentry-sdk[flask]
