@@ -19,6 +19,7 @@ pkginfo==1.5.0.1
 PyPDF2==1.26.0
 pytesseract==0.3.5
 requests==2.25.0
+sentry-sdk[flask]
 six==1.15.0
 urllib3==1.25.10
 uwsgi
