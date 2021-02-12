@@ -56,7 +56,7 @@ app = Flask(__name__)
 sentry_sdk.init(
     dsn="https://67af0f7119714d98b40745a4472aeee1@o399720.ingest.sentry.io/5635264",
     integrations=[FlaskIntegration()],
-    traces_sample_rate=0.0
+    traces_sample_rate=0.0,
 )
 
 
