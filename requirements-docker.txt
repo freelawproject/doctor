@@ -17,7 +17,7 @@ pdf2image==1.7.1
 Pillow==8.0.1
 pkginfo==1.5.0.1
 PyPDF2==1.26.0
-pytesseract==0.3.5
+pytesseract==0.3.7
 requests==2.25.0
 sentry-sdk[flask]
 six==1.15.0
