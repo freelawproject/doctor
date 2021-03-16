@@ -21,5 +21,5 @@ pytesseract==0.3.5
 requests==2.25.0
 sentry-sdk[flask]
 six==1.15.0
-urllib3==1.25.10
+urllib3==1.26.4
 uwsgi
