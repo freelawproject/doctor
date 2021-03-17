@@ -278,7 +278,7 @@ def extract_jef_document():
     :return: Disclosure information
     """
     pdf_bytes = request.files.get("file", None).read()
-    with NamedTemporaryFile(suffix=".json") as tmp:
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
         with open(tmp.name, "wb") as f:
             f.write(pdf_bytes)
         financial_record_data = process_jef_document(file_path=tmp.name)
