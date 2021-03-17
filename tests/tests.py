@@ -48,6 +48,7 @@ class DockerTestBase(TestCase):
         # Disclosure Extractor
         "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract_record",
         "extract-disclosure-jw": f"{BTE_HOST}/financial_disclosure/extract_jw",
+        "extract-disclosure-jef": f"{BTE_HOST}/financial_disclosure/extract_jef",
         # Deprecated APIs
     }
 
@@ -455,9 +456,6 @@ class FinancialDisclosureTests(DockerTestBase):
         )
         with open(pdf_path, "rb") as file:
             pdf_bytes = file.read()
-        pdf_bytes = requests.get(
-            "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/judicial-watch/Robert E Cowen Financial Disclosure Report for 2010.pdf"
-        ).content
         extractor_response = requests.post(
             self.BTE_URLS["extract-disclosure-jw"],
             files={"file": (os.path.basename(pdf_path), pdf_bytes)},
@@ -469,6 +467,24 @@ class FinancialDisclosureTests(DockerTestBase):
         )
 
         display_table(extractor_response.json())
+
+    def test_jef_document(self):
+        """Can we extract data from a judicial watch document?"""
+        pdf_path = os.path.join(
+            self.root, "test_assets", "fd", "JEF_format.pdf"
+        )
+        with open(pdf_path, "rb") as file:
+            pdf_bytes = file.read()
+
+        extractor_response = requests.post(
+            self.BTE_URLS["extract-disclosure-jef"],
+            files={"file": (os.path.basename(pdf_path), pdf_bytes)},
+            timeout=60 * 60,
+        )
+        self.assertTrue(
+            extractor_response.json()["success"],
+            msg="Financial disclosure document parsing failed.",
+        )
 
 
 # These tests aren't automatically triggered by github actions because I

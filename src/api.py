@@ -7,49 +7,37 @@ import img2pdf
 import magic
 import requests
 import sentry_sdk
-
-from PIL import Image
 from disclosure_extractor import (
-    process_financial_document,
-    process_judicial_watch,
     extract_financial_document,
+    process_financial_document,
+    process_jef_document,
+    process_judicial_watch,
 )
-
-from flask import (
-    Flask,
-    request,
-    jsonify,
-    send_file,
-    abort,
-)
+from flask import Flask, jsonify, request, send_file
+from PIL import Image
 from sentry_sdk.integrations.flask import FlaskIntegration
 
-
 from src.utils.audio import (
-    set_mp3_meta_data,
-    convert_to_mp3,
     convert_to_base64,
+    convert_to_mp3,
+    set_mp3_meta_data,
 )
-from src.utils.financial_disclosures import (
-    download_images,
-)
+from src.utils.financial_disclosures import download_images
 from src.utils.image_processing import convert_tiff_to_pdf_bytes
 from src.utils.tasks import (
-    extract_from_docx,
     extract_from_doc,
-    extract_from_wpd,
+    extract_from_docx,
     extract_from_html,
-    extract_from_txt,
-    make_pdftotext_process,
     extract_from_pdf,
-    rasterize_pdf,
-    make_png_thumbnail_for_instance,
+    extract_from_txt,
+    extract_from_wpd,
     get_page_count,
-    pdf_bytes_from_image_array,
+    make_pdftotext_process,
+    make_png_thumbnail_for_instance,
+    rasterize_pdf,
     strip_metadata_from_bytes,
     strip_metadata_from_path,
 )
-
 
 app = Flask(__name__)
 
@@ -277,6 +265,23 @@ def financial_disclosure_extract_record():
         show_logs=True,
         resize=True,
     )
+    return jsonify(financial_record_data)
+
+
+@app.route("/financial_disclosure/extract_jef", methods=["GET", "POST"])
+def extract_jef_document():
+    """Extract content from a JEF generated financial disclosure.
+
+    Extract content from a financial record that was generated using the new
+    JEF system being rolled out by the AO.
+
+    :return: Disclosure information
+    """
+    pdf_bytes = request.files.get("file", None).read()
+    with NamedTemporaryFile(suffix=".json") as tmp:
+        with open(tmp.name, "wb") as f:
+            f.write(pdf_bytes)
+        financial_record_data = process_jef_document(file_path=tmp.name)
     return jsonify(financial_record_data)
 
 
