@@ -485,6 +485,16 @@ class FinancialDisclosureTests(DockerTestBase):
             extractor_response.json()["success"],
             msg="Financial disclosure document parsing failed.",
         )
+        self.assertFalse(
+            extractor_response.json()[
+                "Additional Information or Explanations"
+            ]["is_redacted"]
+        )
+        self.assertFalse(
+            extractor_response.json()["sections"]["Investments and Trusts"][
+                "rows"
+            ][0]["A"]["inferred_value"]
+        )
 
 
 # These tests aren't automatically triggered by github actions because I
