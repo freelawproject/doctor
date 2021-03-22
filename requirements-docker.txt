@@ -1,4 +1,4 @@
-boto3==1.9.38
+boto3==1.17.33
 certifi
 chardet==3.0.4
 disclosure-extractor==0.0.52
