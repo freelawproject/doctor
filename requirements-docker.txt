@@ -11,7 +11,7 @@ idna==2.10
 img2pdf
 lxml==4.5.2
 numpy==1.19.1
-opencv-python==4.2.0.32
+opencv-python==4.5.1.48
 pandas==1.1.1
 pdf2image==1.7.1
 pdfplumber
