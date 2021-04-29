@@ -1,6 +1,6 @@
 boto3==1.9.38
 certifi
-chardet==3.0.4
+chardet==4.0.0
 disclosure-extractor==0.0.52
 eyed3
 flask
