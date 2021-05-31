@@ -7,7 +7,7 @@ flask
 ipython
 PyPDF2==1.26.0
 python-magic
-idna==2.10
+idna==3.2
 img2pdf
 lxml==4.5.2
 numpy==1.19.1
