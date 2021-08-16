@@ -10,7 +10,7 @@ python-magic
 idna==2.10
 img2pdf
 lxml==4.5.2
-numpy==1.19.1
+numpy==1.21.2
 opencv-python==4.2.0.32
 pandas==1.1.1
 pdf2image==1.7.1
