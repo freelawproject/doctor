@@ -1,6 +1,6 @@
 FROM flooie/tesseract-5.0.0
 
-RUN apt-get update
+RUN apt-get update --allow-releaseinfo-change
 RUN apt-get install -y --no-install-recommends \
         libatlas-base-dev gfortran nginx supervisor libpcre3 libpcre3-dev
 
