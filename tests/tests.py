@@ -15,7 +15,7 @@ from disclosure_extractor import display_table
 
 
 class DockerTestBase(TestCase):
-    """ Base class for docker testing."""
+    """Base class for docker testing."""
 
     BTE_HOST = "http://localhost:5051"
     root = os.path.dirname(os.path.realpath(__file__))
@@ -49,6 +49,7 @@ class DockerTestBase(TestCase):
         "extract-disclosure": f"{BTE_HOST}/financial_disclosure/extract_record",
         "extract-disclosure-jw": f"{BTE_HOST}/financial_disclosure/extract_jw",
         "extract-disclosure-jef": f"{BTE_HOST}/financial_disclosure/extract_jef",
+        "extract-disclosure-pdf": f"{BTE_HOST}/financial_disclosure/extract_pdf",
         # Deprecated APIs
     }
 
@@ -63,7 +64,7 @@ class DockerTestBase(TestCase):
         client = docker.from_env()
         client.containers.run(
             "freelawproject/seal-rookery:latest",
-            name="seal-rookery",
+            name="bte-seal-rookery",
             detach=True,
             auto_remove=True,
             volumes={
@@ -468,6 +469,28 @@ class FinancialDisclosureTests(DockerTestBase):
 
         display_table(extractor_response.json())
 
+    def test_pdf_document(self):
+        """Can we extract data from a normal PDF document?"""
+        pdf_path = os.path.join(
+            self.root, "test_assets", "fd", "Alquist-NV-18.pdf"
+        )
+        with open(pdf_path, "rb") as file:
+            pdf_bytes = file.read()
+
+        extractor_response = requests.post(
+            self.BTE_URLS["extract-disclosure-pdf"],
+            files={"file": (os.path.basename(pdf_path), pdf_bytes)},
+            timeout=60 * 2,
+        )
+        self.assertTrue(extractor_response["success"], msg="Extraction Failed")
+        self.assertEqual(
+            extractor_response["sections"]["Investments and Trusts"]["rows"][
+                43
+            ]["A"]["text"],
+            "BLACKROCK STRATEGIC INCOME OPPTYS INSTL CL REINVESTMENTS BSIIX",
+            msg="Wrong Company Name",
+        )
+
     def test_jef_document(self):
         """Can we extract data from a judicial watch document?"""
         pdf_path = os.path.join(
@@ -501,7 +524,7 @@ class FinancialDisclosureTests(DockerTestBase):
 # have not properly mocked them to avoid hitting AWS and
 # testing properly. They do work when called though.
 class AWSFinancialDisclosureTests(DockerTestBase):
-    """Convert Images to PDFs """
+    """Convert Images to PDFs"""
 
     aws_url = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com"
 

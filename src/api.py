@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 from tempfile import NamedTemporaryFile
+from typing import Any
 
 import img2pdf
 import magic
@@ -9,6 +10,7 @@ import requests
 import sentry_sdk
 from disclosure_extractor import (
     extract_financial_document,
+    extract_vector_pdf,
     process_financial_document,
     process_jef_document,
     process_judicial_watch,
@@ -265,6 +267,17 @@ def financial_disclosure_extract_record():
         show_logs=True,
         resize=True,
     )
+    return jsonify(financial_record_data)
+
+
+@app.route("/financial_disclosure/extract_pdf", methods=["GET", "POST"])
+def extract_pdf_document() -> [str, Any]:
+    """Extract content from a regular PDF (if regular)"""
+    pdf_bytes = request.files.get("file", None).read()
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
+        with open(tmp.name, "wb") as f:
+            f.write(pdf_bytes)
+        financial_record_data = extract_vector_pdf(file_path=tmp.name)
     return jsonify(financial_record_data)
 
 
