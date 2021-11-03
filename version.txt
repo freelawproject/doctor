@@ -1,0 +1,3 @@
+0.1.0
+
+0.1.0 - Added Makefile for building ARM and x86_64 binaries (bumped disclosure-extractor version)
