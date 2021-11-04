@@ -271,7 +271,7 @@ def financial_disclosure_extract_record():
 
 
 @app.route("/financial_disclosure/extract_pdf", methods=["GET", "POST"])
-def extract_pdf_document() -> [str, Any]:
+def extract_pdf_document():
     """Extract content from a regular PDF (if regular)"""
     pdf_bytes = request.files.get("file", None).read()
     with NamedTemporaryFile(suffix=".pdf") as tmp:

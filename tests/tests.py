@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import base64
 import json
+import logging
 import os
 import time
 import unittest
@@ -77,7 +78,7 @@ class DockerTestBase(TestCase):
         client.containers.run(
             "freelawproject/binary-transformers-and-extractors:latest",
             ports={"5050/tcp": ("0.0.0.0", 5051)},
-            # cpuset_cpus="0-7",
+            cpuset_cpus="0-7",
             detach=True,
             auto_remove=True,
             volumes={
@@ -477,11 +478,12 @@ class FinancialDisclosureTests(DockerTestBase):
         with open(pdf_path, "rb") as file:
             pdf_bytes = file.read()
 
+        logging.info(f"Extracting financial disclosure from {pdf_path}")
         extractor_response = requests.post(
             self.BTE_URLS["extract-disclosure-pdf"],
             files={"file": (os.path.basename(pdf_path), pdf_bytes)},
-            timeout=60 * 2,
-        )
+            timeout=60 * 5,
+        ).json()
         self.assertTrue(extractor_response["success"], msg="Extraction Failed")
         self.assertEqual(
             extractor_response["sections"]["Investments and Trusts"]["rows"][
