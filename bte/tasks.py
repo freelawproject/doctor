@@ -507,7 +507,7 @@ def set_mp3_meta_data(audio_data: Dict, mp3_path: AnyStr) -> eyed3.core.AudioFil
                 3,
                 f.read(),
                 "image/png",
-                "Seal for %s" % audio_data["court_short_name"],
+                f"Seal for {audio_data['court_short_name']}",
             )
         flp_image_frames.remove(3)
 

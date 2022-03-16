@@ -31,11 +31,11 @@ repos:
     hooks:
      - id: black
 
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
-    hooks:
-     - id: isort
-       name: isort (python)
+#  - repo: https://github.com/PyCQA/isort
+#    rev: 5.10.1
+#    hooks:
+#     - id: isort
+#       name: isort (python)
 
 #
 # Tried and Failed
