@@ -10,7 +10,7 @@ used by Courtlistener.com.
 The goal of this microservice is to isolate out these tools to let Courtlistener (a django site) 
 be streamlined and easier to maintain.  This service is setup to run with NGINX and gunicorn with a 
 series of endpoints that accept JSON, files, and parameters to transform Audio, Documents as well as 
-extract, modify and replace metadat, text and other data.  
+extract, modify and replace metadata, text and other data.  
 
 In general, CL houses documents scraped and collected from hundreds of sources and these documents take
 many varied formats and versions.
@@ -19,7 +19,7 @@ How to Use
 ----------
 
 This tool is designed to be connected securely from CL via a docker network called cl_net_overlay.  But 
-it can also be used directly by exposing port 5050.  For more about developement of the tool see the
+it can also be used directly by exposing port 5050.  For more about development of the tool see the
 (soon coming) DEVELOPING.md file.
 
 
@@ -49,7 +49,7 @@ container name instead of localhost or 0.0.0.0.  In this instance you would use:
 
     curl http://bte:5050
 
-Additionally, the corresponding pyhtonic command would look like something like this:
+Additionally, the corresponding python-ic command would look like something like this:
 
     import requests
     response = requests.get('http://0.0.0.0:5050')
@@ -196,11 +196,11 @@ Keep in mind that this curl will also write the file to the current directory.
 #### Endpoint: /convert/audio/mp3/
 
 This endpoint takes an audio file and converts it to an MP3 file.  This is used to convert different audio formats
-from courts across the country and standardizes the format for our endusers.  
+from courts across the country and standardizes the format for our end users.  
 
 This endpoint also adds the SEAL of the court to the MP3 file and updates the metadata to reflect our updates.
 
-This isnt the cleanest of CURLs becaus we have to convert the large JSON file to a query string, but for proof of concept here is the result
+This isn't the cleanest of CURLs because we have to convert the large JSON file to a query string, but for proof of concept here is the result
 
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
      -X 'POST' \
