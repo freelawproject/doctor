@@ -7,7 +7,6 @@ import img2pdf
 import magic
 import requests
 from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from PIL import Image
 
 from bte.forms import AudioForm, DocumentForm, ImagePdfForm
