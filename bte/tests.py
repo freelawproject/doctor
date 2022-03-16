@@ -21,7 +21,7 @@ class ExtractionTests(unittest.TestCase):
         """"""
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": True}
-        response = requests.post("http://bte:5050/text/", files=files, data=data)
+        response = requests.post("http://bte:5050/extract/pdf/text/", files=files, data=data)
         text = response.text[:100].replace("\n", "").strip()
         self.assertEqual(
             text,
@@ -34,7 +34,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://bte:5050/extract-doc-content/", files=files, data=data
+            "http://bte:5050/extract/doc/text/", files=files, data=data
         )
         self.assertEqual(
             response.json()["success"], True, msg="Content extraction failed"
@@ -49,7 +49,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"ocr_available": True}
         response = requests.post(
-            "http://bte:5050/extract-doc-content/", files=files, params=params
+            "http://bte:5050/extract/doc/text/", files=files, params=params
         )
         self.assertEqual(
             response.json()["success"], True, msg="Content extraction failed"
@@ -68,7 +68,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}
         response = requests.post(
-            "http://bte:5050/extract-doc-content/", files=files, params=params
+            "http://bte:5050/extract/doc/text/", files=files, params=params
         )
         self.assertEqual(
             response.json()["success"], True, msg="Content extraction failed"
@@ -84,7 +84,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-doc.doc")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://bte:5050/extract-doc-content/", files=files, data=data
+            "http://bte:5050/extract/doc/text/", files=files, data=data
         )
         self.assertEqual(
             response.json()["success"], True, msg="Content extraction failed"
@@ -100,7 +100,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-perfect.wpd")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://bte:5050/extract-doc-content/", files=files, data=data
+            "http://bte:5050/extract/doc/text/", files=files, data=data
         )
         self.assertEqual(
             response.json()["success"], True, msg="Content extraction failed"
@@ -124,7 +124,7 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(
             text,
             "(Slip Opinion)              OCTOBER TERM, 2012                                       1",
-            msg=text,
+            msg="Failed to extract content from .pdf file",
         )
 
 
@@ -135,13 +135,13 @@ class ThumbnailTests(unittest.TestCase):
         """Can we generate a pdf to thumbnail?"""
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
-        response = requests.post("http://bte:5050/thumbnail/", files=files, data=data)
+        response = requests.post("http://bte:5050/convert/pdf/thumbnail/", files=files, data=data)
         with open("bte/test_assets/image-pdf-thumbnail.png", "rb") as f:
             answer = f.read()
         self.assertEqual(answer, response.content)
 
         files = make_file(filename="image-pdf-2.pdf")
-        response = requests.post("http://bte:5050/thumbnail/", files=files)
+        response = requests.post("http://bte:5050/convert/pdf/thumbnail/", files=files)
         with open("bte/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
             second_answer = f.read()
         self.assertEqual(second_answer, response.content)
@@ -153,7 +153,7 @@ class MetadataTests(unittest.TestCase):
     def test_page_count_pdf(self):
         """"""
         files = make_file(filename="image-pdf.pdf")
-        page_count = requests.post("http://bte:5050/pg-count/", files=files).json()
+        page_count = requests.post("http://bte:5050/utils/page-count/pdf/", files=files).json()
         self.assertEqual(page_count, 2, "Failed to get page count")
 
     def test_mime_type(self):
@@ -161,7 +161,7 @@ class MetadataTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://bte:5050/mime-type/", files=files, params=params
+            "http://bte:5050/utils/mime-type/", files=files, params=params
         ).json()
         self.assertEqual(
             response["mimetype"], "application/pdf", msg="Failed to get mime type"
@@ -177,7 +177,7 @@ class ImageDisclosuresTest(unittest.TestCase):
             f"{base}_2.tiff",
         ]
         params = {"sorted_urls": json.dumps(sorted_urls)}
-        response = requests.post("http://bte:5050/images-to-pdf/", params=params)
+        response = requests.post("http://bte:5050/convert/images/pdf/", params=params)
         self.assertEqual(response.status_code, 200, msg="Failed status code.")
         self.assertEqual(
             b"%PDF-1.3\n1 0 obj\n<<\n/Type /Pages\n/Count 2\n/Kids [ 3 0 R 4 0 R ]\n>>\nendobj\n2 0 obj\n<<\n/Producer (PyPD",
@@ -209,7 +209,7 @@ class AudioConversionTests(unittest.TestCase):
         files = make_file(filename="1.wma")
         params = {"audio_data": json.dumps(audio_details)}
         response = requests.post(
-            "http://bte:5050/convert-audio/",
+            "http://bte:5050/convert/audio/mp3/",
             files=files,
             params=params,
         )
