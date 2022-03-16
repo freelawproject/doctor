@@ -1,8 +1,18 @@
-FROM flooie/tesseract-5.0.0
+FROM python:3.10-slim
 
 RUN apt-get update
+RUN apt-get install -y curl python3-pip poppler-utils \
+    wget unzip bc vim python3-pip libleptonica-dev git \
+    tesseract-ocr libtesseract-dev nginx
+
 RUN apt-get install -y --no-install-recommends \
-        libatlas-base-dev gfortran nginx supervisor libpcre3 libpcre3-dev
+        libatlas-base-dev gfortran supervisor libpcre3 libpcre3-dev \
+        g++ libz-dev libjpeg-dev build-essential make
+
+#Install QPDF
+COPY docker/install-qpdf.sh /opt/
+RUN ["chmod", "+x", "/opt/install-qpdf.sh"]
+RUN /opt/install-qpdf.sh
 
 RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
     apt-get install -y --no-install-recommends apt-utils && \
@@ -20,23 +30,22 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
         `# Other dependencies` \
         libffi-dev libxml2-dev libxslt-dev python-dev
 
-COPY ./requirements-docker.txt /project/requirements.txt
+RUN pip install seal_rookery
 
-RUN pip install -r /project/requirements.txt
+# set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-RUN useradd --no-create-home nginx
 
-RUN rm /etc/nginx/sites-enabled/default
-RUN rm -r /root/.cache
+COPY ./requirements.txt .
+RUN pip install -r requirements.txt
 
-COPY server-conf/nginx.conf /etc/nginx/
-COPY server-conf/flask-site-nginx.conf /etc/nginx/conf.d/
-COPY server-conf/uwsgi.ini /etc/uwsgi/
-COPY server-conf/supervisord.conf /etc/supervisor/
-COPY error /var/www/json/
-COPY src /project/src
+COPY ./bte /opt/app/bte
+COPY ./manage.py /opt/app/
+WORKDIR /opt/app
 
-WORKDIR /project
+COPY nginx/nginx.conf /etc/nginx/conf.d
 
-CMD ["/usr/bin/supervisord"]
-
+COPY docker/docker-entrypoint.sh /opt/app/
+RUN ["chmod", "+x", "/opt/app/docker-entrypoint.sh"]
+ENTRYPOINT ["/opt/app/docker-entrypoint.sh"]
