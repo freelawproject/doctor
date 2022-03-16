@@ -38,9 +38,11 @@ ENV PYTHONUNBUFFERED 1
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt
 
+COPY ./bte /opt/app/bte
+COPY ./manage.py /opt/app/
 WORKDIR /opt/app
 
-COPY .. .
+#COPY . .
 
 COPY nginx/nginx.conf /etc/nginx/conf.d
 
