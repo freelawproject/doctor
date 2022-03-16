@@ -5,18 +5,7 @@ services:
     container_name: bte
     build: .
     image: freelawproject/bte
-    volumes:
-      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
     depends_on:
       - seal-rookery-tool
     ports:
       - "5050:5050"
-
-  seal-rookery-tool:
-    image: freelawproject/seal-rookery:latest
-    container_name: "seal-rookery-tool"
-    volumes:
-      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
-
-volumes:
-  cl-seal-rookery:
