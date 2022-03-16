@@ -52,7 +52,7 @@ container name instead of localhost or 0.0.0.0.  In this instance you would use:
 Additionally, the corresponding python-ic command would look like something like this:
 
     import requests
-    response = requests.get('http://0.0.0.0:5050')
+    response = requests.get('http://0.0.0.0:5050', timeout=2)
 
 ENDPOINTS
 -------------
