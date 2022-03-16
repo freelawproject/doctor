@@ -19,4 +19,4 @@ jobs:
     - name: Build Image
       run: docker-compose -f docker-compose.dev.yml up --build -d
     - name: Run tests
-      run: docker exec -it mock_courtlistener python3 -m unittest bte.tests
+      run: docker exec mock_courtlistener python3 -m unittest bte.tests
