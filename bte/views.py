@@ -1,6 +1,4 @@
-import json
 import os
-import uuid
 from tempfile import NamedTemporaryFile
 
 import img2pdf

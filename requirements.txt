@@ -4,11 +4,9 @@ PyPDF2
 Pillow
 requests
 pdf2image
-boto3>=1.9.38
 certifi
 chardet>=3.0.4
 eyed3
-flask
 ipython
 python-magic
 idna==2.10

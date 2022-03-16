@@ -5,28 +5,5 @@ services:
     container_name: bte
     build: .
     image: freelawproject/bte
-    networks:
-      - cl_net_overlay
-    volumes:
-      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
-    depends_on:
-      - mock-seal-rookery
     ports:
       - "5050:5050"
-
-  mock-seal-rookery:
-    image: freelawproject/seal-rookery:latest
-    container_name: "mock-seal-rookery"
-    volumes:
-      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
-    deploy:
-      restart_policy:
-        condition: none
-
-networks:
-  cl_net_overlay:
-    driver: bridge
-    external: true
-
-volumes:
-  cl-seal-rookery:
