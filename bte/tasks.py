@@ -19,8 +19,13 @@ from PyPDF2.utils import PdfReadError
 from seal_rookery import seals_data, seals_root
 
 from bte.lib.mojibake import fix_mojibake
-from bte.lib.utils import (BTEUnicodeDecodeError, force_bytes, force_text,
-                           ocr_needed, smart_text)
+from bte.lib.utils import (
+    BTEUnicodeDecodeError,
+    force_bytes,
+    force_text,
+    ocr_needed,
+    smart_text,
+)
 
 
 def strip_metadata_from_bytes(pdf_bytes):
