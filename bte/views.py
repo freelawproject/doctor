@@ -1,43 +1,24 @@
-import os
-from tempfile import NamedTemporaryFile
-import img2pdf
-
-import magic
-import requests
-from django.http import HttpResponse, JsonResponse
-from PIL import Image
-
-from bte.tasks import download_images
-from bte.forms import DocumentForm, ImagePdfForm
-from bte.lib.utils import (
-    cleanup_form,
-    make_png_thumbnail_for_instance,
-    strip_metadata_from_path,
-)
-from bte.tasks import (
-    convert_tiff_to_pdf_bytes,
-    extract_from_doc,
-    extract_from_docx,
-    extract_from_html,
-    extract_from_pdf,
-    extract_from_txt,
-    extract_from_wpd,
-    get_page_count,
-    make_pdftotext_process,
-    rasterize_pdf,
-    strip_metadata_from_bytes,
-)
-
 import json
 import os
 import uuid
+from tempfile import NamedTemporaryFile
 
-from django.http import JsonResponse
+import img2pdf
+import magic
+import requests
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from PIL import Image
 
-from bte.tasks import convert_to_base64, convert_to_mp3, set_mp3_meta_data
-from bte.forms import AudioForm
-from bte.lib.utils import cleanup_form
+from bte.forms import AudioForm, DocumentForm, ImagePdfForm
+from bte.lib.utils import (cleanup_form, make_png_thumbnail_for_instance,
+                           strip_metadata_from_path)
+from bte.tasks import (convert_tiff_to_pdf_bytes, convert_to_base64,
+                       convert_to_mp3, download_images, extract_from_doc,
+                       extract_from_docx, extract_from_html, extract_from_pdf,
+                       extract_from_txt, extract_from_wpd, get_page_count,
+                       make_pdftotext_process, rasterize_pdf,
+                       set_mp3_meta_data, strip_metadata_from_bytes)
 
 
 def heartbeat(request):

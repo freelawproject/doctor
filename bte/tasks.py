@@ -19,13 +19,8 @@ from PyPDF2.utils import PdfReadError
 from seal_rookery import seals_data, seals_root
 
 from bte.lib.mojibake import fix_mojibake
-from bte.lib.utils import (
-    BTEUnicodeDecodeError,
-    force_bytes,
-    force_text,
-    ocr_needed,
-    smart_text,
-)
+from bte.lib.utils import (BTEUnicodeDecodeError, force_bytes, force_text,
+                           ocr_needed, smart_text)
 
 
 def strip_metadata_from_bytes(pdf_bytes):
@@ -507,7 +502,7 @@ def set_mp3_meta_data(audio_data: Dict, mp3_path: AnyStr) -> eyed3.core.AudioFil
                 3,
                 f.read(),
                 "image/png",
-                "Seal for %s" % audio_data["court_short_name"],
+                f"Seal for {audio_data['court_short_name']}",
             )
         flp_image_frames.remove(3)
 

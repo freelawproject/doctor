@@ -19,11 +19,7 @@ class BTEUnicodeDecodeError(UnicodeDecodeError):
 
     def __str__(self):
         original = UnicodeDecodeError.__str__(self)
-        return "%s. You passed in %r (%s)" % (
-            original,
-            self.obj,
-            type(self.obj),
-        )
+        return f"{original}. You passed in {self.obj!r} ({type(self.obj)})"
 
 
 def force_bytes(s, encoding="utf-8", strings_only=False, errors="strict"):

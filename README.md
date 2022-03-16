@@ -3,15 +3,15 @@ Binaries Transformers and Extractors
 ------------------------------------
 
 This is a microservice of containing Binaries, Transformers and Extractors
-used by Courtlistener.com 
+used by Courtlistener.com
 
 How to Use
 ----------
 
-This project is a microservice designed for use by Courtlistener.com. 
+This project is a microservice designed for use by Courtlistener.com.
 
-Hopefully this tool can be used by anyone.  If you are interested in using this tool without Courtlistener you should 
-start by using the `docker-compose.open.yml`.  This file will expose port 5050 
+Hopefully this tool can be used by anyone.  If you are interested in using this tool without Courtlistener you should
+start by using the `docker-compose.open.yml`.  This file will expose port 5050
 for any application can use to connect to this service.
 
     docker-compose -f docker-compose.open.yml up --build -d
@@ -21,7 +21,7 @@ Quick Start
 -----------
 
 Assuming you have docker installed call:
-    
+
     docker-compose -f docker-compose.yml up --build -d
 
 or
@@ -35,7 +35,7 @@ In its most basic test the heartbeat microservice can be checked by running
 
     curl 0.0.0.0:5050
 
-returns 
+returns
 
     {"success": true, "msg": "Heartbeat detected."}
 
@@ -54,7 +54,7 @@ Lets do a quick overview of the endpoints in this microservice.
 Each endpoint is documented below with curl, but a python requests version can be found in the the tests file.
 
 
-Audio conversion: 
+Audio conversion:
 Assuming you are in the root directory the following curl should generate a new MP3 file from the WMA
 
     curl -X POST -H "Content-Type: application/json" 0.0.0.0:5050/convert-audio -F "file=@/Users/Palin/Code/binaries-transformers-extractors/bte/test_assets/vector-pdf.pdf"  
@@ -110,7 +110,7 @@ Given a pdf, extract the text from it.
 
 ##### Endpoint: /extract-doc-content/
 
-This is an important endpoint. Given a document it will extract out the text and return a page count (if possible) 
+This is an important endpoint. Given a document it will extract out the text and return a page count (if possible)
 along with general metadata used in CL.
 
     curl 'http://localhost:5050/extract-doc-content/' \
@@ -154,17 +154,17 @@ This method takes a document and returns the mime type.
      -F "file=@bte/test_assets/image-pdf.pdf"
 
 returns as JSON response identifying the document type
-    
+
     {"mimetype": "PDF document, version 1.3"}
 
-and 
+and
 
     curl 'http://localhost:5050/mime-type/?mime=True' \
      -X 'POST' \
      -F "file=@bte/test_assets/image-pdf.pdf"
 
 returns as JSON response identifying the document type
-    
+
     {"mimetype": "application/pdf"}
 
 Another example  
@@ -187,9 +187,9 @@ Given an image or indeterminate length, this endpoint will convert it to a pdf.
 
     curl 'http://localhost:5050/image-to-pdf/' \
      -X 'POST' \
-     -F "file=@bte/test_assets/long-image.tiff" \ 
+     -F "file=@bte/test_assets/long-image.tiff" \
       --output test-image-to-pdf.pdf
-     
+
 Keep in mind that this curl will write the file to the current directory.
 
 #### Endpoint: /images-to-pdf/
@@ -219,7 +219,7 @@ Keep in mind that this curl will also write the file to the current directory.
 
 #### Endpoint: /convert-audio/
 
-This endpoint takes an audio file and converts it to an MP3 file.  This is used to convert different audio formats 
+This endpoint takes an audio file and converts it to an MP3 file.  This is used to convert different audio formats
 from courts across the country and standardizes the format for our endusers.  
 
 This endpoint also adds the SEAL of the court to the MP3 file and updates the metadata to reflect our updates.
@@ -254,9 +254,9 @@ Seal Rookery is a tool that essentailly holds the seals for courts across the co
 
 ## Testing
 
-Testing is setup with the following default that our tests are run from 
-a container on the same network as the BTE machine.  This is modeled after 
-how we plan to use the BTE image for CL. 
+Testing is setup with the following default that our tests are run from
+a container on the same network as the BTE machine.  This is modeled after
+how we plan to use the BTE image for CL.
 
     docker-compose -f docker-compose.dev.yml up --build -d
 
@@ -264,7 +264,7 @@ Starts the BTE Container and the Mock CL Container that we run our tests from.
 
     docker exec -it mock_courtlistener python3 -m unittest bte.tests
 
-This is a duplicate of the BTE container, which we use for simplicity, but it 
+This is a duplicate of the BTE container, which we use for simplicity, but it
 makes the requests across the docker network.
 
 
