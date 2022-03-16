@@ -7,9 +7,9 @@ Courtlistener Binary, Transformers and Extractors
 This is a microservice of containing Binaries, Transformers and Extractors
 used by Courtlistener.com.  
 
-The goal of this microservice is to isolate out these tools to let Courtlistener (a django site) 
-be streamlined and easier to maintain.  This service is setup to run with NGINX and gunicorn with a 
-series of endpoints that accept JSON, files, and parameters to transform Audio, Documents as well as 
+The goal of this microservice is to isolate out these tools to let Courtlistener (a django site)
+be streamlined and easier to maintain.  This service is setup to run with NGINX and gunicorn with a
+series of endpoints that accept JSON, files, and parameters to transform Audio, Documents as well as
 extract, modify and replace metadata, text and other data.  
 
 In general, CL houses documents scraped and collected from hundreds of sources and these documents take
@@ -18,7 +18,7 @@ many varied formats and versions.
 How to Use
 ----------
 
-This tool is designed to be connected securely from CL via a docker network called cl_net_overlay.  But 
+This tool is designed to be connected securely from CL via a docker network called cl_net_overlay.  But
 it can also be used directly by exposing port 5050.  For more about development of the tool see the
 (soon coming) DEVELOPING.md file.
 
@@ -33,14 +33,14 @@ Assuming you have docker installed run:
 This will expose the endpoints on port 5050, which can be modified in the `nginx/nginx.conf` file and points
 to the django server running on port 8000.
 
-For more options and configuration of nginx checkout [https://nginx.org/en/docs/](https://nginx.org/en/docs/). 
+For more options and configuration of nginx checkout [https://nginx.org/en/docs/](https://nginx.org/en/docs/).
 
 After the compose file has finished you should be able to test that you have a working environment by running
 
     curl 0.0.0.0:5050
     curl http://localhost:5050
 
-which should return a JSON response. 
+which should return a JSON response.
 
     {"success": true, "msg": "Heartbeat detected."}
 

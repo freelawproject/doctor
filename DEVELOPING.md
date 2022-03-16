@@ -8,7 +8,7 @@ to verify that the service works as expected and also works across a docker netw
     docker-compose -f docker-compose.dev.yml up --build -d
 
 
-## Testing 
+## Testing
 
 Testing is setup with the following default that our tests are run from
 a container on the same network as the BTE machine.  This is modeled after

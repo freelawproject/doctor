@@ -21,7 +21,9 @@ class ExtractionTests(unittest.TestCase):
         """"""
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": True}
-        response = requests.post("http://bte:5050/extract/pdf/text/", files=files, data=data)
+        response = requests.post(
+            "http://bte:5050/extract/pdf/text/", files=files, data=data
+        )
         text = response.text[:100].replace("\n", "").strip()
         self.assertEqual(
             text,
@@ -135,7 +137,9 @@ class ThumbnailTests(unittest.TestCase):
         """Can we generate a pdf to thumbnail?"""
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
-        response = requests.post("http://bte:5050/convert/pdf/thumbnail/", files=files, data=data)
+        response = requests.post(
+            "http://bte:5050/convert/pdf/thumbnail/", files=files, data=data
+        )
         with open("bte/test_assets/image-pdf-thumbnail.png", "rb") as f:
             answer = f.read()
         self.assertEqual(answer, response.content)
@@ -153,7 +157,9 @@ class MetadataTests(unittest.TestCase):
     def test_page_count_pdf(self):
         """"""
         files = make_file(filename="image-pdf.pdf")
-        page_count = requests.post("http://bte:5050/utils/page-count/pdf/", files=files).json()
+        page_count = requests.post(
+            "http://bte:5050/utils/page-count/pdf/", files=files
+        ).json()
         self.assertEqual(page_count, 2, "Failed to get page count")
 
     def test_mime_type(self):
