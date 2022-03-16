@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  bte:
+    container_name: bte
+    build: .
+    image: freelawproject/bte
+    networks:
+      - cl_net_overlay
+    volumes:
+      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
+    depends_on:
+      - mock-seal-rookery
+
+  mock_courtlistener:
+    container_name: mock_courtlistener
+    image: freelawproject/bte
+    networks:
+      - cl_net_overlay
+    depends_on:
+      - bte
+      - mock-seal-rookery
+    volumes:
+      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
+
+  mock-seal-rookery:
+    image: freelawproject/seal-rookery:latest
+    container_name: "mock-seal-rookery"
+    volumes:
+      - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
+    deploy:
+      restart_policy:
+        condition: none
+
+networks:
+  cl_net_overlay:
+    driver: bridge
+    external: true
+
+volumes:
+  cl-seal-rookery:
