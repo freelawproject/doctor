@@ -1,0 +1,32 @@
+0.2.0
+
+## Current
+
+**0.2.0 - 2022-03-16**
+
+Features:
+ - Greatly improved documentation
+ - Improved speed
+
+Changes:
+ - Overhauled the entire codebase
+ - Dropped seal-rookery image
+ - Switched to Django and gunicorn from uWSGI and Flask
+ - Completed api tests
+ - Added Makefile for building and pushing
+ - Updated NGINX config
+ - Added DEVELOPING.md
+ - Added composefile for testing with or without docker networking
+ - Removed financial disclosures (coming soon as a separate project).
+ - General improvements and cleanup.
+ - Add support for multiple architectures. (linux/amd64,linux/arm64)
+ - Added changelog
+
+
+**0.1.0 - 2021-11-08**
+
+
+**0.0.36 - 2021-05-11**
+
+
+**0.0.36 - 2021-03-17**

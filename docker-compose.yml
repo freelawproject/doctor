@@ -3,7 +3,9 @@ version: '3.8'
 services:
   bte:
     container_name: bte
-    build: .
+    build:
+      dockerfile: docker/Dockerfile
+      context: .
     image: freelawproject/bte
     ports:
       - "5050:5050"

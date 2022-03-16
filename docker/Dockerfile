@@ -37,11 +37,11 @@ ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
 
-COPY ./requirements.txt .
+COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY ./bte /opt/app/bte
-COPY ./manage.py /opt/app/
+COPY bte /opt/app/bte
+COPY manage.py /opt/app/
 WORKDIR /opt/app
 
 COPY nginx/nginx.conf /etc/nginx/conf.d

@@ -1,104 +1,73 @@
 
-Binaries Transformers and Extractors
+Courtlistener Binary, Transformers and Extractors
 ------------------------------------
 
+##Notes
+
 This is a microservice of containing Binaries, Transformers and Extractors
-used by Courtlistener.com
+used by Courtlistener.com.  
+
+The goal of this microservice is to isolate out these tools to let Courtlistener (a django site) 
+be streamlined and easier to maintain.  This service is setup to run with NGINX and gunicorn with a 
+series of endpoints that accept JSON, files, and parameters to transform Audio, Documents as well as 
+extract, modify and replace metadat, text and other data.  
+
+In general, CL houses documents scraped and collected from hundreds of sources and these documents take
+many varied formats and versions.
 
 How to Use
 ----------
 
-This project is a microservice designed for use by Courtlistener.com.
-
-Hopefully this tool can be used by anyone.  If you are interested in using this tool without Courtlistener you should
-start by using the `docker-compose.open.yml`.  This file will expose port 5050
-for any application can use to connect to this service.
-
-    docker-compose -f docker-compose.open.yml up --build -d
+This tool is designed to be connected securely from CL via a docker network called cl_net_overlay.  But 
+it can also be used directly by exposing port 5050.  For more about developement of the tool see the
+(soon coming) DEVELOPING.md file.
 
 
 Quick Start
 -----------
 
-Assuming you have docker installed call:
+Assuming you have docker installed run:
 
     docker-compose -f docker-compose.yml up --build -d
 
-or
+This will expose the endpoints on port 5050, which can be modified in the `nginx/nginx.conf` file and points
+to the django server running on port 8000.
 
-    docker-compose -f docker-compose.dev.yml up --build -d
+For more options and configuration of nginx checkout [https://nginx.org/en/docs/](https://nginx.org/en/docs/). 
 
-Depending on your purpose you can either expose the microservice to port
-5050 and make a series of requests against it.
-
-In its most basic test the heartbeat microservice can be checked by running
+After the compose file has finished you should be able to test that you have a working environment by running
 
     curl 0.0.0.0:5050
+    curl http://localhost:5050
 
-returns
+which should return a JSON response. 
 
     {"success": true, "msg": "Heartbeat detected."}
 
+if you are using the development docker-compose file the via the docker network you would use
+container name instead of localhost or 0.0.0.0.  In this instance you would use:
 
-NETWORKING
-----------
+    curl http://bte:5050
 
-Free Law Project uses this as a microservice that is only accessible from the docket network between
-containers.  
-
-ENDPOINTS
----------
-
-Lets do a quick overview of the endpoints in this microservice.
-
-Each endpoint is documented below with curl, but a python requests version can be found in the the tests file.
-
-
-Audio conversion:
-Assuming you are in the root directory the following curl should generate a new MP3 file from the WMA
-
-    curl -X POST -H "Content-Type: application/json" 0.0.0.0:5050/convert-audio -F "file=@/Users/Palin/Code/binaries-transformers-extractors/bte/test_assets/vector-pdf.pdf"  
-    curl -X POST 0.0.0.0:5050/pg-count/ -o vector-pdf.pdf -d @/Users/Palin/Code/binaries-transformers-extractors/bte/test_assets/vector-pdf.pdf
-
-
-
-
-So if you wanted to get the page count for a particular PDF document you could accomplish that by running the following CURL command
-
-    curl -i http://0.0.0.0:5050/pg-count/ -X POST -F "file=@bte/test_assets/image-pdf.pdf"
-
-of the equivalent python request
+Additionally, the corresponding pyhtonic command would look like something like this:
 
     import requests
+    response = requests.get('http://0.0.0.0:5050')
 
-    files = {
-        'file': ('image-pdf.pdf', open('bte/test_assets/image-pdf.pdf', 'rb')),
-    }
-    response = requests.post('http://0.0.0.0:5050/pg-count/', files=files)
+ENDPOINTS
+-------------
 
+The service currently supports the following tools:
 
-Extracting text from an regular PDF is also very simple
+1. Convert audio files from wma, ogg, wav to MP3.
+2. Convert an image or images to a PDF.
+3. Identify the mime type of a file.
+4. OCR text from an image PDF.
+5. Extract text from PDF, RTF, DOC, DOCX, or WPD, HTML, TXT files.
+6. Create a thumbnail of the first page of a PDF.
+7. Get page count for a document.
 
-    curl 'http://0.0.0.0:5050/extract-doc-content/' \
-            -X 'POST' \
-            -F "file=@bte/test_assets/vector-pdf.pdf"
-
-Extracting text from an image PDF is also very simple
-
-    curl 'http://localhost:5050/extract-doc-content/?ocr_available=2' \
-             -X 'POST' \
-             -F "file=@bte/test_assets/image-pdf.pdf"
-
-
-Keep in mind this only works if you uncomment out the port mapping in the docker-compose.yml file.  
-
-This image is by default set up to run over cl_network_overlay - a docker network that allows separate docker containers
-to communicate.
-
-
-#ENDPOINTS
-
-## Extractors
+A brief description and curl command for each endpoint is provided below.
 
 ##### Endpoint: /text/
 
@@ -117,6 +86,7 @@ along with general metadata used in CL.
      -X 'POST' \
      -F "file=@bte/test_assets/vector-pdf.pdf"
 
+or if you need to OCR the document you pass in the ocr_available parameter.
 
     curl 'http://localhost:5050/extract-doc-content/?ocr_available=True' \
      -X 'POST' \
@@ -215,7 +185,7 @@ Thumbnail takes a pdf and returns a png thumbnail of the first page.
 Keep in mind that this curl will also write the file to the current directory.
 
 
-##Audio Converter
+##Audio
 
 #### Endpoint: /convert-audio/
 
@@ -239,35 +209,14 @@ This returns the audio file back as a JSON Response which can be written to an M
     }
 
 
-Docker and Nginx
-----------------
+Nginx
+-----
 
 NGINX controls a lot of what is occurring and currently has some limitations that can be adjusted
-Currently the maximum file size that can be buffered is 100 MB.  One could modify NGINX by modifying nginx/nginx.conf file.
-
-
-Seal Rookery Image
-------------
-
-Seal Rookery is a tool that essentailly holds the seals for courts across the country.  It is used by the audio conversion endpoint.
+Currently the maximum file size that can be buffered is 100 MB.  One could modify NGINX by modifying `nginx/nginx.conf` file.
 
 
 ## Testing
 
-Testing is setup with the following default that our tests are run from
-a container on the same network as the BTE machine.  This is modeled after
-how we plan to use the BTE image for CL.
-
-    docker-compose -f docker-compose.dev.yml up --build -d
-
-Starts the BTE Container and the Mock CL Container that we run our tests from.
-
-    docker exec -it mock_courtlistener python3 -m unittest bte.tests
-
-This is a duplicate of the BTE container, which we use for simplicity, but it
-makes the requests across the docker network.
-
-
-## Building Images
-
-A soon to be written make file will certainly be used to build and push images to docker hub.
+Testing is designed to be run with the `docker-compose.dev.yml` file.  To see more about testing
+checkout the DEVELOPING.md file.

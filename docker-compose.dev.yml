@@ -3,7 +3,9 @@ version: '3.8'
 services:
   bte:
     container_name: bte
-    build: .
+    build:
+      dockerfile: docker/Dockerfile
+      context: .
     image: freelawproject/bte
     networks:
       - cl_net_overlay
