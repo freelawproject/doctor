@@ -31,7 +31,7 @@ from typing import Any, AnyStr, Dict
 
 import eyed3
 from eyed3 import id3
-from seal_rookery import seals_data, seals_root
+# from seal_rookery import seals_data, seals_root
 
 
 def strip_metadata_from_bytes(pdf_bytes):
@@ -491,31 +491,31 @@ def set_mp3_meta_data(audio_data: Dict, mp3_path: AnyStr) -> eyed3.core.AudioFil
     # Add images to the mp3. If it has a seal, use that for the Front Cover
     # and use the FLP logo for the Publisher Logo. If it lacks a seal, use the
     # Publisher logo for both the front cover and the Publisher logo.
-    try:
-        has_seal = seals_data[audio_data["court_pk"]]["has_seal"]
-    except AttributeError:
-        # Unknown court in Seal Rookery.
-        has_seal = False
-    except KeyError:
-        # Unknown court altogether (perhaps a test?)
-        has_seal = False
+    # try:
+    #     has_seal = seals_data[audio_data["court_pk"]]["has_seal"]
+    # except AttributeError:
+    #     # Unknown court in Seal Rookery.
+    #     has_seal = False
+    # except KeyError:
+    #     # Unknown court altogether (perhaps a test?)
+    #     has_seal = False
 
     flp_image_frames = [
         3,  # "Front Cover". Complete list at eyed3/id3/frames.py
         14,  # "Publisher logo".
     ]
-    if has_seal:
-        with open(
-            os.path.join(seals_root, "512", f"{audio_data['court_pk']}.png"),
-            "rb",
-        ) as f:
-            audio_file.tag.images.set(
-                3,
-                f.read(),
-                "image/png",
-                "Seal for %s" % audio_data["court_short_name"],
-            )
-        flp_image_frames.remove(3)
+    # if has_seal:
+    #     with open(
+    #         os.path.join(seals_root, "512", f"{audio_data['court_pk']}.png"),
+    #         "rb",
+    #     ) as f:
+    #         audio_file.tag.images.set(
+    #             3,
+    #             f.read(),
+    #             "image/png",
+    #             "Seal for %s" % audio_data["court_short_name"],
+    #         )
+    #     flp_image_frames.remove(3)
 
     for frame in flp_image_frames:
         cover_art_fp = os.path.join(assets_dir, "producer-300x300.png")

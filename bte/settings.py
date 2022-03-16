@@ -14,6 +14,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = True
+SECRET_KEY = "this-is-a-secret-key"
 ALLOWED_HOSTS = ["bte", "0.0.0.0", "localhost"]
 INSTALLED_APPS = []
 ROOT_URLCONF = "bte.urls"

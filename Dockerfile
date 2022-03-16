@@ -42,8 +42,6 @@ COPY ./bte /opt/app/bte
 COPY ./manage.py /opt/app/
 WORKDIR /opt/app
 
-#COPY . .
-
 COPY nginx/nginx.conf /etc/nginx/conf.d
 
 COPY docker/docker-entrypoint.sh /opt/app/

@@ -10,7 +10,7 @@ services:
     volumes:
       - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
     depends_on:
-      - mock-seal-rookery
+      - cl-seal-rookery
 
   mock_courtlistener:
     container_name: mock_courtlistener
@@ -19,13 +19,13 @@ services:
       - cl_net_overlay
     depends_on:
       - bte
-      - mock-seal-rookery
+      - cl-seal-rookery
     volumes:
       - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
 
-  mock-seal-rookery:
+  cl-seal-rookery:
     image: freelawproject/seal-rookery:latest
-    container_name: "mock-seal-rookery"
+    container_name: "cl-seal-rookery"
     volumes:
       - cl-seal-rookery:${PYTHON_PACKAGES}/seal_rookery
     deploy:
