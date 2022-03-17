@@ -202,8 +202,8 @@ Keep in mind that this curl will also write the file to the current directory.
 
 #### Endpoint: /convert/pdf/thumbnails/
 
-Give a PDF and a range or pages, this endpoint will return a zip file containing thumbnails 
-for each page requested.  For example if you want thumbnails for the first four pages you 
+Give a PDF and a range or pages, this endpoint will return a zip file containing thumbnails
+for each page requested.  For example if you want thumbnails for the first four pages you
 
     curl 'http://localhost:5050/convert/pdf/thumbnails/?max_dimension=350&pages=%5B1%2C+2%2C+3%2C+4%5D' \
      -X 'POST' \
