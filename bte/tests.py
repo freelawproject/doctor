@@ -2,6 +2,7 @@ import base64
 import json
 import unittest
 from tempfile import NamedTemporaryFile
+from zipfile import ZipFile
 
 import eyed3
 import requests
@@ -122,6 +123,7 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://bte:5050/document/pdf-to-text/", files=files
         ).json()
+
         text = response["content"][:100].replace("\n", "").strip()
         self.assertEqual(
             text,
@@ -134,7 +136,7 @@ class ThumbnailTests(unittest.TestCase):
     """Can we generate thumbnail images from PDF files"""
 
     def test_convert_pdf_to_thumbnail_png(self):
-        """Can we generate a pdf to thumbnail?"""
+        """Can we generate four thumbanils a pdf?"""
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
         response = requests.post(
@@ -149,6 +151,30 @@ class ThumbnailTests(unittest.TestCase):
         with open("bte/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
             second_answer = f.read()
         self.assertEqual(second_answer, response.content)
+
+    def test_thumbnail_range(self):
+        """Can we generate a thumbnail for a range of pages?"""
+        files = make_file(filename="vector-pdf.pdf")
+        pages = [1, 2, 3, 4]
+        data = {
+            "max_dimension": 350,
+            "pages": json.dumps(pages),
+        }
+
+        response = requests.post(
+            "http://bte:5050/convert/pdf/thumbnails/", files=files, data=data
+        )
+        with NamedTemporaryFile(suffix=".zip") as tmp:
+            with open(tmp.name, "wb") as f:
+                f.write(response.content)
+                with ZipFile(tmp.name, "r") as zipObj:
+                    listOfiles = sorted(zipObj.namelist())
+        self.assertEqual(len(listOfiles), 4, msg="Failed to generate thumbnails")
+        self.assertEqual(
+            ["thumb-1.png", "thumb-2.png", "thumb-3.png", "thumb-4.png"],
+            listOfiles,
+            msg="thumbnails not generated",
+        )
 
 
 class MetadataTests(unittest.TestCase):
@@ -172,6 +198,36 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(
             response["mimetype"], "application/pdf", msg="Failed to get mime type"
         )
+
+    def test_embedding_text_to_image_pdf(self):
+        """Can we embed text into an image PDF?"""
+        data = {"ocr_available": False}
+
+        files = make_file(filename="image-pdf.pdf")
+        image_response = requests.post(
+            "http://bte:5050/extract/pdf/text/", files=files, data=data
+        )
+        self.assertEqual(
+            "", image_response.text.strip("\x0c\x0c"), msg="PDF should have no text"
+        )
+
+        # Embed text into the image pdf and check that we get some text
+        new_pdf = requests.post("http://bte:5050/utils/add/text/pdf/", files=files)
+        with NamedTemporaryFile(suffix=".pdf") as tmp:
+            with open(tmp.name, "wb") as f:
+                f.write(new_pdf.content)
+            with open(tmp.name, "rb") as f:
+                files = {"file": (tmp.name, f.read())}
+
+            # Confirm that text is now embedded in the PDF
+            response = requests.post(
+                "http://bte:5050/extract/pdf/text/", files=files, data=data
+            )
+            self.assertIn(
+                "(SlipOpinion)             OCTOBER TERM, 2012",
+                response.text,
+                msg=response.text,
+            )
 
 
 class ImageDisclosuresTest(unittest.TestCase):

@@ -25,4 +25,4 @@ requests>=2.25.0
 sentry-sdk[flask]
 six>=1.15.0
 urllib3>=1.25.10
-uwsgi
+reportlab

@@ -30,6 +30,7 @@ class DocumentForm(forms.Form):
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
     mime = forms.BooleanField(label="mime", required=False)
     max_dimension = forms.IntegerField(label="max-dimension", required=False)
+    pages = forms.Field(label="pages", required=False)
 
     def temp_save_file(self, fp):
         with open(fp, "wb") as f:
@@ -45,6 +46,9 @@ class DocumentForm(forms.Form):
         fp = tempfile.NamedTemporaryFile(
             delete=False, suffix=f'.{self.cleaned_data["extension"]}'
         )
+        self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
+        if self.cleaned_data["pages"]:
+            self.cleaned_data["pages"] = json.loads(self.cleaned_data["pages"])
         self.cleaned_data["fp"] = fp.name
         self.temp_save_file(fp.name)
         return self.cleaned_data

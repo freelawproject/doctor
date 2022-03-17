@@ -1,16 +1,22 @@
 import os
+import shutil
 from tempfile import NamedTemporaryFile
 
 import img2pdf
 import magic
+import pytesseract
 import requests
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image
+from PyPDF2 import PdfFileReader, PdfFileWriter
+from pytesseract import Output
 
 from bte.forms import AudioForm, DocumentForm, ImagePdfForm
 from bte.lib.utils import (
     cleanup_form,
+    make_page_with_text,
     make_png_thumbnail_for_instance,
+    make_png_thumbnails,
     strip_metadata_from_path,
 )
 from bte.tasks import (
@@ -114,6 +120,29 @@ def extract_doc_content(request):
             "success": True if returncode == 0 else False,
         }
     )
+
+
+def make_thumbnail_from_range(request):
+    """Can we make a range of thumbnails from a pdf?
+
+    :return: The zip of thumbail images.
+    """
+    form = DocumentForm(request.POST, request.FILES)
+    if not form.is_valid():
+        return JsonResponse({"success": False})
+    make_png_thumbnails(
+        form.cleaned_data["fp"],
+        form.cleaned_data["max_dimension"],
+        form.cleaned_data["pages"],
+        form.cleaned_data["tmp_dir"],
+    )
+    with NamedTemporaryFile(delete=True, suffix=".zip") as tmp:
+        shutil.make_archive(
+            f"{tmp.name[:-4]}", "zip", form.cleaned_data["tmp_dir"].name
+        )
+        shutil.rmtree(form.cleaned_data["tmp_dir"].name)
+        cleanup_form(form)
+        return FileResponse(open(tmp.name, "rb"))
 
 
 def make_png_thumbnail(request):
@@ -226,3 +255,36 @@ def convert_audio(request):
             "success": True,
         }
     )
+
+
+def embed_text(request):
+    """Embed text onto an image PDF.
+
+    :return: Embedded PDF
+    """
+    form = DocumentForm(request.GET, request.FILES)
+    if not form.is_valid():
+        return JsonResponse({"success": False})
+    fp = form.cleaned_data["fp"]
+    with NamedTemporaryFile(suffix=".tiff") as destination:
+        rasterize_pdf(fp, destination.name)
+        data = pytesseract.image_to_data(destination.name, output_type=Output.DICT)
+        image = Image.open(destination.name)
+        w, h = image.width, image.height
+        output = PdfFileWriter()
+        existing_pdf = PdfFileReader(open(fp, "rb"))
+        for page in range(0, existing_pdf.getNumPages()):
+            packet = make_page_with_text(page + 1, data, h, w)
+            new_pdf = PdfFileReader(packet)
+            page = existing_pdf.getPage(page)
+            page.mergePage(new_pdf.getPage(0))
+            output.addPage(page)
+
+        with NamedTemporaryFile(suffix=".pdf") as pdf_destination:
+            outputStream = open(pdf_destination.name, "wb")
+            output.write(outputStream)
+            outputStream.close()
+            img = open(pdf_destination.name, "rb")
+            response = FileResponse(img)
+            cleanup_form(form)
+            return response

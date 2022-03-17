@@ -2,14 +2,19 @@ import datetime
 import io
 import os
 import re
+import shutil
 import subprocess
 import warnings
+import zipfile
 from collections import namedtuple
 from decimal import Decimal
+from glob import glob
 from pathlib import Path
 
 import six
+from django.http import HttpResponse
 from PyPDF2 import PdfFileMerger
+from reportlab.pdfgen import canvas
 
 
 class BTEUnicodeDecodeError(UnicodeDecodeError):
@@ -166,7 +171,6 @@ def make_png_thumbnail_for_instance(filepath, max_dimension):
     :param max_dimension: The longest you want any edge to be
     :param response: Flask response object
     """
-
     command = [
         "pdftoppm",
         "-singlefile",
@@ -182,6 +186,39 @@ def make_png_thumbnail_for_instance(filepath, max_dimension):
     )
     stdout, stderr = p.communicate()
     return stdout, stderr.decode("utf-8"), str(p.returncode)
+
+
+def make_png_thumbnails(filepath, max_dimension, pages, directory):
+    """Abstract function for making a thumbnail for a PDF
+
+    See helper functions below for how to use this in a simple way.
+
+    :param filepath: The attr where the PDF is located on the item
+    :param max_dimension: The longest you want any edge to be
+    :param response: Flask response object
+    """
+    for page in pages:
+        command = [
+            "pdftoppm",
+            "-singlefile",
+            "-f",
+            str(page),
+            "-scale-to",
+            str(max_dimension),
+            filepath,
+            "-png",
+            f"{directory.name}/thumb-{page}",
+        ]
+        p = subprocess.Popen(
+            command, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        p.communicate()
+
+    # zipped_file = zip_files(glob(f"{directory.name}/*"))
+
+    # response = HttpResponse(zipped_file, content_type='application/octet-stream')
+    # response['Content-Disposition'] = 'attachment; filename=thumbnails.zip'
+    # return response
 
 
 def pdf_bytes_from_image_array(image_list, output_path) -> None:
@@ -273,3 +310,40 @@ def ocr_needed(path: str, content: str) -> bool:
     if content.strip() == "" or pdf_has_images(path):
         return True
     return False
+
+
+def make_page_with_text(page, data, h, w):
+    """Make a page with text
+
+    :param page:
+    :param data:
+    :param h:
+    :param w:
+    :return:
+    """
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=(w, h))
+    # Set to a standard size and font for now.
+    can.setFont("Helvetica", 9)
+    # Make the text transparent
+    can.setFillAlpha(0)
+    for i in range(len(data["level"])):
+        try:
+            letter, (x, y, ww, hh), pg = (
+                data["text"][i],
+                (data["left"][i], data["top"][i], data["width"][i], data["height"][i]),
+                data["page_num"][i],
+            )
+        except:
+            continue
+        # Adjust the text to an 8.5 by 11 inch page
+        sub = ((11 * 72) / h) * int(hh)
+        x = ((8.5 * 72) / w) * int(x)
+        y = ((11 * 72) / h) * int(y)
+        yy = (11 * 72) - y
+        if int(page) == int(pg):
+            can.drawString(x, yy - sub, letter)
+    can.showPage()
+    can.save()
+    packet.seek(0)
+    return packet

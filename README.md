@@ -155,6 +155,13 @@ returns
 
 This method is useful for identifying the type of document, incorrect documents and weird documents.
 
+#### Endpoint: /utils/add/text/pdf/
+
+This method will take an image PDF and return the PDF with transparent text overlayed on the document.
+This allows users to copy and paste (more or less) from our OCRd text.
+
+    More Documentation needed.
+
 ## Converters
 
 #### Endpoint: /convert/image/pdf/
@@ -186,12 +193,16 @@ Thumbnail takes a pdf and returns a png thumbnail of the first page.
 
     curl 'http://localhost:5050/convert/pdf/thumbnail/' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf"
+     -F "file=@bte/test_assets/image-pdf.pdf" \
      -o test-thumbnail.png
 
 This returns the binary data of the thumbnail.
 
 Keep in mind that this curl will also write the file to the current directory.
+
+#### Endpoint: /convert/pdf/thumbnails/
+
+    Documentation coming soon
 
 #### Endpoint: /convert/audio/mp3/
 
