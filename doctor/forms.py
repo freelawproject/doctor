@@ -47,7 +47,7 @@ class DocumentForm(forms.Form):
             delete=False, suffix=f'.{self.cleaned_data["extension"]}'
         )
         self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
-        if self.cleaned_data["pages"]:
+        if self.cleaned_data.get("pages"):
             self.cleaned_data["pages"] = json.loads(self.cleaned_data["pages"])
         self.cleaned_data["fp"] = fp.name
         self.temp_save_file(fp.name)

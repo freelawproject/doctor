@@ -1,11 +1,8 @@
 
-Courtlistener Binary, Transformers and Extractors
+Doctor
 ------------------------------------
 
-## Notes
-
-This is a microservice of containing Binaries, Transformers and Extractors
-used by Courtlistener.com.  
+Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifiying documents.
 
 The goal of this microservice is to isolate out these tools to let Courtlistener (a django site)
 be streamlined and easier to maintain.  This service is setup to run with NGINX and gunicorn with a
@@ -47,7 +44,7 @@ which should return a JSON response.
 if you are using the development docker-compose file the via the docker network you would use
 container name instead of localhost or 0.0.0.0.  In this instance you would use:
 
-    curl http://bte:5050
+    curl http://doctor:5050
 
 Additionally, the corresponding python-ic command would look like something like this:
 
@@ -79,7 +76,7 @@ Given a pdf, extract the text from it.
 
     curl 'http://localhost:5050/extract/pdf/text/?ocr_available=True' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf"
+     -F "file=@doctor/test_assets/image-pdf.pdf"
 
 ##### Endpoint: /extract/doc/text/
 
@@ -88,13 +85,13 @@ along with general metadata used in CL.
 
     curl 'http://localhost:5050/extract/doc/text/' \
      -X 'POST' \
-     -F "file=@bte/test_assets/vector-pdf.pdf"
+     -F "file=@doctor/test_assets/vector-pdf.pdf"
 
 or if you need to OCR the document you pass in the ocr_available parameter.
 
     curl 'http://localhost:5050/extract/doc/text/?ocr_available=True' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf"
+     -F "file=@doctor/test_assets/image-pdf.pdf"
 
 Presuming that the request was valid you should receive the following JSON response back.
 
@@ -117,7 +114,7 @@ This method takes a document and returns the page count.
 
     curl 'http://localhost:5050/utils/page-count/pdf/' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf"
+     -F "file=@doctor/test_assets/image-pdf.pdf"
 
 This will return an HTTP response with page count.  In the above example it would return __2__.
 
@@ -127,7 +124,7 @@ This method takes a document and returns the mime type.
 
     curl 'http://localhost:5050/utils/mime-type/?mime=False' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf"
+     -F "file=@doctor/test_assets/image-pdf.pdf"
 
 returns as JSON response identifying the document type
 
@@ -137,7 +134,7 @@ and
 
     curl 'http://localhost:5050/utils/mime-type/?mime=True' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf"
+     -F "file=@doctor/test_assets/image-pdf.pdf"
 
 returns as JSON response identifying the document type
 
@@ -147,7 +144,7 @@ Another example
 
     curl 'http://localhost:5050/utils/mime-type/?mime=True' \
      -X 'POST' \
-     -F "file=@bte/test_assets/word-doc.doc"
+     -F "file=@doctor/test_assets/word-doc.doc"
 
 returns
 
@@ -160,7 +157,10 @@ This method is useful for identifying the type of document, incorrect documents 
 This method will take an image PDF and return the PDF with transparent text overlayed on the document.
 This allows users to copy and paste (more or less) from our OCRd text.
 
-    More Documentation needed.
+    curl 'http://localhost:5050/utils/add/text/pdf/' \
+     -X 'POST' \
+     -F "file=@doctor/test_assets/image-pdf.pdf" \
+     -o image-pdf-with-embedded-text.pdf
 
 ## Converters
 
@@ -170,7 +170,7 @@ Given an image or indeterminate length, this endpoint will convert it to a pdf.
 
     curl 'http://localhost:5050/convert/image/pdf/' \
      -X 'POST' \
-     -F "file=@bte/test_assets/long-image.tiff" \
+     -F "file=@doctor/test_assets/long-image.tiff" \
       --output test-image-to-pdf.pdf
 
 Keep in mind that this curl will write the file to the current directory.
@@ -193,7 +193,7 @@ Thumbnail takes a pdf and returns a png thumbnail of the first page.
 
     curl 'http://localhost:5050/convert/pdf/thumbnail/' \
      -X 'POST' \
-     -F "file=@bte/test_assets/image-pdf.pdf" \
+     -F "file=@doctor/test_assets/image-pdf.pdf" \
      -o test-thumbnail.png
 
 This returns the binary data of the thumbnail.
@@ -202,7 +202,15 @@ Keep in mind that this curl will also write the file to the current directory.
 
 #### Endpoint: /convert/pdf/thumbnails/
 
-    Documentation coming soon
+Give a PDF and a range or pages, this endpoint will return a zip file containing thumbnails 
+for each page requested.  For example if you want thumbnails for the first four pages you 
+
+    curl 'http://localhost:5050/convert/pdf/thumbnails/?max_dimension=350&pages=%5B1%2C+2%2C+3%2C+4%5D' \
+     -X 'POST' \
+     -F "file=@doctor/test_assets/vector-pdf.pdf" \
+     -o thumbnails.zip
+
+This will return four thumbnails in a zip file.
 
 #### Endpoint: /convert/audio/mp3/
 
@@ -215,7 +223,7 @@ This isn't the cleanest of CURLs because we have to convert the large JSON file 
 
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
      -X 'POST' \
-     -F "file=@bte/test_assets/1.wma"
+     -F "file=@doctor/test_assets/1.wma"
 
 This returns the audio file back as a JSON Response which can be written to an MP3 file.
 

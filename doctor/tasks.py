@@ -18,9 +18,9 @@ from PyPDF2 import PdfFileMerger, PdfFileReader
 from PyPDF2.utils import PdfReadError
 from seal_rookery import seals_data, seals_root
 
-from bte.lib.mojibake import fix_mojibake
-from bte.lib.utils import (
-    BTEUnicodeDecodeError,
+from doctor.lib.mojibake import fix_mojibake
+from doctor.lib.utils import (
+    DoctorUnicodeDecodeError,
     force_bytes,
     force_text,
     ocr_needed,
@@ -314,8 +314,8 @@ def extract_from_html(path):
         for encoding in encodings:
             try:
                 content = force_text(content, encoding=encoding)
-            except BTEUnicodeDecodeError:
-                return content, "BTE Unicode Decode Error", 1
+            except DoctorUnicodeDecodeError:
+                return content, "Doctor Unicode Decode Error", 1
 
         # Fell through, therefore unable to decode the string.
         return content, "", 0
@@ -354,7 +354,7 @@ def extract_from_txt(filepath):
         try:
             # Alas, cp1252 is probably still more popular than utf-8.
             content = smart_text(data, encoding="cp1252")
-        except BTEUnicodeDecodeError:
+        except DoctorUnicodeDecodeError:
             content = smart_text(data, encoding="utf-8", errors="ignore")
     except:
         try:
@@ -423,7 +423,7 @@ def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
 
     """Convert audio bytes to mp3 at temporary path
 
-    :param output_path: Audio file bytes sent to BTE
+    :param output_path: Audio file bytes sent to Doctor
     :param media: Temporary filepath for output of audioprocess
     :return:
     """

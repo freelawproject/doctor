@@ -11,15 +11,15 @@ from PIL import Image
 from PyPDF2 import PdfFileReader, PdfFileWriter
 from pytesseract import Output
 
-from bte.forms import AudioForm, DocumentForm, ImagePdfForm
-from bte.lib.utils import (
+from doctor.forms import AudioForm, DocumentForm, ImagePdfForm
+from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
     strip_metadata_from_path,
 )
-from bte.tasks import (
+from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
     convert_to_base64,
     convert_to_mp3,
@@ -127,7 +127,7 @@ def make_thumbnail_from_range(request):
 
     :return: The zip of thumbail images.
     """
-    form = DocumentForm(request.POST, request.FILES)
+    form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
         return JsonResponse({"success": False})
     make_png_thumbnails(
@@ -151,7 +151,7 @@ def make_png_thumbnail(request):
     :return: A response containing our file and any errors
     :type: HTTPS response
     """
-    form = DocumentForm(request.POST, request.FILES)
+    form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
         return JsonResponse({"success": False})
     thumbnail, _, _ = make_png_thumbnail_for_instance(

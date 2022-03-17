@@ -40,7 +40,7 @@ ENV PYTHONUNBUFFERED 1
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY bte /opt/app/bte
+COPY doctor /opt/app/doctor
 COPY manage.py /opt/app/
 WORKDIR /opt/app
 

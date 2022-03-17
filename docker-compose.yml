@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  bte:
-    container_name: bte
+  doctor:
+    container_name: doctor
     build:
       dockerfile: docker/Dockerfile
       context: .
-    image: freelawproject/bte
+    image: freelawproject/doctor
     ports:
       - "5050:5050"
