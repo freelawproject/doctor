@@ -1,6 +1,6 @@
 ## Notes
 
-As this is a microservice of Courtlistner, tests are designed to be run from a Mock Courtlistener instance
+As this is a microservice of Courtlistener, tests are designed to be run from a Mock Courtlistener instance
 to verify that the service works as expected and also works across a docker network.  
 
 ## Quick start
