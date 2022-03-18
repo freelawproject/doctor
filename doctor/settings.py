@@ -15,7 +15,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = True
 SECRET_KEY = "this-is-a-secret-key"
-ALLOWED_HOSTS = ["doctor", "0.0.0.0", "localhost"]
+ALLOWED_HOSTS = ["cl-doctor", "0.0.0.0", "localhost"]
 INSTALLED_APPS = []
 ROOT_URLCONF = "doctor.urls"
 WSGI_APPLICATION = "doctor.wsgi.application"
