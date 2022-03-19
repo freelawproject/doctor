@@ -47,5 +47,6 @@ WORKDIR /opt/app
 COPY nginx/nginx.conf /etc/nginx/conf.d
 
 COPY docker/docker-entrypoint.sh /opt/app/
+EXPOSE 5050
 RUN ["chmod", "+x", "/opt/app/docker-entrypoint.sh"]
 ENTRYPOINT ["/opt/app/docker-entrypoint.sh"]
