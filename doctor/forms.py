@@ -8,10 +8,11 @@ from django import forms
 class AudioForm(forms.Form):
 
     file = forms.FileField(label="document", required=True)
-    audio_data = forms.JSONField(label="audio-data", required=True)
+    audio_data = forms.JSONField(label="audio-data", required=False)
 
     def clean(self):
         self.cleaned_data["fp"] = f"/tmp/audio_{uuid.uuid4().hex}.mp3"
+        self.cleaned_data["extension"] = self.cleaned_data["file"].name.split(".")[-1]
         return self.cleaned_data
 
 

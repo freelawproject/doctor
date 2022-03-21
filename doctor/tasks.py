@@ -444,7 +444,7 @@ def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
         av_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False
     )
     ffmpeg_cmd.communicate(media.read())
-    return None
+    return output_path
 
 
 def set_mp3_meta_data(audio_data: Dict, mp3_path: AnyStr) -> eyed3.core.AudioFile:
@@ -548,9 +548,9 @@ def best_case_name(audio_dict: Dict) -> AnyStr:
 
     Assumes that the object passed in has all of those attributes.
     """
-    if audio_dict["case_name"]:
-        return audio_dict["case_name"]
-    elif audio_dict["case_name_full"]:
+    if audio_dict.get("case_name"):
+        return audio_dict.get("case_name")
+    elif audio_dict.get("case_name_full"):
         return audio_dict["case_name_full"]
     else:
-        return audio_dict["case_name_short"]
+        return audio_dict.get("case_name_short", "")

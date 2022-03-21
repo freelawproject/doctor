@@ -283,12 +283,11 @@ class AudioConversionTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200, msg="Bad status code")
-        self.assertTrue(response.json()["success"], msg="Conversion failed")
 
         # Validate some metadata in the MP3.
-        with NamedTemporaryFile(suffix="mp3") as tmp:
+        with NamedTemporaryFile(suffix=".mp3") as tmp:
             with open(tmp.name, "wb") as mp3_data:
-                mp3_data.write(base64.b64decode(response.json()["audio_b64"]))
+                mp3_data.write(response.content)
                 mp3_file = eyed3.load(tmp.name)
 
             self.assertEqual(
@@ -307,7 +306,14 @@ class AudioConversionTests(unittest.TestCase):
                 eyed3.core.AUDIO_MP3,
                 msg="Audio conversion to mp3 failed.",
             )
-        print("Successfully converted to mp3.")
+
+    def test_audio_duration(self):
+        files = make_file(filename="1.mp3")
+        response = requests.post(
+            "http://cl-doctor:5050/utils/audio/duration/",
+            files=files,
+        )
+        self.assertEqual(51.64773161867487, float(response.text), msg="Bad duration")
 
 
 if __name__ == "__main__":

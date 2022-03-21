@@ -162,6 +162,14 @@ This allows users to copy and paste (more or less) from our OCRd text.
      -F "file=@doctor/test_assets/image-pdf.pdf" \
      -o image-pdf-with-embedded-text.pdf
 
+#### Endpoint: /utils/audio/duration/
+
+This endpoint returns the duration of an MP3 file.
+
+    curl 'http://localhost:5050/utils/audio/duration/' \
+     -X 'POST' \
+     -F "file=@doctor/test_assets/1.mp3"
+
 ## Converters
 
 #### Endpoint: /convert/image/pdf/
@@ -225,13 +233,8 @@ This isn't the cleanest of CURLs because we have to convert the large JSON file 
      -X 'POST' \
      -F "file=@doctor/test_assets/1.wma"
 
-This returns the audio file back as a JSON Response which can be written to an MP3 file.
+This returns the audio file as a file response.
 
-    {
-      "audio_b64": audio_b64,
-      "duration": audio_file.info.time_secs,
-      "success": True,
-    }
 
 
 Nginx

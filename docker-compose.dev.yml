@@ -10,7 +10,7 @@ services:
     networks:
       - cl_net_overlay
 
-  mock_courtlistener:
+  mock_cl_doctor:
     container_name: mock_cl_doctor
     image: freelawproject/doctor:latest
     networks:

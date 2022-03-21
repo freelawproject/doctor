@@ -10,6 +10,7 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image
 from PyPDF2 import PdfFileReader, PdfFileWriter
 from pytesseract import Output
+import eyed3
 
 from doctor.forms import AudioForm, DocumentForm, ImagePdfForm
 from doctor.lib.utils import (
@@ -229,32 +230,36 @@ def images_to_pdf(request):
     return HttpResponse(cleaned_pdf_bytes, content_type="application/pdf")
 
 
+def fetch_audio_duration(request):
+    """Fetch audio duration from file."""
+    form = AudioForm(request.GET, request.FILES)
+    if not form.is_valid():
+        return JsonResponse({"success": False})
+
+    with NamedTemporaryFile(suffix=".mp3") as tmp:
+        with open(tmp.name, "wb") as f:
+            for chunk in form.cleaned_data["file"].chunks():
+                f.write(chunk)
+        mp3_file = eyed3.load(tmp.name)
+        return HttpResponse(mp3_file.info.time_secs)
+
+
 def convert_audio(request):
     """Convert audio file to MP3 and update metadata on mp3.
 
     :return: Converted audio
     """
-
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
         return JsonResponse({"success": False})
-
-    fp = form.cleaned_data["fp"]
+    filepath = form.cleaned_data["fp"]
     media_file = form.cleaned_data["file"]
     audio_data = form.cleaned_data["audio_data"]
-
-    convert_to_mp3(fp, media_file)
-    audio_file = set_mp3_meta_data(audio_data, fp)
-    audio_b64 = convert_to_base64(fp)
-
+    convert_to_mp3(filepath, media_file)
+    set_mp3_meta_data(audio_data, filepath)
+    response = FileResponse(open(filepath, "rb"))
     cleanup_form(form)
-    return JsonResponse(
-        {
-            "audio_b64": audio_b64,
-            "duration": audio_file.info.time_secs,
-            "success": True,
-        }
-    )
+    return response
 
 
 def embed_text(request):
