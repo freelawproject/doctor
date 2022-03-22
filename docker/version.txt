@@ -1,6 +1,17 @@
-0.2.2
+0.2.3
 
 ## Current
+
+**0.2.3 - 2022-03-22**
+
+Features:
+ - Update type of response object
+ - Drop json response success = False if invalid form and just return Bad Request
+
+Changes:
+
+
+## Previous Versions
 
 **0.2.2 - 2022-03-21**
 
@@ -13,7 +24,6 @@ Changes:
  - Bump version to 0.2.2
  - Update tests for new endpoint.
 
-## Previous Versions
 
 **0.2.1 - 2022-03-18**
 
