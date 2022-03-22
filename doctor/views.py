@@ -12,6 +12,8 @@ from PyPDF2 import PdfFileReader, PdfFileWriter
 from pytesseract import Output
 import eyed3
 
+from django.core.exceptions import BadRequest
+
 from doctor.forms import AudioForm, DocumentForm, ImagePdfForm
 from doctor.lib.utils import (
     cleanup_form,
@@ -52,7 +54,7 @@ def extract_pdf(request):
     """"""
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     fp = form.cleaned_data["fp"]
     ocr_available = form.cleaned_data["ocr_available"]
     content, err, returncode, extracted_by_ocr = extract_from_pdf(fp, ocr_available)
@@ -65,7 +67,7 @@ def image_to_pdf(request):
 
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     image = Image.open(form.cleaned_data["fp"])
     pdf_bytes = convert_tiff_to_pdf_bytes(image)
     cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
@@ -76,16 +78,15 @@ def image_to_pdf(request):
         return HttpResponse(cleaned_pdf_bytes)
 
 
-def extract_doc_content(request):
+def extract_doc_content(request) -> HttpResponse:
     """Extract txt from different document types.
 
     :return: The content of a document/error message.
     :type: json object
     """
-
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     ocr_available = form.cleaned_data["ocr_available"]
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
@@ -111,26 +112,22 @@ def extract_doc_content(request):
     page_count = get_page_count(fp, extension)
 
     os.remove(form.cleaned_data["fp"])
-    return JsonResponse(
-        {
-            "content": content,
-            "err": str(err),
-            "extracted_by_ocr": extracted_by_ocr,
-            "error_code": str(returncode),
-            "page_count": page_count,
-            "success": True if returncode == 0 else False,
-        }
-    )
+    response = HttpResponse(content)
+    response.set_cookie(key="extracted_by_ocr", value=1 if extracted_by_ocr else 0)
+    response.set_cookie(key="page_count", value=page_count)
+    response.set_cookie(key="err", value=err)
+    response.set_cookie(key="returncode", value=returncode)
+    return response
 
 
-def make_thumbnail_from_range(request):
+def make_thumbnail_from_range(request) -> FileResponse:
     """Can we make a range of thumbnails from a pdf?
 
     :return: The zip of thumbail images.
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     make_png_thumbnails(
         form.cleaned_data["fp"],
         form.cleaned_data["max_dimension"],
@@ -146,7 +143,7 @@ def make_thumbnail_from_range(request):
         return FileResponse(open(tmp.name, "rb"))
 
 
-def make_png_thumbnail(request):
+def make_png_thumbnail(request) -> HttpResponse:
     """Make a thumbnail of the first page of a PDF and return it.
 
     :return: A response containing our file and any errors
@@ -154,7 +151,7 @@ def make_png_thumbnail(request):
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     thumbnail, _, _ = make_png_thumbnail_for_instance(
         form.cleaned_data["fp"],
         form.cleaned_data["max_dimension"],
@@ -163,48 +160,50 @@ def make_png_thumbnail(request):
     return HttpResponse(thumbnail)
 
 
-def page_count(request):
+def page_count(request) -> HttpResponse:
     """Get page count from PDF
 
     :return: Page count
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     extension = form.cleaned_data["extension"]
     pg_count = get_page_count(form.cleaned_data["fp"], extension)
     cleanup_form(form)
     return HttpResponse(pg_count)
 
 
-def extract_mime_type(request):
+def extract_mime_type(request) -> JsonResponse:
     """Identify the mime type of a document
 
     :return: Mime type
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     mime = form.cleaned_data["mime"]
     mimetype = magic.from_file(form.cleaned_data["fp"], mime=mime)
     cleanup_form(form)
     return JsonResponse({"mimetype": mimetype})
 
 
-def pdf_to_text(request):
+def pdf_to_text(request) -> HttpResponse:
     """Extract text from text based PDFs immediately.
 
     :return:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     content, err, _ = make_pdftotext_process(form.cleaned_data["fp"])
     cleanup_form(form)
-    return JsonResponse({"content": content, "err": err, "success": True})
+    response = HttpResponse(content)
+    response.set_cookie(key="err", value=err)
+    return response
 
 
-def images_to_pdf(request):
+def images_to_pdf(request) -> HttpResponse:
     """
 
     :param request:
@@ -212,7 +211,7 @@ def images_to_pdf(request):
     """
     form = ImagePdfForm(request.GET)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     sorted_urls = form.cleaned_data["sorted_urls"]
 
     if len(sorted_urls) > 1:
@@ -230,12 +229,11 @@ def images_to_pdf(request):
     return HttpResponse(cleaned_pdf_bytes, content_type="application/pdf")
 
 
-def fetch_audio_duration(request):
+def fetch_audio_duration(request) -> HttpResponse:
     """Fetch audio duration from file."""
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
-
+        raise BadRequest("Invalid form")
     with NamedTemporaryFile(suffix=".mp3") as tmp:
         with open(tmp.name, "wb") as f:
             for chunk in form.cleaned_data["file"].chunks():
@@ -244,17 +242,17 @@ def fetch_audio_duration(request):
         return HttpResponse(mp3_file.info.time_secs)
 
 
-def convert_audio(request):
+def convert_audio(request) -> FileResponse:
     """Convert audio file to MP3 and update metadata on mp3.
 
     :return: Converted audio
     """
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     filepath = form.cleaned_data["fp"]
     media_file = form.cleaned_data["file"]
-    audio_data = form.cleaned_data["audio_data"]
+    audio_data = {k: v[0] for k, v in dict(request.GET).items()}
     convert_to_mp3(filepath, media_file)
     set_mp3_meta_data(audio_data, filepath)
     response = FileResponse(open(filepath, "rb"))
@@ -262,14 +260,14 @@ def convert_audio(request):
     return response
 
 
-def embed_text(request):
+def embed_text(request) -> FileResponse:
     """Embed text onto an image PDF.
 
     :return: Embedded PDF
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return JsonResponse({"success": False})
+        raise BadRequest("Invalid form")
     fp = form.cleaned_data["fp"]
     with NamedTemporaryFile(suffix=".tiff") as destination:
         rasterize_pdf(fp, destination.name)

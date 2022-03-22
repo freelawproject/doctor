@@ -1,4 +1,3 @@
-import base64
 import json
 import unittest
 from tempfile import NamedTemporaryFile
@@ -39,13 +38,20 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
         )
+        self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
-            response.json()["success"], True, msg="Content extraction failed"
-        )
-        self.assertEqual(
-            response.json()["content"][:100].replace("\n", "").strip(),
+            response.text[:100].replace("\n", "").strip(),
             "(Slip Opinion)              OCTOBER TERM, 2012                                       1",
             msg="Failed to extract content from .pdf file",
+        )
+        self.assertFalse(
+            int(response.cookies.get("extracted_by_ocr")),
+            msg="Failed to extract by OCR",
+        )
+        self.assertEqual(
+            int(response.cookies.get("page_count")),
+            30,
+            msg="Failed to extract by OCR",
         )
 
     def test_pdf_ocr_extraction(self):
@@ -54,17 +60,16 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/extract/doc/text/", files=files, params=params
         )
-        self.assertEqual(
-            response.json()["success"], True, msg="Content extraction failed"
-        )
-        content = response.json()["content"][:100].replace("\n", "").strip()
+        self.assertTrue(response.ok, msg="Content extraction failed")
+        content = response.text[:100].replace("\n", "").strip()
         self.assertEqual(
             content,
             "(Slip Opinion) OCTOBER TERM, 2012 1SyllabusNOTE: Where it is feasible, a syllabus (headnote) wil",
             msg="Failed to extract content from image .pdf file",
         )
-        self.assertEqual(
-            response.json()["page_count"], 2, msg="Failed to extract page count"
+        self.assertTrue(
+            int(response.cookies.get("extracted_by_ocr")),
+            msg="Failed to extract by OCR",
         )
 
     def test_docx_format(self):
@@ -73,12 +78,9 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/extract/doc/text/", files=files, params=params
         )
+        self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
-            response.json()["success"], True, msg="Content extraction failed"
-        )
-        content = response.json()["content"][:200].replace("\n", "").strip()
-        self.assertEqual(
-            content,
+            response.text[:200].replace("\n", "").strip(),
             "ex- Cpl,                                                                                                 Current Discharge and Applicant's RequestApplication R",
             msg="Failed to extract content from .docx file",
         )
@@ -89,10 +91,8 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
         )
-        self.assertEqual(
-            response.json()["success"], True, msg="Content extraction failed"
-        )
-        content = response.json()["content"][:100].replace("\n", "").strip()
+        self.assertTrue(response.ok, msg="Content extraction failed")
+        content = response.text[:100].replace("\n", "").strip()
         self.assertEqual(
             content,
             "Attorneys for Appellant                            Attorneys for AppelleeSteve Carter",
@@ -105,30 +105,14 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
         )
-        self.assertEqual(
-            response.json()["success"], True, msg="Content extraction failed"
-        )
-        content = response.json()["content"]
+        self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertIn(
             "ATTORNEY FOR APPELLANT",
-            response.json()["content"],
+            response.text,
             msg="Failed to extract content from WPD file",
         )
         self.assertEqual(
-            14259, len(content), msg="Failed to extract content from WPD file"
-        )
-
-    def test_pdf_text(self):
-        files = make_file(filename="vector-pdf.pdf")
-        response = requests.post(
-            "http://cl-doctor:5050/document/pdf-to-text/", files=files
-        ).json()
-
-        text = response["content"][:100].replace("\n", "").strip()
-        self.assertEqual(
-            text,
-            "(Slip Opinion)              OCTOBER TERM, 2012                                       1",
-            msg="Failed to extract content from .pdf file",
+            14259, len(response.text), msg="Failed to extract content from WPD file"
         )
 
 
@@ -153,6 +137,12 @@ class ThumbnailTests(unittest.TestCase):
         with open("doctor/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
             second_answer = f.read()
         self.assertEqual(second_answer, response.content)
+
+        files = make_file(filename="empty.pdf")
+        response = requests.post(
+            "http://cl-doctor:5050/convert/pdf/thumbnail/", files=files
+        )
+        self.assertEqual(response.status_code, 500, msg="Wrong status code")
 
     def test_thumbnail_range(self):
         """Can we generate a thumbnail for a range of pages?"""
@@ -275,11 +265,10 @@ class AudioConversionTests(unittest.TestCase):
         }
 
         files = make_file(filename="1.wma")
-        params = {"audio_data": json.dumps(audio_details)}
         response = requests.post(
             "http://cl-doctor:5050/convert/audio/mp3/",
             files=files,
-            params=params,
+            params=audio_details,
         )
 
         self.assertEqual(response.status_code, 200, msg="Bad status code")
@@ -300,7 +289,6 @@ class AudioConversionTests(unittest.TestCase):
                 "SEC v. Frank J. Custable, Jr.",
                 msg="Title metadata failed.",
             )
-
             self.assertEqual(
                 mp3_file.type,
                 eyed3.core.AUDIO_MP3,
