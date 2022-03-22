@@ -95,14 +95,8 @@ or if you need to OCR the document you pass in the ocr_available parameter.
 
 Presuming that the request was valid you should receive the following JSON response back.
 
-    {
-        "content": content,
-        "err": str(err),
-        "extracted_by_ocr": extracted_by_ocr,
-        "error_code": str(returncode),
-        "page_count": page_count,
-        "success": True if returncode == 0 else False,
-    }
+This returns an HTTP Response for the content
+And includes the following cookies `extracted_by_ocr`, `err`, `page_count`, `returncode`
 
 The method accepts **PDF** (image and vector), **DOC, DOCX, HTML, TXT and WPD** files.
 
