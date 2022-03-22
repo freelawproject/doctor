@@ -9,6 +9,11 @@ RUN apt-get install -y --no-install-recommends \
         libatlas-base-dev gfortran supervisor libpcre3 libpcre3-dev \
         g++ libz-dev libjpeg-dev build-essential make
 
+#Install QPDF
+COPY docker/install-qpdf.sh /opt/
+RUN ["chmod", "+x", "/opt/install-qpdf.sh"]
+RUN /opt/install-qpdf.sh
+
 RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
     apt-get install -y --no-install-recommends apt-utils && \
     apt-get install \
