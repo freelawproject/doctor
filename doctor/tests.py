@@ -98,6 +98,11 @@ class ExtractionTests(unittest.TestCase):
             "Attorneys for Appellant                            Attorneys for AppelleeSteve Carter",
             msg="Failed to extract content from .doc file",
         )
+        self.assertEqual(
+            int(response.cookies.get("page_count")),
+            4,
+            msg="Failed to extract by OCR",
+        )
 
     def test_wpd_format(self):
         files = make_file(filename="word-perfect.wpd")
