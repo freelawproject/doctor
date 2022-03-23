@@ -41,16 +41,16 @@ from doctor.tasks import (
 )
 
 
-def heartbeat(request):
+def heartbeat(request) -> HttpResponse:
     """Heartbeat endpoint
 
-    :param request:
-    :return:
+    :param request: The request object
+    :return: Heartbeat
     """
-    return JsonResponse({"success": True, "msg": "Heartbeat detected."})
+    return HttpResponse("Heartbeat detected.")
 
 
-def extract_pdf(request):
+def extract_pdf(request) -> HttpResponse:
     """"""
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
@@ -62,7 +62,7 @@ def extract_pdf(request):
     return HttpResponse(f"{content}")
 
 
-def image_to_pdf(request):
+def image_to_pdf(request) -> HttpResponse:
     """"""
 
     form = DocumentForm(request.POST, request.FILES)
@@ -78,7 +78,7 @@ def image_to_pdf(request):
         return HttpResponse(cleaned_pdf_bytes)
 
 
-def extract_doc_content(request) -> HttpResponse:
+def extract_doc_content(request) -> JsonResponse:
     """Extract txt from different document types.
 
     :return: The content of a document/error message.
@@ -106,18 +106,19 @@ def extract_doc_content(request) -> HttpResponse:
     else:
         content = ""
         err = "Unable to extract content due to unknown extension"
-        returncode = 1
 
     # Get page count if you can
     page_count = get_page_count(fp, extension)
-
     os.remove(form.cleaned_data["fp"])
-    response = HttpResponse(content)
-    response.set_cookie(key="extracted_by_ocr", value=1 if extracted_by_ocr else 0)
-    response.set_cookie(key="page_count", value=page_count)
-    response.set_cookie(key="err", value=err)
-    response.set_cookie(key="returncode", value=returncode)
-    return response
+    return JsonResponse(
+        {
+            "content": content,
+            "err": err,
+            "extension": extension,
+            "extracted_by_ocr": extracted_by_ocr,
+            "page_count": page_count,
+        }
+    )
 
 
 def make_thumbnail_from_range(request) -> FileResponse:
@@ -188,7 +189,7 @@ def extract_mime_type(request) -> JsonResponse:
     return JsonResponse({"mimetype": mimetype})
 
 
-def pdf_to_text(request) -> HttpResponse:
+def pdf_to_text(request) -> JsonResponse:
     """Extract text from text based PDFs immediately.
 
     :return:
@@ -198,9 +199,12 @@ def pdf_to_text(request) -> HttpResponse:
         raise BadRequest("Invalid form")
     content, err, _ = make_pdftotext_process(form.cleaned_data["fp"])
     cleanup_form(form)
-    response = HttpResponse(content)
-    response.set_cookie(key="err", value=err)
-    return response
+    return JsonResponse(
+        "content",
+        content,
+        "err",
+        err,
+    )
 
 
 def images_to_pdf(request) -> HttpResponse:

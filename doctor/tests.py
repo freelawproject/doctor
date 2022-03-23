@@ -12,8 +12,8 @@ from doctor.lib.utils import make_file
 class HeartbeatTests(unittest.TestCase):
     def test_heartbeat(self):
         """Can we curl the heartbeat endpoint?"""
-        response = requests.get("http://cl-doctor:5050/").json()
-        self.assertEqual(response["msg"], "Heartbeat detected.", msg="Heartbeat failed")
+        response = requests.get("http://cl-doctor:5050/")
+        self.assertEqual(response.text, "Heartbeat detected.", msg="Heartbeat failed")
 
 
 class ExtractionTests(unittest.TestCase):
@@ -40,16 +40,16 @@ class ExtractionTests(unittest.TestCase):
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
-            response.text[:100].replace("\n", "").strip(),
+            response.json()["content"][:100].replace("\n", "").strip(),
             "(Slip Opinion)              OCTOBER TERM, 2012                                       1",
             msg="Failed to extract content from .pdf file",
         )
         self.assertFalse(
-            int(response.cookies.get("extracted_by_ocr")),
+            response.json()["extracted_by_ocr"],
             msg="Failed to extract by OCR",
         )
         self.assertEqual(
-            int(response.cookies.get("page_count")),
+            response.json()["page_count"],
             30,
             msg="Failed to extract by OCR",
         )
@@ -61,14 +61,14 @@ class ExtractionTests(unittest.TestCase):
             "http://cl-doctor:5050/extract/doc/text/", files=files, params=params
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
-        content = response.text[:100].replace("\n", "").strip()
+        content = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(
             content,
             "(Slip Opinion) OCTOBER TERM, 2012 1SyllabusNOTE: Where it is feasible, a syllabus (headnote) wil",
             msg="Failed to extract content from image .pdf file",
         )
         self.assertTrue(
-            int(response.cookies.get("extracted_by_ocr")),
+            response.json()["extracted_by_ocr"],
             msg="Failed to extract by OCR",
         )
 
@@ -80,7 +80,7 @@ class ExtractionTests(unittest.TestCase):
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
-            response.text[:200].replace("\n", "").strip(),
+            response.json()["content"][:200].replace("\n", "").strip(),
             "ex- Cpl,                                                                                                 Current Discharge and Applicant's RequestApplication R",
             msg="Failed to extract content from .docx file",
         )
@@ -92,15 +92,15 @@ class ExtractionTests(unittest.TestCase):
             "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
-        content = response.text[:100].replace("\n", "").strip()
+        content = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(
             content,
             "Attorneys for Appellant                            Attorneys for AppelleeSteve Carter",
             msg="Failed to extract content from .doc file",
         )
         self.assertEqual(
-            int(response.cookies.get("page_count")),
-            4,
+            response.json()["page_count"],
+            None,
             msg="Failed to extract by OCR",
         )
 
@@ -113,11 +113,13 @@ class ExtractionTests(unittest.TestCase):
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertIn(
             "ATTORNEY FOR APPELLANT",
-            response.text,
+            response.json()["content"],
             msg="Failed to extract content from WPD file",
         )
         self.assertEqual(
-            14259, len(response.text), msg="Failed to extract content from WPD file"
+            14259,
+            len(response.json()["content"]),
+            msg="Failed to extract content from WPD file",
         )
 
 
