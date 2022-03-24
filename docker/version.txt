@@ -1,19 +1,30 @@
-0.2.4
+0.2.5
 
 ## Current
+
+**0.2.5 - 2022-03-24**
+
+Features:
+ - Add two new endpoints
+ - Extensions from blob
+ - Mime type from blob
+
+Changes:
+ - Drop NGINX
+ - Combine installation
+
+## Previous Versions
 
 **0.2.4 - 2022-03-23**
 
 Features:
- - Refactor document/extract/ endpoint to reuturn json and drop cookies
+ - Refactor document/extract/ endpoint to return json and drop cookies
 
 Changes:
  - Fix dockerfile update-seals
  - Drop cookie support and use JSON responses when necessary
  - Update tests
  - Update heartbeat to match disclosure endpoint
-
-## Previous Versions
 
 **0.2.3 - 2022-03-22**
 

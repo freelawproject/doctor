@@ -192,9 +192,7 @@ def extract_mime_type(request) -> JsonResponse:
 
 
 def extract_mime_from_buffer(request) -> HttpResponse:
-    """Extract mime from buffer request
-
-    """
+    """Extract mime from buffer request"""
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
         raise BadRequest("Invalid form")
