@@ -6,7 +6,7 @@ from zipfile import ZipFile
 import eyed3
 import requests
 
-from doctor.lib.utils import make_file
+from doctor.lib.utils import make_file, make_buffer
 
 
 class HeartbeatTests(unittest.TestCase):
@@ -197,6 +197,38 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(
             response["mimetype"], "application/pdf", msg="Failed to get mime type"
         )
+
+    def test_mime_type_unknown_name(self):
+        """"""
+        files = make_buffer(filename="image-pdf.pdf")
+        response = requests.post(
+            "http://cl-doctor:5050/utils/file/mime/",
+            files=files,
+            params={"mime": True},
+        ).json()
+        self.assertEqual(
+            response["mime"], "application/pdf", msg="Failed to get mime type"
+        )
+        self.assertEqual(response["extension"], ".pdf", msg="Failed to get extension")
+
+    def test_get_extension(self):
+        """"""
+        files = make_buffer(filename="image-pdf.pdf")
+        response = requests.post(
+            "http://cl-doctor:5050/utils/file/extension/", files=files
+        )
+        self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
+
+        files = make_buffer(filename="word-docx.docx")
+        response = requests.post(
+            "http://cl-doctor:5050/utils/file/extension/", files=files
+        )
+        self.assertEqual(response.text, ".docx", msg="Failed to get mime type")
+        files = make_buffer(filename="word-doc.doc")
+        response = requests.post(
+            "http://cl-doctor:5050/utils/file/extension/", files=files
+        )
+        self.assertEqual(response.text, ".doc", msg="Failed to get mime type")
 
     def test_embedding_text_to_image_pdf(self):
         """Can we embed text into an image PDF?"""

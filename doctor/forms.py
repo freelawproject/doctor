@@ -25,6 +25,14 @@ class ImagePdfForm(forms.Form):
         return self.cleaned_data
 
 
+class MimeForm(forms.Form):
+    file = forms.FileField(label="document", required=False)
+    mime = forms.BooleanField(label="mime", required=False)
+
+    def clean(self):
+        self.cleaned_data["filename"] = "unknown"
+
+
 class DocumentForm(forms.Form):
 
     file = forms.FileField(label="document", required=False)

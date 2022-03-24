@@ -14,6 +14,12 @@ urlpatterns = [
     path("convert/audio/mp3/", views.convert_audio, name="convert-audio"),
     path("utils/page-count/pdf/", views.page_count, name="page_count"),
     path("utils/mime-type/", views.extract_mime_type, name="mime_type"),
+    path("utils/file/extension/", views.extract_extension, name="file-extension"),
+    path(
+        "utils/file/mime/",
+        views.extract_mime_from_buffer,
+        name="mime_type_from_buffer",
+    ),
     path("utils/audio/duration/", views.fetch_audio_duration, name="audio-duration"),
     path("utils/add/text/pdf/", views.embed_text, name="add-text-to-pdf"),
     # Extractors

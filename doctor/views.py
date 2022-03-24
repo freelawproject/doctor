@@ -1,9 +1,11 @@
 import os
+import re
 import shutil
 from tempfile import NamedTemporaryFile
 
 import img2pdf
 import magic
+import mimetypes
 import pytesseract
 import requests
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -14,7 +16,7 @@ import eyed3
 
 from django.core.exceptions import BadRequest
 
-from doctor.forms import AudioForm, DocumentForm, ImagePdfForm
+from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
@@ -187,6 +189,64 @@ def extract_mime_type(request) -> JsonResponse:
     mimetype = magic.from_file(form.cleaned_data["fp"], mime=mime)
     cleanup_form(form)
     return JsonResponse({"mimetype": mimetype})
+
+
+def extract_mime_from_buffer(request) -> HttpResponse:
+    """Extract mime from buffer request
+
+    """
+    form = MimeForm(request.GET, request.FILES)
+    if not form.is_valid():
+        raise BadRequest("Invalid form")
+
+    file_buffer = form.cleaned_data["file"].read()
+    mime = magic.from_buffer(file_buffer, mime=True)
+    extension = mimetypes.guess_extension(mime)
+    return JsonResponse({"mime": mime, "extension": extension})
+
+
+def extract_extension(request) -> HttpResponse:
+    """A handful of workarounds for getting extensions we can trust."""
+    form = MimeForm(request.GET, request.FILES)
+    if not form.is_valid():
+        raise BadRequest("Invalid form")
+    content = form.cleaned_data["file"].read()
+
+    file_str = magic.from_buffer(content)
+    if file_str.startswith("Composite Document File V2 Document"):
+        # Workaround for issue with libmagic1==5.09-2 in Ubuntu 12.04. Fixed
+        # in libmagic 5.11-2.
+        mime = "application/msword"
+    elif file_str == "(Corel/WP)":
+        mime = "application/vnd.wordperfect"
+    elif file_str == "C source, ASCII text":
+        mime = "text/plain"
+    elif file_str.startswith("WordPerfect document"):
+        mime = "application/vnd.wordperfect"
+    elif re.findall(
+        r"(Audio file with ID3.*MPEG.*layer III)|(.*Audio Media.*)", file_str
+    ):
+        mime = "audio/mpeg"
+    else:
+        # No workaround necessary
+        mime = magic.from_buffer(content, mime=True)
+    extension = mimetypes.guess_extension(mime)
+    if extension == ".obj":
+        # It could be a wpd, if it's not a PDF
+        if "PDF" in content[0:40]:
+            # Does 'PDF' appear in the beginning of the content?
+            extension = ".pdf"
+        else:
+            extension = ".wpd"
+    fixes = {
+        ".htm": ".html",
+        ".xml": ".html",
+        ".wsdl": ".html",
+        ".ksh": ".txt",
+        ".asf": ".wma",
+        ".dot": ".doc",
+    }
+    return HttpResponse(fixes.get(extension, extension).lower())
 
 
 def pdf_to_text(request) -> JsonResponse:

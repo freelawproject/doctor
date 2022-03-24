@@ -13,8 +13,8 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEBUG = True
-SECRET_KEY = "this-is-a-secret-key"
+DEBUG = False
+SECRET_KEY = "this-is-a-not-so-secret-key"
 ALLOWED_HOSTS = ["cl-doctor", "0.0.0.0", "localhost"]
 INSTALLED_APPS = []
 ROOT_URLCONF = "doctor.urls"

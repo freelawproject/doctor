@@ -273,6 +273,12 @@ def make_file(filename, dir=None):
         return {"file": (filename, f.read())}
 
 
+def make_buffer(filename, dir=None):
+    filepath = f"{Path.cwd()}/doctor/test_assets/{filename}"
+    with open(filepath, "rb") as f:
+        return {"file": ("filename", f.read())}
+
+
 def pdf_has_images(path: str) -> bool:
     """Check raw PDF for embedded images.
 
