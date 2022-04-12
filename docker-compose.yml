@@ -1,9 +1,0 @@
-version: '3.8'
-
-services:
-  cl-doctor:
-    container_name: cl-doctor
-    build:
-      dockerfile: docker/Dockerfile
-      context: .
-    image: freelawproject/doctor:latest
