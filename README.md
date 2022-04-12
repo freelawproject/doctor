@@ -5,7 +5,7 @@ Doctor
 Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifiying documents.
 
 The goal of this microservice is to isolate out these tools to let Courtlistener (a django site)
-be streamlined and easier to maintain.  This service is setup to run with NGINX and gunicorn with a
+be streamlined and easier to maintain.  This service is setup to run with gunicorn with a
 series of endpoints that accept JSON, files, and parameters to transform Audio, Documents as well as
 extract, modify and replace metadata, text and other data.  
 
@@ -25,31 +25,25 @@ Quick Start
 
 Assuming you have docker installed run:
 
-    docker-compose -f docker-compose.yml up --build -d
+    docker run -d -p 5050:5050 freelawproject/doctor:latest
 
-This will expose the endpoints on port 5050, which can be modified in the `nginx/nginx.conf` file and points
-to the django server running on port 8000.
+This will expose the endpoints on port 5050 with four gunicorn workers.
 
-For more options and configuration of nginx checkout [https://nginx.org/en/docs/](https://nginx.org/en/docs/).
+If you wish to have more gunicorn workers, you'll want to set the DOCTOR_WORKERS environment variable. You can do that 
+with:
 
-After the compose file has finished you should be able to test that you have a working environment by running
+    docker run -d -p 5050:5050 -e DOCTOR_WORKERS=16 freelawproject/doctor:latest
 
-    curl 0.0.0.0:5050
+If you are doing OCR, you will certainly want more workers.
+
+After the image is running, you should be able to test that you have a working environment by running
+
     curl http://localhost:5050
 
-which should return a JSON response.
+which should return a text response.
 
-    {"success": true, "msg": "Heartbeat detected."}
+    Heartbeat detected.
 
-if you are using the development docker-compose file the via the docker network you would use
-container name instead of localhost or 0.0.0.0.  In this instance you would use:
-
-    curl http://doctor:5050
-
-Additionally, the corresponding python-ic command would look like something like this:
-
-    import requests
-    response = requests.get('http://0.0.0.0:5050', timeout=2)
 
 ENDPOINTS
 -------------
@@ -228,14 +222,6 @@ This isn't the cleanest of CURLs because we have to convert the large JSON file 
      -F "file=@doctor/test_assets/1.wma"
 
 This returns the audio file as a file response.
-
-
-
-Nginx
------
-
-NGINX controls a lot of what is occurring and currently has some limitations that can be adjusted
-Currently the maximum file size that can be buffered is 100 MB.  One could modify NGINX by modifying `nginx/nginx.conf` file.
 
 
 ## Testing

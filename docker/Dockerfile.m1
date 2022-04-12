@@ -30,8 +30,8 @@ RUN pip install seal_rookery
 RUN update-seals -f
 
 # set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1 \
+    PYTHONUNBUFFERED 1
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -40,7 +40,10 @@ COPY doctor /opt/app/doctor
 COPY manage.py /opt/app/
 WORKDIR /opt/app
 
-COPY docker/docker-entrypoint.sh /opt/app/
 EXPOSE 5050
-RUN ["chmod", "+x", "/opt/app/docker-entrypoint.sh"]
-ENTRYPOINT ["/opt/app/docker-entrypoint.sh"]
+ENTRYPOINT gunicorn doctor.wsgi:application \
+     --workers ${DOCTOR_WORKERS:-4} \
+     --max-requests 1000 \
+     --max-requests-jitter 100 \
+     --timeout 3600 \
+     --bind 0.0.0.0:5050

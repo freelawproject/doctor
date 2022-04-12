@@ -25,4 +25,6 @@ makes the requests across the docker network.
 
 ## Building Images
 
-A soon to be written make file will certainly be used to build and push images to docker hub.
+1. Bump the version number in version.txt.
+
+2. Run `make image --file docker/Makefile` to build or run `make push--file docker/Makefile` to push.
