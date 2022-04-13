@@ -18,7 +18,7 @@ image:
 	$(DOCKER) build -t $(DOCKER_REPOSITORY):$(DOCKER_TAG) -t $(DOCKER_REPOSITORY):latest --file docker/Dockerfile .
 
 m1:
-	$(DOCKER) build -t $(DOCKER_REPOSITORY):$(DOCKER_TAG) -t $(DOCKER_REPOSITORY):latest --file docker/Dockerfile.m1 .
+	$(DOCKER) build --build-arg BUILD_ENV=amd64 -t $(DOCKER_REPOSITORY):$(DOCKER_TAG) -t $(DOCKER_REPOSITORY):latest --file docker/Dockerfile .
 
 
 push: image

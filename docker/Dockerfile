@@ -1,12 +1,18 @@
-FROM python:3.10-slim
+ARG BUILD_ENV=arm64
+
+FROM --platform=linux/amd64 python:3.10-slim as build-amd64
+
+FROM --platform=linux/arm64 python:3.10-slim as build-arm64
+
+#`python-base` sets up all our shared environment variables
+FROM build-${BUILD_ENV} as python-base
 
 RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
     apt-get install -y --no-install-recommends apt-utils && \
     apt-get install -y python3-pip poppler-utils \
-    wget unzip bc vim python3-pip libleptonica-dev git \
-    tesseract-ocr libtesseract-dev \
+    libleptonica-dev tesseract-ocr libtesseract-dev \
     libatlas-base-dev gfortran supervisor libpcre3 libpcre3-dev \
-    g++ libz-dev libjpeg-dev build-essential make && \
+    g++ libz-dev libjpeg-dev build-essential qpdf && \
     apt-get install \
         --option "Acquire::Retries=3" \
         --no-install-recommends \
@@ -24,7 +30,6 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
-
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
