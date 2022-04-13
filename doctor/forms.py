@@ -15,6 +15,7 @@ class AudioForm(forms.Form):
         self.cleaned_data["extension"] = self.cleaned_data["file"].name.split(".")[-1]
         return self.cleaned_data
 
+
 class AudioDurationForm(forms.Form):
 
     file = forms.FileField(label="document", required=True)
@@ -59,7 +60,9 @@ class DocumentForm(forms.Form):
         """"""
         try:
             self.cleaned_data["filename"] = self.cleaned_data["file"].get("name", "")
-            self.cleaned_data["extension"] = self.cleaned_data["file"].name.split(".")[-1]
+            self.cleaned_data["extension"] = self.cleaned_data["file"].name.split(".")[
+                -1
+            ]
             if not self.cleaned_data["max_dimension"]:
                 self.cleaned_data["max_dimension"] = 350
             fp = tempfile.NamedTemporaryFile(

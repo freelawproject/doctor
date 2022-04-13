@@ -17,8 +17,13 @@ from PyPDF2 import PdfFileReader, PdfFileWriter
 from pytesseract import Output
 import eyed3
 
-from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm, \
-    AudioDurationForm
+from doctor.forms import (
+    AudioForm,
+    DocumentForm,
+    ImagePdfForm,
+    MimeForm,
+    AudioDurationForm,
+)
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
