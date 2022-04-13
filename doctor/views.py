@@ -17,7 +17,8 @@ from PyPDF2 import PdfFileReader, PdfFileWriter
 from pytesseract import Output
 import eyed3
 
-from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm
+from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm, \
+    AudioDurationForm
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
@@ -294,7 +295,7 @@ def images_to_pdf(request) -> HttpResponse:
 
 def fetch_audio_duration(request) -> HttpResponse:
     """Fetch audio duration from file."""
-    form = AudioForm(request.GET, request.FILES)
+    form = AudioDurationForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
     with NamedTemporaryFile(suffix=".mp3") as tmp:
