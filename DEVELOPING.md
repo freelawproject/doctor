@@ -4,9 +4,6 @@ As this is a microservice of Courtlistener, tests are designed to be run from a 
 to verify that the service works as expected and also works across a docker network.  
 
 ## Quick start
-Generally you can run the following command to build and start your containers
-but if you are on a new AMD64 mac, you may need to comment out the build
-command and use the makefile to build your images.
 
     docker-compose -f docker-compose.dev.yml up --build -d
 

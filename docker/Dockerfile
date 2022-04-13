@@ -1,15 +1,9 @@
-ARG BUILD_ENV=arm64
-
-FROM --platform=linux/amd64 python:3.10-slim as build-amd64
-
-FROM --platform=linux/arm64 python:3.10-slim as build-arm64
-
-#`python-base` sets up all our shared environment variables
-FROM build-${BUILD_ENV} as python-base
+# Note: Force M1 to emulate amd64
+FROM --platform=linux/amd64 python:3.10-slim
 
 RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
     apt-get install -y --no-install-recommends apt-utils && \
-    apt-get install -y python3-pip poppler-utils \
+    apt-get install -y python3-pip poppler-utils curl \
     libleptonica-dev tesseract-ocr libtesseract-dev \
     libatlas-base-dev gfortran supervisor libpcre3 libpcre3-dev \
     g++ libz-dev libjpeg-dev build-essential qpdf && \

@@ -203,7 +203,6 @@ class MetadataTests(unittest.TestCase):
         files = make_buffer(filename="image-pdf.pdf")
         response = requests.post(
             "http://cl-doctor:5050/utils/file/mime/",
-            files=files,
             params={"mime": True},
         ).json()
         self.assertEqual(
