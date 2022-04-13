@@ -57,7 +57,7 @@ def extract_pdf(request) -> HttpResponse:
     """Extract text from PDF"""
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     fp = form.cleaned_data["fp"]
     ocr_available = form.cleaned_data["ocr_available"]
     content, err, returncode, extracted_by_ocr = extract_from_pdf(fp, ocr_available)
@@ -70,7 +70,7 @@ def image_to_pdf(request) -> HttpResponse:
 
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     image = Image.open(form.cleaned_data["fp"])
     pdf_bytes = convert_tiff_to_pdf_bytes(image)
     cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
@@ -89,7 +89,7 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     ocr_available = form.cleaned_data["ocr_available"]
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
@@ -131,7 +131,7 @@ def make_thumbnail_from_range(request) -> Union[FileResponse, HttpResponse]:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     make_png_thumbnails(
         form.cleaned_data["fp"],
         form.cleaned_data["max_dimension"],
@@ -155,7 +155,7 @@ def make_png_thumbnail(request) -> HttpResponse:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     thumbnail, _, _ = make_png_thumbnail_for_instance(
         form.cleaned_data["fp"],
         form.cleaned_data["max_dimension"],
@@ -171,7 +171,7 @@ def page_count(request) -> HttpResponse:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     extension = form.cleaned_data["extension"]
     pg_count = get_page_count(form.cleaned_data["fp"], extension)
     cleanup_form(form)
@@ -185,7 +185,7 @@ def extract_mime_type(request) -> Union[JsonResponse, HttpResponse]:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     mime = form.cleaned_data["mime"]
     mimetype = magic.from_file(form.cleaned_data["fp"], mime=mime)
     cleanup_form(form)
@@ -196,7 +196,7 @@ def extract_mime_from_buffer(request) -> Union[JsonResponse, HttpResponse]:
     """Extract mime from buffer request"""
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
 
     file_buffer = form.cleaned_data["file"].read()
     mime = magic.from_buffer(file_buffer, mime=True)
@@ -208,7 +208,7 @@ def extract_extension(request) -> HttpResponse:
     """A handful of workarounds for getting extensions we can trust."""
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     content = form.cleaned_data["file"].read()
 
     file_str = magic.from_buffer(content)
@@ -255,7 +255,7 @@ def pdf_to_text(request) -> JsonResponse:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     content, err, _ = make_pdftotext_process(form.cleaned_data["fp"])
     cleanup_form(form)
     return JsonResponse(
@@ -274,7 +274,7 @@ def images_to_pdf(request) -> HttpResponse:
     """
     form = ImagePdfForm(request.GET)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     sorted_urls = form.cleaned_data["sorted_urls"]
 
     if len(sorted_urls) > 1:
@@ -296,7 +296,7 @@ def fetch_audio_duration(request) -> HttpResponse:
     """Fetch audio duration from file."""
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     with NamedTemporaryFile(suffix=".mp3") as tmp:
         with open(tmp.name, "wb") as f:
             for chunk in form.cleaned_data["file"].chunks():
@@ -312,7 +312,7 @@ def convert_audio(request) -> Union[FileResponse, HttpResponse]:
     """
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     filepath = form.cleaned_data["fp"]
     media_file = form.cleaned_data["file"]
     audio_data = {k: v[0] for k, v in dict(request.GET).items()}
@@ -330,7 +330,7 @@ def embed_text(request) -> Union[FileResponse, HttpResponse]:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse('Invalid form', status=HTTPStatus.NOT_ACCEPTABLE)
+        return HttpResponse("Invalid form", status=HTTPStatus.NOT_ACCEPTABLE)
     fp = form.cleaned_data["fp"]
     with NamedTemporaryFile(suffix=".tiff") as destination:
         rasterize_pdf(fp, destination.name)
