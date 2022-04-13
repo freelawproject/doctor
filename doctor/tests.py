@@ -265,7 +265,7 @@ class MetadataTests(unittest.TestCase):
 
 class ImageDisclosuresTest(unittest.TestCase):
     def test_images_to_pdf(self):
-        """"""
+        """Do we create a PDF from several tiffs successfully?"""
         base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
         sorted_urls = [
             f"{base}_1.tiff",
@@ -277,8 +277,8 @@ class ImageDisclosuresTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, msg="Failed status code.")
         self.assertEqual(
-            b"%PDF-1.3\n1 0 obj\n<<\n/Type /Pages\n/Count 2\n/Kids [ 3 0 R 4 0 R ]\n>>\nendobj\n2 0 obj\n<<\n/Producer (PyPD",
-            response.content[:100],
+            b"%PDF-1.3\n",
+            response.content[:9],
             msg="PDF generation failed",
         )
 
