@@ -16,7 +16,7 @@ from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfFileMerger, PdfFileReader
 from PyPDF2.utils import PdfReadError
-from seal_rookery import seals_data, seals_root
+from seal_rookery.find import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
 from doctor.lib.utils import (
@@ -485,30 +485,21 @@ def set_mp3_meta_data(audio_data: Dict, mp3_path: AnyStr) -> eyed3.core.AudioFil
     # Add images to the mp3. If it has a seal, use that for the Front Cover
     # and use the FLP logo for the Publisher Logo. If it lacks a seal, use the
     # Publisher logo for both the front cover and the Publisher logo.
-    try:
-        has_seal = seals_data[audio_data["court_pk"]]["has_seal"]
-    except AttributeError:
-        # Unknown court in Seal Rookery.
-        has_seal = False
-    except KeyError:
-        # Unknown court altogether (perhaps a test?)
-        has_seal = False
+    url = seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM)
 
     flp_image_frames = [
         3,  # "Front Cover". Complete list at eyed3/id3/frames.py
         14,  # "Publisher logo".
     ]
-    if has_seal:
-        with open(
-            os.path.join(seals_root, "512", f"{audio_data['court_pk']}.png"),
-            "rb",
-        ) as f:
-            audio_file.tag.images.set(
-                3,
-                f.read(),
-                "image/png",
-                f"Seal for {audio_data['court_short_name']}",
-            )
+
+    if url:
+        seal_content = requests.get(url, timeout=30).content
+        audio_file.tag.images.set(
+            3,
+            seal_content,
+            "image/png",
+            f"Seal for {audio_data['court_short_name']}",
+        )
         flp_image_frames.remove(3)
 
     for frame in flp_image_frames:

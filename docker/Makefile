@@ -17,6 +17,10 @@ all: image
 image:
 	$(DOCKER) build -t $(DOCKER_REPOSITORY):$(DOCKER_TAG) -t $(DOCKER_REPOSITORY):latest --file docker/Dockerfile .
 
+m1:
+	$(DOCKER) build -t $(DOCKER_REPOSITORY):$(DOCKER_TAG) -t $(DOCKER_REPOSITORY):latest --file docker/Dockerfile.m1 .
+
+
 push: image
 	$(info Checking if valid architecture)
 	@if [ $(UNAME) = "x86_64" ]; then \

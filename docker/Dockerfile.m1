@@ -26,9 +26,6 @@ COPY docker/install-qpdf.sh /opt/
 RUN ["chmod", "+x", "/opt/install-qpdf.sh"]
 RUN /opt/install-qpdf.sh
 
-RUN pip install seal_rookery
-RUN update-seals -f
-
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1 \
     PYTHONUNBUFFERED 1

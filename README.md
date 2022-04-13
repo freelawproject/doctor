@@ -29,7 +29,7 @@ Assuming you have docker installed run:
 
 This will expose the endpoints on port 5050 with four gunicorn workers.
 
-If you wish to have more gunicorn workers, you'll want to set the DOCTOR_WORKERS environment variable. You can do that 
+If you wish to have more gunicorn workers, you'll want to set the DOCTOR_WORKERS environment variable. You can do that
 with:
 
     docker run -d -p 5050:5050 -e DOCTOR_WORKERS=16 freelawproject/doctor:latest
