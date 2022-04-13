@@ -292,7 +292,7 @@ class AudioConversionTests(unittest.TestCase):
         audio_details = {
             "court_full_name": "Testing Supreme Court",
             "court_short_name": "Testing Supreme Court",
-            "court_pk": "test",
+            "court_pk": "mad",
             "court_url": "http://www.example.com/",
             "docket_number": "docket number 1 005",
             "date_argued": "2020-01-01",

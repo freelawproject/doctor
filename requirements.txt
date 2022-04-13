@@ -26,3 +26,4 @@ sentry-sdk[flask]
 six>=1.15.0
 urllib3>=1.25.10
 reportlab
+seal-rookery>=2.1.5
