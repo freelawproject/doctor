@@ -22,7 +22,7 @@ Starts the Doctor Container and the Mock CL Container that we run our tests from
 
     docker exec -it mock_cl_doctor python3 -m unittest doctor.tests
 
-or 
+or
 
     docker exec -it mock_cl_doctor python manage.py test
 
