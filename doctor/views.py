@@ -1,4 +1,3 @@
-import http.client
 import os
 import re
 import shutil
