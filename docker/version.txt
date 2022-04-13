@@ -1,6 +1,14 @@
-0.2.6
+0.2.7
 
 ## Current
+
+**0.2.7 - 2022-04-12**
+
+Features:
+ - Bump seal-roorkey to speed up builds.
+ - Add m1 build in Makefile.
+
+## Previous Versions
 
 **0.2.6 - 2022-04-12**
 
@@ -8,9 +16,6 @@ Fixes:
  - Add additional workers and worker resets to the gunicorn configuration. The
    default is now four workers, and additional ones can be created with the
    DOCTOR_WORKERS env.
-
-
-## Previous Versions
 
 **0.2.5 - 2022-03-24**
 
