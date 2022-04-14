@@ -66,6 +66,7 @@ class MimeForm(forms.Form):
     def clean(self):
         self.cleaned_data["filename"] = "unknown"
 
+
 class ThumbnailForm(forms.Form):
     file = forms.FileField(label="document", required=True)
     max_dimension = forms.IntegerField(label="max-dimension", required=False)
