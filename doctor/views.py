@@ -1,7 +1,8 @@
 import os
 import re
-import shutil
+from http.client import NOT_ACCEPTABLE
 from tempfile import NamedTemporaryFile
+from typing import Union
 
 import img2pdf
 import magic
@@ -16,17 +17,15 @@ import eyed3
 
 from django.core.exceptions import BadRequest
 
-from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm
+from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm, ThumbnailForm
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
     make_png_thumbnail_for_instance,
-    make_png_thumbnails,
     strip_metadata_from_path,
 )
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
-    convert_to_base64,
     convert_to_mp3,
     download_images,
     extract_from_doc,
@@ -54,14 +53,19 @@ def heartbeat(request) -> HttpResponse:
 
 def extract_pdf(request) -> HttpResponse:
     """"""
-    form = DocumentForm(request.GET, request.FILES)
-    if not form.is_valid():
-        raise BadRequest("Invalid form")
-    fp = form.cleaned_data["fp"]
-    ocr_available = form.cleaned_data["ocr_available"]
-    content, err, returncode, extracted_by_ocr = extract_from_pdf(fp, ocr_available)
-    cleanup_form(form)
-    return HttpResponse(f"{content}")
+
+    try:
+        form = DocumentForm(request.GET, request.FILES)
+        if not form.is_valid():
+            validation_message = form.errors.get_json_data()["__all__"][0]["message"]
+            return HttpResponse(validation_message, status=NOT_ACCEPTABLE)
+        fp = form.cleaned_data["fp"]
+        ocr_available = form.cleaned_data["ocr_available"]
+        content, err, returncode, extracted_by_ocr = extract_from_pdf(fp, ocr_available)
+        cleanup_form(form)
+        return HttpResponse(f"{content}")
+    except Exception as e:
+        return HttpResponse(str(e), status=NOT_ACCEPTABLE)
 
 
 def image_to_pdf(request) -> HttpResponse:
@@ -69,7 +73,7 @@ def image_to_pdf(request) -> HttpResponse:
 
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     image = Image.open(form.cleaned_data["fp"])
     pdf_bytes = convert_tiff_to_pdf_bytes(image)
     cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
@@ -80,7 +84,7 @@ def image_to_pdf(request) -> HttpResponse:
         return HttpResponse(cleaned_pdf_bytes)
 
 
-def extract_doc_content(request) -> JsonResponse:
+def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     """Extract txt from different document types.
 
     :return: The content of a document/error message.
@@ -88,7 +92,7 @@ def extract_doc_content(request) -> JsonResponse:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     ocr_available = form.cleaned_data["ocr_available"]
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
@@ -123,44 +127,23 @@ def extract_doc_content(request) -> JsonResponse:
     )
 
 
-def make_thumbnail_from_range(request) -> FileResponse:
-    """Can we make a range of thumbnails from a pdf?
-
-    :return: The zip of thumbail images.
-    """
-    form = DocumentForm(request.GET, request.FILES)
-    if not form.is_valid():
-        raise BadRequest("Invalid form")
-    make_png_thumbnails(
-        form.cleaned_data["fp"],
-        form.cleaned_data["max_dimension"],
-        form.cleaned_data["pages"],
-        form.cleaned_data["tmp_dir"],
-    )
-    with NamedTemporaryFile(delete=True, suffix=".zip") as tmp:
-        shutil.make_archive(
-            f"{tmp.name[:-4]}", "zip", form.cleaned_data["tmp_dir"].name
-        )
-        shutil.rmtree(form.cleaned_data["tmp_dir"].name)
-        cleanup_form(form)
-        return FileResponse(open(tmp.name, "rb"))
-
-
 def make_png_thumbnail(request) -> HttpResponse:
     """Make a thumbnail of the first page of a PDF and return it.
 
     :return: A response containing our file and any errors
     :type: HTTPS response
     """
-    form = DocumentForm(request.GET, request.FILES)
+    form = ThumbnailForm(request.POST, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
-    thumbnail, _, _ = make_png_thumbnail_for_instance(
-        form.cleaned_data["fp"],
-        form.cleaned_data["max_dimension"],
-    )
-    os.remove(form.cleaned_data["fp"])
-    return HttpResponse(thumbnail)
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
+    document = form.cleaned_data["file"]
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
+        with open(tmp.name, "wb") as f:
+            f.write(document.read())
+        thumbnail, _, _ = make_png_thumbnail_for_instance(
+            tmp.name, form.cleaned_data["max_dimension"]
+        )
+        return HttpResponse(thumbnail)
 
 
 def page_count(request) -> HttpResponse:
@@ -170,21 +153,21 @@ def page_count(request) -> HttpResponse:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     extension = form.cleaned_data["extension"]
     pg_count = get_page_count(form.cleaned_data["fp"], extension)
     cleanup_form(form)
     return HttpResponse(pg_count)
 
 
-def extract_mime_type(request) -> JsonResponse:
+def extract_mime_type(request) -> Union[JsonResponse, HttpResponse]:
     """Identify the mime type of a document
 
     :return: Mime type
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     mime = form.cleaned_data["mime"]
     mimetype = magic.from_file(form.cleaned_data["fp"], mime=mime)
     cleanup_form(form)
@@ -195,7 +178,7 @@ def extract_mime_from_buffer(request) -> HttpResponse:
     """Extract mime from buffer request"""
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
 
     file_buffer = form.cleaned_data["file"].read()
     mime = magic.from_buffer(file_buffer, mime=True)
@@ -207,7 +190,7 @@ def extract_extension(request) -> HttpResponse:
     """A handful of workarounds for getting extensions we can trust."""
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     content = form.cleaned_data["file"].read()
 
     file_str = magic.from_buffer(content)
@@ -247,14 +230,14 @@ def extract_extension(request) -> HttpResponse:
     return HttpResponse(fixes.get(extension, extension).lower())
 
 
-def pdf_to_text(request) -> JsonResponse:
+def pdf_to_text(request) -> Union[JsonResponse, HttpResponse]:
     """Extract text from text based PDFs immediately.
 
     :return:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     content, err, _ = make_pdftotext_process(form.cleaned_data["fp"])
     cleanup_form(form)
     return JsonResponse(
@@ -293,25 +276,29 @@ def images_to_pdf(request) -> HttpResponse:
 
 def fetch_audio_duration(request) -> HttpResponse:
     """Fetch audio duration from file."""
-    form = AudioForm(request.GET, request.FILES)
-    if not form.is_valid():
-        raise BadRequest("Invalid form")
-    with NamedTemporaryFile(suffix=".mp3") as tmp:
-        with open(tmp.name, "wb") as f:
-            for chunk in form.cleaned_data["file"].chunks():
-                f.write(chunk)
-        mp3_file = eyed3.load(tmp.name)
-        return HttpResponse(mp3_file.info.time_secs)
+    try:
+        form = AudioForm(request.GET, request.FILES)
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
+        with NamedTemporaryFile(suffix=".mp3") as tmp:
+            with open(tmp.name, "wb") as f:
+                for chunk in form.cleaned_data["file"].chunks():
+                    f.write(chunk)
+            mp3_file = eyed3.load(tmp.name)
+            return HttpResponse(mp3_file.info.time_secs)
+    except Exception as e:
+        return HttpResponse(str(e))
 
 
-def convert_audio(request) -> FileResponse:
+def convert_audio(request) -> Union[FileResponse, HttpResponse]:
     """Convert audio file to MP3 and update metadata on mp3.
 
     :return: Converted audio
     """
+    # try:
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     filepath = form.cleaned_data["fp"]
     media_file = form.cleaned_data["file"]
     audio_data = {k: v[0] for k, v in dict(request.GET).items()}
@@ -320,16 +307,18 @@ def convert_audio(request) -> FileResponse:
     response = FileResponse(open(filepath, "rb"))
     cleanup_form(form)
     return response
+    # except Exception as e:
+    #     return HttpResponse(str(e))
 
 
-def embed_text(request) -> FileResponse:
+def embed_text(request) -> Union[FileResponse, HttpResponse]:
     """Embed text onto an image PDF.
 
     :return: Embedded PDF
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        raise BadRequest("Invalid form")
+        return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
     fp = form.cleaned_data["fp"]
     with NamedTemporaryFile(suffix=".tiff") as destination:
         rasterize_pdf(fp, destination.name)

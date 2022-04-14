@@ -1,12 +1,15 @@
 import json
 import unittest
+from pathlib import Path
 from tempfile import NamedTemporaryFile
-from zipfile import ZipFile
+from django.test import Client
 
 import eyed3
 import requests
 
 from doctor.lib.utils import make_file, make_buffer
+
+asset_path = f"{Path.cwd()}/doctor/test_assets"
 
 
 class HeartbeatTests(unittest.TestCase):
@@ -25,6 +28,7 @@ class ExtractionTests(unittest.TestCase):
             "http://cl-doctor:5050/extract/pdf/text/", files=files, data=data
         )
         text = response.text[:100].replace("\n", "").strip()
+        self.assertEqual(200, response.status_code, msg="Wrong status code")
         self.assertEqual(
             text,
             "(Slip Opinion)              OCTOBER TERM, 2012                                       1",
@@ -76,7 +80,9 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/", files=files, params=params
+            "http://cl-doctor:5050/extract/doc/text/",
+            files=files,
+            params=params,
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
@@ -126,12 +132,24 @@ class ExtractionTests(unittest.TestCase):
 class ThumbnailTests(unittest.TestCase):
     """Can we generate thumbnail images from PDF files"""
 
+    # def test_locally(self):
+    #     c = Client()
+    #     with open(f"{asset_path}/image-pdf.pdf", "rb") as fp:
+    #         response = c.post(
+    #             "/convert/pdf/thumbnail/",
+    #             {"max_dimension": 350, "file": fp},
+    #         )
+    #
+    #     self.assertEqual(200, response.status_code)
+
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate four thumbanils a pdf?"""
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
         response = requests.post(
-            "http://cl-doctor:5050/convert/pdf/thumbnail/", files=files, data=data
+            "http://cl-doctor:5050/convert/pdf/thumbnail/",
+            files=files,
+            data=data,
         )
         with open("doctor/test_assets/image-pdf-thumbnail.png", "rb") as f:
             answer = f.read()
@@ -149,31 +167,7 @@ class ThumbnailTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/convert/pdf/thumbnail/", files=files
         )
-        self.assertEqual(response.status_code, 500, msg="Wrong status code")
-
-    def test_thumbnail_range(self):
-        """Can we generate a thumbnail for a range of pages?"""
-        files = make_file(filename="vector-pdf.pdf")
-        pages = [1, 2, 3, 4]
-        params = {
-            "max_dimension": 350,
-            "pages": json.dumps(pages),
-        }
-
-        response = requests.post(
-            "http://cl-doctor:5050/convert/pdf/thumbnails/", files=files, params=params
-        )
-        with NamedTemporaryFile(suffix=".zip") as tmp:
-            with open(tmp.name, "wb") as f:
-                f.write(response.content)
-            with ZipFile(tmp.name, "r") as zipObj:
-                listOfiles = sorted(zipObj.namelist())
-        self.assertEqual(len(listOfiles), 4, msg="Failed to generate thumbnails")
-        self.assertEqual(
-            ["thumb-1.png", "thumb-2.png", "thumb-3.png", "thumb-4.png"],
-            listOfiles,
-            msg="thumbnails not generated",
-        )
+        self.assertEqual(response.status_code, 406, msg="Wrong status code")
 
 
 class MetadataTests(unittest.TestCase):
@@ -184,15 +178,17 @@ class MetadataTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         page_count = requests.post(
             "http://cl-doctor:5050/utils/page-count/pdf/", files=files
-        ).json()
-        self.assertEqual(page_count, 2, "Failed to get page count")
+        ).text
+        self.assertEqual(int(page_count), 2, "Failed to get page count")
 
     def test_mime_type(self):
         """"""
         files = make_file(filename="image-pdf.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://cl-doctor:5050/utils/mime-type/", files=files, params=params
+            "http://cl-doctor:5050/utils/mime-type/",
+            files=files,
+            params=params,
         ).json()
         self.assertEqual(
             response["mimetype"], "application/pdf", msg="Failed to get mime type"
@@ -254,7 +250,9 @@ class MetadataTests(unittest.TestCase):
 
             # Confirm that text is now embedded in the PDF
             response = requests.post(
-                "http://cl-doctor:5050/extract/pdf/text/", files=files, data=data
+                "http://cl-doctor:5050/extract/pdf/text/",
+                files=files,
+                data=data,
             )
             self.assertIn(
                 "(SlipOpinion)             OCTOBER TERM, 2012",
@@ -273,7 +271,8 @@ class ImageDisclosuresTest(unittest.TestCase):
         ]
         params = {"sorted_urls": json.dumps(sorted_urls)}
         response = requests.post(
-            "http://cl-doctor:5050/convert/images/pdf/", params=params
+            "http://cl-doctor:5050/convert/images/pdf/",
+            params=params,
         )
         self.assertEqual(response.status_code, 200, msg="Failed status code.")
         self.assertEqual(
@@ -309,7 +308,6 @@ class AudioConversionTests(unittest.TestCase):
             files=files,
             params=audio_details,
         )
-
         self.assertEqual(response.status_code, 200, msg="Bad status code")
 
         # Validate some metadata in the MP3.
@@ -341,6 +339,23 @@ class AudioConversionTests(unittest.TestCase):
             files=files,
         )
         self.assertEqual(51.64773161867487, float(response.text), msg="Bad duration")
+
+
+class TestFailedValidations(unittest.TestCase):
+    def test_for_406s(self):
+        response = requests.post(
+            "http://cl-doctor:5050/utils/audio/duration/",
+        )
+        self.assertEqual(response.status_code, 406, msg="Wrong validation")
+
+    def test_pdf_406s(self):
+        response = requests.post(
+            "http://cl-doctor:5050/extract/pdf/text/",
+        )
+        self.assertEqual(
+            "File is missing.", response.text, msg="Wrong validation error"
+        )
+        self.assertEqual(response.status_code, 406, msg="Wrong validation")
 
 
 if __name__ == "__main__":

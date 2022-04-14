@@ -1,12 +1,11 @@
-FROM python:3.10-slim
+# Note: Force M1 to emulate amd64
+FROM --platform=linux/amd64 python:3.10-slim
 
 RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
     apt-get install -y --no-install-recommends apt-utils && \
-    apt-get install -y python3-pip poppler-utils \
-    wget unzip bc vim python3-pip libleptonica-dev git \
-    tesseract-ocr libtesseract-dev \
-    libatlas-base-dev gfortran supervisor libpcre3 libpcre3-dev \
-    g++ libz-dev libjpeg-dev build-essential make && \
+    apt-get install -y python3-pip poppler-utils curl \
+    libleptonica-dev tesseract-ocr libtesseract-dev \
+    g++ libz-dev libjpeg-dev build-essential qpdf && \
     apt-get install \
         --option "Acquire::Retries=3" \
         --no-install-recommends \
@@ -25,7 +24,6 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
@@ -40,4 +38,3 @@ CMD gunicorn doctor.wsgi:application \
       --max-requests-jitter 100 \
       --timeout 3600 \
       --bind 0.0.0.0:5050
-
