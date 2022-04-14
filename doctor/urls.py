@@ -10,7 +10,6 @@ urlpatterns = [
     path("convert/image/pdf/", views.image_to_pdf, name="image-to-pdf"),
     path("convert/images/pdf/", views.images_to_pdf, name="images-to-pdf"),
     path("convert/pdf/thumbnail/", views.make_png_thumbnail, name="thumbnail"),
-    path("convert/pdf/thumbnails/", views.make_thumbnail_from_range, name="thumbnail"),
     path("convert/audio/mp3/", views.convert_audio, name="convert-audio"),
     path("utils/page-count/pdf/", views.page_count, name="page_count"),
     path("utils/mime-type/", views.extract_mime_type, name="mime_type"),
