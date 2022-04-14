@@ -176,7 +176,7 @@ def extract_mime_type(request) -> Union[JsonResponse, HttpResponse]:
 
 def extract_mime_from_buffer(request) -> HttpResponse:
     """Extract mime from buffer request"""
-    form = MimeForm(request.GET, request.FILES)
+    form = MimeForm(request.POST, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=NOT_ACCEPTABLE)
 

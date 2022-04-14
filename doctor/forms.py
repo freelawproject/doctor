@@ -64,6 +64,10 @@ class MimeForm(forms.Form):
     mime = forms.BooleanField(label="mime", required=False)
 
     def clean(self):
+        file = self.cleaned_data.get("file", False)
+        if not file:
+            raise ValidationError("File is missing.")
+
         self.cleaned_data["filename"] = "unknown"
 
 
