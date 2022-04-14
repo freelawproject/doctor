@@ -1,14 +1,23 @@
-0.2.7
+0.2.8
 
 ## Current
+
+**0.2.8 - 2022-04-14**
+
+Features:
+ - Drop m1 specific docker builds.
+ - Return 406's when validation of forms fails
+ - Add tests for incomplete post requests to the server.
+ - Reduce build installs and build install time.
+
+
+## Previous Versions
 
 **0.2.7 - 2022-04-12**
 
 Features:
- - Bump seal-roorkey to speed up builds.
+ - Bump seal-rookey to speed up builds.
  - Add m1 build in Makefile.
-
-## Previous Versions
 
 **0.2.6 - 2022-04-12**
 
