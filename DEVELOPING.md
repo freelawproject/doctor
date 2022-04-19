@@ -18,7 +18,7 @@ how we plan to use the Doctor image for CL.
 
 Starts the Doctor Container and the Mock CL Container that we run our tests from.
 
-    docker exec -it mock_courtlistener python3 -m unittest doctor.tests
+    docker exec -it mock_cl_doctor python3 -m unittest doctor.tests
 
 This is a duplicate of the Doctor container, which we use for simplicity, but it
 makes the requests across the docker network.

@@ -2,7 +2,6 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from django.test import Client
 
 import eyed3
 import requests
@@ -190,9 +189,22 @@ class MetadataTests(unittest.TestCase):
             files=files,
             params=params,
         ).json()
+        print(response)
         self.assertEqual(
             response["mimetype"], "application/pdf", msg="Failed to get mime type"
         )
+
+    def test_broken_mime_type(self):
+        """"""
+        files = make_buffer(filename="broken-mime.pdf")
+        params = {"mime": True}
+        response = requests.post(
+            "http://cl-doctor:5050/utils/file/extension/",
+            files=files,
+            params=params,
+        )
+        self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
+
 
     def test_mime_type_unknown_name(self):
         """"""

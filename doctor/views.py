@@ -219,6 +219,12 @@ def extract_extension(request) -> HttpResponse:
             extension = ".pdf"
         else:
             extension = ".wpd"
+    # We started seeing PDFs with whitespace in the bytes at the beginning
+    # of the file. Removing the \r from the file helps identify it correctly.
+    if extension == ".bin":
+        mime = magic.from_buffer(content.strip(b"\r"), mime=True)
+        extension = mimetypes.guess_extension(mime)
+
     fixes = {
         ".htm": ".html",
         ".xml": ".html",

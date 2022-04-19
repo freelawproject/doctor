@@ -1,6 +1,14 @@
-0.2.8
+0.2.9
 
 ## Current
+
+**0.2.9 - 2022-04-19**
+
+Features:
+ - Fix for mime type detection for weird PDF failures
+ - Test for broken PDFs
+
+## Previous Versions
 
 **0.2.8 - 2022-04-14**
 
@@ -9,9 +17,6 @@ Features:
  - Return 406's when validation of forms fails
  - Add tests for incomplete post requests to the server.
  - Reduce build installs and build install time.
-
-
-## Previous Versions
 
 **0.2.7 - 2022-04-12**
 
