@@ -205,6 +205,14 @@ class MetadataTests(unittest.TestCase):
         )
         self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
 
+        files = make_buffer(filename="missouri.pdf")
+        params = {"mime": True}
+        response = requests.post(
+            "http://cl-doctor:5050/utils/file/extension/",
+            files=files,
+            params=params,
+        )
+        self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
 
     def test_mime_type_unknown_name(self):
         """"""
