@@ -308,7 +308,8 @@ def extract_from_html(path):
     A simple wrapper to go get content, and send it along.
     """
     try:
-        content = open(path).read().encode()
+        with open(path, "rb") as f:
+            content = f.read()
         content = get_clean_body_content(content)
         encodings = ["utf-8", "ISO8859", "cp1252"]
         for encoding in encodings:
