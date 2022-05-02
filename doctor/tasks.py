@@ -16,7 +16,7 @@ from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfFileMerger, PdfFileReader
 from PyPDF2.utils import PdfReadError
-from seal_rookery.find import seal, ImageSizes
+from seal_rookery.search import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
 from doctor.lib.utils import (
@@ -308,7 +308,8 @@ def extract_from_html(path):
     A simple wrapper to go get content, and send it along.
     """
     try:
-        content = open(path).read().encode()
+        with open(path, "rb") as f:
+            content = f.read()
         content = get_clean_body_content(content)
         encodings = ["utf-8", "ISO8859", "cp1252"]
         for encoding in encodings:
