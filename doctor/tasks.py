@@ -16,7 +16,7 @@ from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfFileMerger, PdfFileReader
 from PyPDF2.utils import PdfReadError
-from seal_rookery.find import seal, ImageSizes
+from seal_rookery.search import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
 from doctor.lib.utils import (
