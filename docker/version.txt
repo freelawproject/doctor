@@ -1,14 +1,21 @@
-0.2.9
+0.2.10
 
 ## Current
+
+**0.2.10 - 2022-05-02**
+
+Features:
+ - Adds better encoding for extract_from_html
+ - Bump seal-rookery to 2.2.1
+ - Update seal-rookery call
+
+## Previous Versions
 
 **0.2.9 - 2022-04-19**
 
 Features:
  - Fix for mime type detection for weird PDF failures
  - Test for broken PDFs
-
-## Previous Versions
 
 **0.2.8 - 2022-04-14**
 
