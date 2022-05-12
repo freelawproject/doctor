@@ -1,6 +1,14 @@
-0.2.10
+0.2.11
 
 ## Current
+
+**0.2.11 - 2022-05-12**
+
+Features:
+ - Add even better encoding for extract_from_html
+ - Add better error message
+
+## Previous Versions
 
 **0.2.10 - 2022-05-02**
 
@@ -8,8 +16,6 @@ Features:
  - Adds better encoding for extract_from_html
  - Bump seal-rookery to 2.2.1
  - Update seal-rookery call
-
-## Previous Versions
 
 **0.2.9 - 2022-04-19**
 
