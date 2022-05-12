@@ -311,17 +311,18 @@ def extract_from_html(path):
         with open(path, "rb") as f:
             content = f.read()
         content = get_clean_body_content(content)
-        encodings = ["utf-8", "ISO8859", "cp1252"]
-        for encoding in encodings:
+        for encoding in ["utf-8", "ISO8859", "cp1252", "latin-1"]:
             try:
                 content = force_text(content, encoding=encoding)
+                return content, "", 0
             except DoctorUnicodeDecodeError:
-                return content, "Doctor Unicode Decode Error", 1
-
+                error = "Could not encode content properly"
+                fail_code = 1
         # Fell through, therefore unable to decode the string.
-        return content, "", 0
+        return content, error, fail_code
     except Exception as e:
-        return "", str(e), 1
+        error_msg = f"Could not read/clean html file {str(e)}"
+        return "", error_msg, 1
 
 
 def get_clean_body_content(content):
