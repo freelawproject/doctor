@@ -1,14 +1,19 @@
-0.2.11
+0.2.12
 
 ## Current
+
+**0.2.12 - 2022-05-19**
+
+Features:
+ - Add an even better encoding for extract_from_html
+
+## Previous Versions
 
 **0.2.11 - 2022-05-12**
 
 Features:
  - Add even better encoding for extract_from_html
  - Add better error message
-
-## Previous Versions
 
 **0.2.10 - 2022-05-02**
 
