@@ -245,7 +245,15 @@ def cleanup_ocr_text(txt: str) -> str:
 
 
 def convert_file_to_txt(path: str) -> str:
-    tesseract_command = ["tesseract", path, "stdout", "-l", "eng"]
+    tesseract_command = [
+        "tesseract",
+        path,
+        "stdout",
+        "-l",
+        "eng",
+        "-c",
+        "tessedit_do_invert=0",  # Assume a white background for speed
+    ]
     p = subprocess.Popen(
         tesseract_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
