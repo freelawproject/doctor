@@ -36,7 +36,7 @@ WORKDIR /opt/app
 
 EXPOSE 5050
 CMD gunicorn doctor.wsgi:application \
-      --workers ${DOCTOR_WORKERS:-4} \
+      --workers ${DOCTOR_WORKERS:-1} \
       --max-requests 1000 \
       --max-requests-jitter 100 \
       --timeout 3600 \
