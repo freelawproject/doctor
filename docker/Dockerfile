@@ -22,7 +22,10 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
 
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    # Disable tesseract multithreading for more scalable performance and
+    # faster overall performance
+    OMP_THREAD_LIMIT=1
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
