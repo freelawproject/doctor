@@ -9,6 +9,7 @@ This release is focused on performance improvements and easier scaling. It:
  - Disables multi-threaded tesseract code. This makes it easier to scale doctor in a k8s environment due to at most one CPU being used per conversion.
  - Sets the number of gunicorn workers to 1 by default. This makes it so that scaling is can be moved to k8s instead of gunicorn.
  - Tells tesseract not to look for white text on black backgrounds. This is just a simple performance tweak.
+ - Upgrades to PyPDF2 version 2.0.0.
 
 
 ## Previous Versions
