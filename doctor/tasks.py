@@ -15,7 +15,7 @@ from lxml.etree import XMLSyntaxError
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfFileMerger, PdfFileReader
-from PyPDF2.utils import PdfReadError
+from PyPDF2.errors import PdfReadError
 from seal_rookery.search import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
@@ -245,7 +245,15 @@ def cleanup_ocr_text(txt: str) -> str:
 
 
 def convert_file_to_txt(path: str) -> str:
-    tesseract_command = ["tesseract", path, "stdout", "-l", "eng"]
+    tesseract_command = [
+        "tesseract",
+        path,
+        "stdout",
+        "-l",
+        "eng",
+        "-c",
+        "tessedit_do_invert=0",  # Assume a white background for speed
+    ]
     p = subprocess.Popen(
         tesseract_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )

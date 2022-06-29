@@ -22,7 +22,10 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
 
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    # Disable tesseract multithreading for more scalable performance and
+    # faster overall performance
+    OMP_THREAD_LIMIT=1
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -33,7 +36,7 @@ WORKDIR /opt/app
 
 EXPOSE 5050
 CMD gunicorn doctor.wsgi:application \
-      --workers ${DOCTOR_WORKERS:-4} \
+      --workers ${DOCTOR_WORKERS:-1} \
       --max-requests 1000 \
       --max-requests-jitter 100 \
       --timeout 3600 \
