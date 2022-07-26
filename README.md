@@ -5,13 +5,13 @@ Doctor
 Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifiying documents and audio files.
 
 At a high level, this service provides you with high-performance HTTP endpoints that can:
- 
+
  - Extract text from documents in various formats
  - Convert audio files from one format to another while stripping messy metadata
  - Create thumbnails of PDFs
- 
-Under the hood, Doctor uses gunicorn to connect to a django service. The django service uses 
-carefully configured implementations of `ffmpeg`, `pdftotext`, `tesseract`, `ghostscript`, and a 
+
+Under the hood, Doctor uses gunicorn to connect to a django service. The django service uses
+carefully configured implementations of `ffmpeg`, `pdftotext`, `tesseract`, `ghostscript`, and a
 number of other converters.
 
 
