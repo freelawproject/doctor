@@ -9,8 +9,13 @@ https://docs.djangoproject.com/en/4.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
+import environ
+import sentry_sdk
 
 from pathlib import Path
+from sentry_sdk.integrations.django import DjangoIntegration
+
+env = environ.FileAwareEnv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = False
@@ -19,3 +24,14 @@ ALLOWED_HOSTS = ["cl-doctor", "0.0.0.0", "localhost"]
 INSTALLED_APPS = []
 ROOT_URLCONF = "doctor.urls"
 WSGI_APPLICATION = "doctor.wsgi.application"
+
+
+SENTRY_DSN = env("SENTRY_DSN", default="")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(),
+        ],
+        ignore_errors=[KeyboardInterrupt],
+    )

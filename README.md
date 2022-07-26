@@ -228,3 +228,11 @@ This returns the audio file as a file response.
 
 Testing is designed to be run with the `docker-compose.dev.yml` file.  To see more about testing
 checkout the DEVELOPING.md file.
+
+## Sentry Logging
+
+For debugging purposes, it's possible to set your Sentry DSN to send events to Sentry.
+By default, no SENTRY_DSN is set and no events will be sent to Sentry.
+To use Sentry set the SENTRY_DSN environment variable to your DSN. Using Docker you can set it with:
+
+    docker run -d -p 5050:5050 -e SENTRY_DSN=<https://yout-sentry-dsn> freelawproject/doctor:latest
