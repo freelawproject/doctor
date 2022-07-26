@@ -1,6 +1,14 @@
-0.2.13
+0.2.14
 
 ## Current
+
+**0.2.14 - 2022-07-26**
+
+Features:
+ - Adds sentry integration
+ - Adds django-environ to allow environment variables for Django settings
+
+## Previous Versions
 
 **0.2.13 - 2022-06-02**
 
@@ -10,9 +18,6 @@ This release is focused on performance improvements and easier scaling. It:
  - Sets the number of gunicorn workers to 1 by default. This makes it so that scaling is can be moved to k8s instead of gunicorn.
  - Tells tesseract not to look for white text on black backgrounds. This is just a simple performance tweak.
  - Upgrades to PyPDF2 version 2.0.0.
-
-
-## Previous Versions
 
 **0.2.12 - 2022-05-19**
 
