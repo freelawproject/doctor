@@ -2,22 +2,17 @@
 Doctor
 ------------------------------------
 
-Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifiying documents.
+Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifiying documents and audio files.
 
-The goal of this microservice is to isolate out these tools to let Courtlistener (a django site)
-be streamlined and easier to maintain.  This service is setup to run with gunicorn with a
-series of endpoints that accept JSON, files, and parameters to transform Audio, Documents as well as
-extract, modify and replace metadata, text and other data.  
+At a high level, this service provides you with high-performance HTTP endpoints that can:
 
-In general, CL houses documents scraped and collected from hundreds of sources and these documents take
-many varied formats and versions.
+ - Extract text from documents in various formats
+ - Convert audio files from one format to another while stripping messy metadata
+ - Create thumbnails of PDFs
 
-How to Use
-----------
-
-This tool is designed to be connected securely from CL via a docker network called cl_net_overlay.  But
-it can also be used directly by exposing port 5050.  For more about development of the tool see the
-(soon coming) DEVELOPING.md file.
+Under the hood, Doctor uses gunicorn to connect to a django service. The django service uses
+carefully configured implementations of `ffmpeg`, `pdftotext`, `tesseract`, `ghostscript`, and a
+number of other converters.
 
 
 Quick Start
@@ -27,20 +22,19 @@ Assuming you have docker installed run:
 
     docker run -d -p 5050:5050 freelawproject/doctor:latest
 
-This will expose the endpoints on port 5050 with four gunicorn workers.
+This will expose the endpoints on port 5050 with one gunicorn worker. This is usually ideal because it allows you to horizontally scale Doctor using an orchestration system like Kubernetes.
 
-If you wish to have more gunicorn workers, you'll want to set the DOCTOR_WORKERS environment variable. You can do that
-with:
+If you are not using a system that supports horizontal scaling, you may wish to have more gunicorn workers so that Doctor can handle more simultaneous tasks. To set that up, simply set the DOCTOR_WORKERS environment variable:
 
     docker run -d -p 5050:5050 -e DOCTOR_WORKERS=16 freelawproject/doctor:latest
 
-If you are doing OCR, you will certainly want more workers.
+If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving Doctor many workers becomes particularly important. If it does not have a worker available, your call to Doctor will probably time out.
 
 After the image is running, you should be able to test that you have a working environment by running
 
     curl http://localhost:5050
 
-which should return a text response.
+which should return a text response:
 
     Heartbeat detected.
 
