@@ -1,14 +1,17 @@
-0.2.14
-
 ## Current
+
+**0.2.15 - 2022-07-27**
+
+Fixes:
+ - Adds PyCryptodome in order to handle encrypted PDFs ([144](https://github.com/freelawproject/doctor/issues/144))
+
+## Previous Versions
 
 **0.2.14 - 2022-07-26**
 
 Features:
  - Adds sentry integration
  - Adds django-environ to allow environment variables for Django settings
-
-## Previous Versions
 
 **0.2.13 - 2022-06-02**
 
