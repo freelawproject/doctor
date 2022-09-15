@@ -17,7 +17,14 @@ import eyed3
 
 from django.core.exceptions import BadRequest
 
-from doctor.forms import AudioForm, DocumentForm, ImagePdfForm, MimeForm, ThumbnailForm
+from doctor.forms import (
+    AudioForm,
+    BaseFileForm,
+    DocumentForm,
+    ImagePdfForm,
+    MimeForm,
+    ThumbnailForm,
+)
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
@@ -28,6 +35,7 @@ from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
     convert_to_mp3,
     download_images,
+    get_document_number_from_pdf,
     extract_from_doc,
     extract_from_docx,
     extract_from_html,
@@ -348,3 +356,20 @@ def embed_text(request) -> Union[FileResponse, HttpResponse]:
             response = FileResponse(img)
             cleanup_form(form)
             return response
+
+
+def get_document_number(request) -> HttpResponse:
+    """Get PACER document number from PDF
+
+    :param request: The request object
+    :return: PACER document number
+    """
+
+    form = BaseFileForm(request.GET, request.FILES)
+    if not form.is_valid():
+        validation_message = form.errors.get_json_data()["__all__"][0]["message"]
+        return HttpResponse(validation_message, status=NOT_ACCEPTABLE)
+    fp = form.cleaned_data["fp"]
+    document_number = get_document_number_from_pdf(fp)
+    cleanup_form(form)
+    return HttpResponse(document_number)

@@ -27,6 +27,7 @@ urlpatterns = [
     # Utils
     path("pg-count/", views.page_count, name="page_count"),
     path("mime-type/", views.extract_mime_type, name="mime_type"),
+    path("get-document-number/", views.get_document_number, name="get-document-number"),
     # Converters
     path("image-to-pdf/", views.image_to_pdf, name="image-to-pdf"),
     path("thumbnail/", views.make_png_thumbnail, name="thumbnail"),
