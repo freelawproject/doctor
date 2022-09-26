@@ -581,9 +581,7 @@ def clean_document_number(document_number: str) -> str:
     return document_number
 
 
-def get_document_number_from_pdf(
-    path: str,
-) -> str:
+def get_document_number_from_pdf(path: str) -> str:
     """Get PACER document number from PDF.
 
     :param path: The path to the PDF
