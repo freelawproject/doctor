@@ -21,13 +21,17 @@ urlpatterns = [
     ),
     path("utils/audio/duration/", views.fetch_audio_duration, name="audio-duration"),
     path("utils/add/text/pdf/", views.embed_text, name="add-text-to-pdf"),
+    path(
+        "utils/document-number/pdf/",
+        views.get_document_number,
+        name="document-number-pdf",
+    ),
     # Extractors
     path("text/", views.extract_pdf, name="text"),
     path("extract-doc-content/", views.extract_doc_content, name="extract-doc-content"),
     # Utils
     path("pg-count/", views.page_count, name="page_count"),
     path("mime-type/", views.extract_mime_type, name="mime_type"),
-    path("get-document-number/", views.get_document_number, name="get-document-number"),
     # Converters
     path("image-to-pdf/", views.image_to_pdf, name="image-to-pdf"),
     path("thumbnail/", views.make_png_thumbnail, name="thumbnail"),

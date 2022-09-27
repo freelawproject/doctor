@@ -298,7 +298,7 @@ class MetadataTests(unittest.TestCase):
                 files = {"file": (filename, f.read())}
 
                 document_number = requests.post(
-                    "http://cl-doctor:5050/get-document-number/", files=files
+                    "http://cl-doctor:5050/utils/document-number/pdf/", files=files
                 ).text
 
             self.assertEqual(doc_num, document_number)

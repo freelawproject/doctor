@@ -1,6 +1,6 @@
 import os
 import re
-from http.client import BAD_REQUEST
+from http.client import BAD_REQUEST, INTERNAL_SERVER_ERROR
 from tempfile import NamedTemporaryFile
 from typing import Union
 
@@ -73,7 +73,7 @@ def extract_pdf(request) -> HttpResponse:
         cleanup_form(form)
         return HttpResponse(f"{content}")
     except Exception as e:
-        return HttpResponse(str(e), status=BAD_REQUEST)
+        return HttpResponse(str(e), status=INTERNAL_SERVER_ERROR)
 
 
 def image_to_pdf(request) -> HttpResponse:
