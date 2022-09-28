@@ -2,6 +2,8 @@ import asyncio
 import base64
 import io
 import os
+import pdfplumber
+import re
 import subprocess
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr, ByteString, Dict, List
@@ -550,3 +552,49 @@ def best_case_name(audio_dict: Dict) -> AnyStr:
         return audio_dict["case_name_full"]
     else:
         return audio_dict.get("case_name_short", "")
+
+
+def get_header_stamp(obj: Dict) -> bool:
+    """pdfplumber filter to extract the PDF header stamp.
+
+    :param obj: The page object to evaluate.
+    :return: True if the found it, otherwise False.
+    """
+
+    # This option works for most juridictions except for ca5
+    if "LiberationSans" in obj.get("fontname", ""):
+        return True
+    # Exception for ca5
+    if obj["y0"] > 750:
+        return True
+    return False
+
+
+def clean_document_number(document_number: str) -> str:
+    """Removes #, leading and ending whitespaces from the document number.
+
+    :param document_number: The document number to clean
+    :return: The cleaned document number.
+    """
+    document_number = document_number.strip()
+    document_number = document_number.replace("#", "")
+    return document_number
+
+
+def get_document_number_from_pdf(path: str) -> str:
+    """Get PACER document number from PDF.
+
+    :param path: The path to the PDF
+    :return: The PACER document number.
+    """
+
+    with pdfplumber.open(path) as f:
+        header_stamp = f.pages[0].filter(get_header_stamp).extract_text()
+
+    # regex options to extract the document number
+    regex = r"Document:(.[0-9.\-.\#]+)|Document(.[0-9.\-.\#]+)|Doc:(.[0-9.\-.\#]+)|DktEntry:(.[0-9.\-.\#]+)"
+    document_number_matches = re.findall(regex, header_stamp)
+
+    # If not matches are found, let's fail it loud
+    document_number = [dn for dn in document_number_matches[0] if dn]
+    return clean_document_number(document_number[0])

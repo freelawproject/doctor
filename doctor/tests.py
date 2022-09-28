@@ -1,4 +1,6 @@
 import json
+import os
+import glob
 import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -279,6 +281,27 @@ class MetadataTests(unittest.TestCase):
                 response.text,
                 msg=response.text,
             )
+
+    def test_get_document_number(self):
+        """Check if the PACER document number is correctly extracted from
+        documents from multiple jurisdictions.
+        """
+
+        filepath = f"{Path.cwd()}/doctor/test_assets/recap_documents/"
+        for file in glob.glob(os.path.join(filepath, "*.pdf")):
+
+            filename = os.path.relpath(file, filepath)
+            filename_sans_ext = filename.split(".")[0]
+            doc_num = filename_sans_ext.split("_")[1]
+
+            with open(file, "rb") as f:
+                files = {"file": (filename, f.read())}
+
+                document_number = requests.post(
+                    "http://cl-doctor:5050/utils/document-number/pdf/", files=files
+                ).text
+
+            self.assertEqual(doc_num, document_number)
 
 
 class ImageDisclosuresTest(unittest.TestCase):

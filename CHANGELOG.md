@@ -1,11 +1,16 @@
 ## Current
 
+**0.2.16 - 2022-09-28**
+
+Features:
+ - Adds /utils/document-number/pdf/ service that returns the PACER document number from a RECAP PDF document.
+
+## Previous Versions
+
 **0.2.15 - 2022-07-27**
 
 Fixes:
  - Adds PyCryptodome in order to handle encrypted PDFs ([144](https://github.com/freelawproject/doctor/issues/144))
-
-## Previous Versions
 
 **0.2.14 - 2022-07-26**
 

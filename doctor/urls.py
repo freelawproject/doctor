@@ -21,6 +21,11 @@ urlpatterns = [
     ),
     path("utils/audio/duration/", views.fetch_audio_duration, name="audio-duration"),
     path("utils/add/text/pdf/", views.embed_text, name="add-text-to-pdf"),
+    path(
+        "utils/document-number/pdf/",
+        views.get_document_number,
+        name="document-number-pdf",
+    ),
     # Extractors
     path("text/", views.extract_pdf, name="text"),
     path("extract-doc-content/", views.extract_doc_content, name="extract-doc-content"),

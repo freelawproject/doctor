@@ -152,6 +152,17 @@ This endpoint returns the duration of an MP3 file.
      -X 'POST' \
      -F "file=@doctor/test_assets/1.mp3"
 
+#### Endpoint: /utils/document-number/pdf/
+
+This method takes a RECAP document and returns its PACER document number.
+
+    curl 'http://localhost:5050/utils/document-number/pdf/' \
+     -X 'POST' \
+     -F "file=@doctor/test_assets/recap_documents/ca2_1-1.pdf"
+
+This will return an HTTP response with the document number.  In the above example it would return __1-1__.
+
+
 ## Converters
 
 #### Endpoint: /convert/image/pdf/
