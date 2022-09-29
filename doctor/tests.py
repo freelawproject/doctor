@@ -168,7 +168,7 @@ class ThumbnailTests(unittest.TestCase):
         response = requests.post(
             "http://cl-doctor:5050/convert/pdf/thumbnail/", files=files
         )
-        self.assertEqual(response.status_code, 406, msg="Wrong status code")
+        self.assertEqual(response.status_code, 400, msg="Wrong status code")
 
 
 class MetadataTests(unittest.TestCase):
@@ -385,14 +385,14 @@ class AudioConversionTests(unittest.TestCase):
 
 
 class TestFailedValidations(unittest.TestCase):
-    def test_for_406s(self):
+    def test_for_400s(self):
         """Test validation for missing audio file"""
         response = requests.post(
             "http://cl-doctor:5050/utils/audio/duration/",
         )
-        self.assertEqual(response.status_code, 406, msg="Wrong validation")
+        self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
-    def test_pdf_406s(self):
+    def test_pdf_400s(self):
         """Test validation for missing PDF file"""
         response = requests.post(
             "http://cl-doctor:5050/extract/pdf/text/",
@@ -400,15 +400,15 @@ class TestFailedValidations(unittest.TestCase):
         self.assertEqual(
             "File is missing.", response.text, msg="Wrong validation error"
         )
-        self.assertEqual(response.status_code, 406, msg="Wrong validation")
+        self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
-    def test_pdf_406_mime(self):
-        "Test return 406 on missing file for mime extraction"
+    def test_pdf_400_mime(self):
+        "Test return 400 on missing file for mime extraction"
         response = requests.post(
             "http://cl-doctor:5050/utils/file/mime/",
             params={"mime": True},
         )
-        self.assertEqual(response.status_code, 406, msg="Wrong validation")
+        self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
 
 if __name__ == "__main__":
