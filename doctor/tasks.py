@@ -162,14 +162,6 @@ def get_page_count(path, extension):
     return None
 
 
-# def extract_from_pdf(tmp_tiff):
-#     pipe = subprocess.PIPE
-#     tesseract_cmd = ["tesseract", tmp_tiff, "stdout", "-l", "eng"]
-#     process = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
-#     content, err = process.communicate()
-#     return content.decode("utf-8"), err, process.returncode
-
-
 def extract_from_pdf(
     path: str,
     ocr_available: bool = False,
@@ -184,7 +176,6 @@ def extract_from_pdf(
     If a text-based PDF we fix corrupt PDFs from ca9.
 
     :param path: The path to the PDF
-    :param opinion: The Opinion associated with the PDF
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """

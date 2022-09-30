@@ -94,6 +94,5 @@ class DocumentForm(BaseFileForm):
     mime = forms.BooleanField(label="mime", required=False)
 
     def clean(self):
-        """"""
         self.clean_file()
         return self.cleaned_data
