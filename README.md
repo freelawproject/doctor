@@ -58,35 +58,46 @@ A brief description and curl command for each endpoint is provided below.
 
 ## Extractors
 
-##### Endpoint: /extract/pdf/text/
-
-Given a pdf, extract the text from it.  
-
-    curl 'http://localhost:5050/extract/pdf/text/?ocr_available=True' \
-     -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf"
-
 ##### Endpoint: /extract/doc/text/
 
-This is an important endpoint. Given a document it will extract out the text and return a page count (if possible)
-along with general metadata used in CL.
+Given a document, extract out the text and assorted metadata. Supports the following document types:
 
-    curl 'http://localhost:5050/extract/doc/text/' \
-     -X 'POST' \
-     -F "file=@doctor/test_assets/vector-pdf.pdf"
+ - `pdf` - Adobe portable document format files, via `pdftotext`.
+ - `doc` - Word document files, via `antiword`.
+ - `docx` - Open Office XML files, via `docx2txt`.
+ - `html` - HTML files, via `lxml.html.clean.Cleaner`. Strips out dangerous tags and hoists their contents to their parent. Hoisted tags include: `a`, `body`, `font`, `noscript`, and `img`.
+ - `txt` - Text files. This attempts to normalize all encoding questions to utf-8. First, we try cp1251, then utf-8, ignoring errors.
+ - `wpd` - Word Perfect files, via `wpd2html` followed by cleaning the HTML as above.
 
-or if you need to OCR the document you pass in the ocr_available parameter.
+```bash
+curl 'http://localhost:5050/extract/doc/text/' \
+  -X 'POST' \
+  -F "file=@doctor/test_assets/vector-pdf.pdf"
+```
 
-    curl 'http://localhost:5050/extract/doc/text/?ocr_available=True' \
-     -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf"
+Parameters:
 
-Presuming that the request was valid you should receive the following JSON response back.
+ - `ocr_available`: Whether doctor should use tesseract to provide OCR services for the document. OCR is always possible in doctor, but sometimes you won't want to use it, since it can be slow. If you want it disabled for this request, omit this optional parameter. To enable it, set ocr_available to `True`:
 
-This returns an JSON Response
-And includes the following keys `extracted_by_ocr`, `err`, `page_count`, `content`
+```bash
+curl 'http://localhost:5050/extract/doc/text/?ocr_available=True' \
+  -X 'POST' \
+  -F "file=@doctor/test_assets/image-pdf.pdf"
+```
 
-The method accepts **PDF** (image and vector), **DOC, DOCX, HTML, TXT and WPD** files.
+Magic:
+
+ - The mimetype of the file will be determined by the name of the file you pass in. For example, if you pass in medical_assessment.pdf, the `pdf` extractor will be used.
+
+Valid requests will receive a JSON response with the following keys:
+
+ - `content`: The utf-8 encoded text of the file
+ - `err`: An error message, if one should occur.
+ - `extension`: The sniffed extension of the file.
+ - `extracted_by_ocr`: Whether OCR was needed and used during processing.
+ - `page_count`: The number of pages, if it applies.
+}
+
 
 ## Utilities
 
