@@ -65,11 +65,15 @@ def extract_pdf(request) -> HttpResponse:
     try:
         form = DocumentForm(request.GET, request.FILES)
         if not form.is_valid():
-            validation_message = form.errors.get_json_data()["__all__"][0]["message"]
+            validation_message = form.errors.get_json_data()["__all__"][0][
+                "message"
+            ]
             return HttpResponse(validation_message, status=BAD_REQUEST)
         fp = form.cleaned_data["fp"]
         ocr_available = form.cleaned_data["ocr_available"]
-        content, err, returncode, extracted_by_ocr = extract_from_pdf(fp, ocr_available)
+        content, err, returncode, extracted_by_ocr = extract_from_pdf(
+            fp, ocr_available
+        )
         cleanup_form(form)
         return HttpResponse(f"{content}")
     except Exception as e:
@@ -106,7 +110,9 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     fp = form.cleaned_data["fp"]
     extracted_by_ocr = False
     if extension == "pdf":
-        content, err, returncode, extracted_by_ocr = extract_from_pdf(fp, ocr_available)
+        content, err, returncode, extracted_by_ocr = extract_from_pdf(
+            fp, ocr_available
+        )
     elif extension == "doc":
         content, err, returncode = extract_from_doc(fp)
     elif extension == "docx":
@@ -336,7 +342,9 @@ def embed_text(request) -> Union[FileResponse, HttpResponse]:
     fp = form.cleaned_data["fp"]
     with NamedTemporaryFile(suffix=".tiff") as destination:
         rasterize_pdf(fp, destination.name)
-        data = pytesseract.image_to_data(destination.name, output_type=Output.DICT)
+        data = pytesseract.image_to_data(
+            destination.name, output_type=Output.DICT
+        )
         image = Image.open(destination.name)
         w, h = image.width, image.height
         output = PdfFileWriter()
@@ -367,7 +375,9 @@ def get_document_number(request) -> HttpResponse:
 
     form = BaseFileForm(request.GET, request.FILES)
     if not form.is_valid():
-        validation_message = form.errors.get_json_data()["__all__"][0]["message"]
+        validation_message = form.errors.get_json_data()["__all__"][0][
+            "message"
+        ]
         return HttpResponse(validation_message, status=BAD_REQUEST)
     fp = form.cleaned_data["fp"]
     document_number = get_document_number_from_pdf(fp)

@@ -17,7 +17,9 @@ class HeartbeatTests(unittest.TestCase):
     def test_heartbeat(self):
         """Can we curl the heartbeat endpoint?"""
         response = requests.get("http://cl-doctor:5050/")
-        self.assertEqual(response.text, "Heartbeat detected.", msg="Heartbeat failed")
+        self.assertEqual(
+            response.text, "Heartbeat detected.", msg="Heartbeat failed"
+        )
 
 
 class ExtractionTests(unittest.TestCase):
@@ -63,7 +65,9 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"ocr_available": True}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/", files=files, params=params
+            "http://cl-doctor:5050/extract/doc/text/",
+            files=files,
+            params=params,
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
@@ -193,7 +197,9 @@ class MetadataTests(unittest.TestCase):
         ).json()
         print(response)
         self.assertEqual(
-            response["mimetype"], "application/pdf", msg="Failed to get mime type"
+            response["mimetype"],
+            "application/pdf",
+            msg="Failed to get mime type",
         )
 
     def test_broken_mime_type(self):
@@ -227,7 +233,9 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(
             response["mime"], "application/pdf", msg="Failed to get mime type"
         )
-        self.assertEqual(response["extension"], ".pdf", msg="Failed to get extension")
+        self.assertEqual(
+            response["extension"], ".pdf", msg="Failed to get extension"
+        )
 
     def test_get_extension(self):
         """"""
@@ -257,7 +265,9 @@ class MetadataTests(unittest.TestCase):
             "http://cl-doctor:5050/extract/pdf/text/", files=files, data=data
         )
         self.assertEqual(
-            "", image_response.text.strip("\x0c\x0c"), msg="PDF should have no text"
+            "",
+            image_response.text.strip("\x0c\x0c"),
+            msg="PDF should have no text",
         )
 
         # Embed text into the image pdf and check that we get some text
@@ -298,7 +308,8 @@ class MetadataTests(unittest.TestCase):
                 files = {"file": (filename, f.read())}
 
                 document_number = requests.post(
-                    "http://cl-doctor:5050/utils/document-number/pdf/", files=files
+                    "http://cl-doctor:5050/utils/document-number/pdf/",
+                    files=files,
                 ).text
 
             self.assertEqual(doc_num, document_number)
@@ -381,7 +392,9 @@ class AudioConversionTests(unittest.TestCase):
             "http://cl-doctor:5050/utils/audio/duration/",
             files=files,
         )
-        self.assertEqual(51.64773161867487, float(response.text), msg="Bad duration")
+        self.assertEqual(
+            51.64773161867487, float(response.text), msg="Bad duration"
+        )
 
 
 class TestFailedValidations(unittest.TestCase):

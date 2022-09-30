@@ -54,7 +54,8 @@ def force_bytes(s, encoding="utf-8", strings_only=False, errors="strict"):
                 # know how to print itself properly. We shouldn't raise a
                 # further exception.
                 return b" ".join(
-                    force_bytes(arg, encoding, strings_only, errors) for arg in s
+                    force_bytes(arg, encoding, strings_only, errors)
+                    for arg in s
                 )
             return six.text_type(s).encode(encoding, errors)
     else:
@@ -98,7 +99,9 @@ def force_text(s, encoding="utf-8", strings_only=False, errors="strict"):
             # working unicode method. Try to handle this without raising a
             # further exception by individually forcing the exception args
             # to unicode.
-            s = " ".join(force_text(arg, encoding, strings_only, errors) for arg in s)
+            s = " ".join(
+                force_text(arg, encoding, strings_only, errors) for arg in s
+            )
     return s
 
 
@@ -206,7 +209,10 @@ def make_png_thumbnails(filepath, max_dimension, pages, directory):
             f"{directory.name}/thumb-{page}",
         ]
         p = subprocess.Popen(
-            command, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            command,
+            close_fds=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         p.communicate()
 
@@ -327,7 +333,12 @@ def make_page_with_text(page, data, h, w):
         try:
             letter, (x, y, ww, hh), pg = (
                 data["text"][i],
-                (data["left"][i], data["top"][i], data["width"][i], data["height"][i]),
+                (
+                    data["left"][i],
+                    data["top"][i],
+                    data["width"][i],
+                    data["height"][i],
+                ),
                 data["page_num"][i],
             )
         except:
