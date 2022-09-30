@@ -30,7 +30,7 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
-        text = response.text[:100].replace("\n", "").strip()
+        text = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(200, response.status_code, msg="Wrong status code")
         self.assertEqual(
             text,
@@ -231,10 +231,9 @@ class MetadataTests(unittest.TestCase):
             params={"mime": True},
         ).json()
         self.assertEqual(
-            response["mime"], "application/pdf", msg="Failed to get mime type"
-        )
-        self.assertEqual(
-            response["extension"], ".pdf", msg="Failed to get extension"
+            response["mimetype"],
+            "application/pdf",
+            msg="Failed to get mime type",
         )
 
     def test_get_extension(self):
@@ -266,7 +265,7 @@ class MetadataTests(unittest.TestCase):
         )
         self.assertEqual(
             "",
-            image_response.text.strip("\x0c\x0c"),
+            image_response.json()["content"].strip("\x0c\x0c"),
             msg="PDF should have no text",
         )
 
@@ -288,8 +287,8 @@ class MetadataTests(unittest.TestCase):
             )
             self.assertIn(
                 "(SlipOpinion)             OCTOBER TERM, 2012",
-                response.text,
-                msg=response.text,
+                response.json()["content"],
+                msg=f"Got {response.json()}",
             )
 
     def test_get_document_number(self):
@@ -411,12 +410,14 @@ class TestFailedValidations(unittest.TestCase):
             "http://doctor:5050/extract/doc/text/",
         )
         self.assertEqual(
-            "File is missing.", response.text, msg="Wrong validation error"
+            "Failed validation",
+            response.text,
+            msg="Wrong validation error",
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
     def test_pdf_400_mime(self):
-        "Test return 400 on missing file for mime extraction"
+        """Test return 400 on missing file for mime extraction"""
         response = requests.post(
             "http://doctor:5050/utils/mime-type/",
             params={"mime": True},

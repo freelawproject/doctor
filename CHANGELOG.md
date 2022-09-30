@@ -1,11 +1,33 @@
 ## Current
 
+**0.3.0 - 2022-09-30**
+
+Features:
+ - Code cleanup and reformatting.
+ - Documentation enhancements.
+ - Removal of dead code.
+
+Changes:
+ - Removes a number of URLs that were duplicative:
+   - `/extract/pdf/text/`: Use `/extract/doc/text/` instead. They ran the same code under the covers, but their returns are slightly different. Generally, if you used something like `response.text` before, you should use `response.json()["content"]` now.
+   - `/utils/file/mime/`: Use `/utils/mime-type/` instead. If you used `response.json()["mime"]` before, use `response.json()["mimetype"]` now.
+   - These endpoints were never documented:
+     - `/text/`, `/document/pdf-to-text/`, and `/extract-doc-content/`: Use `/extract/doc/text/` instead.
+     - `/pg-count/` and `/document/page_count/`:  Use `/utils/page-count/pdf/` instead.
+     - `/mime-type/`: Use `/utils/mime-type/` instead.
+     - `/image-to-pdf/`: Use `/convert/image/pdf/` instead.
+     - `/images-to-pdf/`: Use `/convert/images/pdf/` instead.
+     - `/thumbnail/`: Use `/convert/pdf/thumbnail/` instead.
+     - `/convert-audio/`: Use `/convert/audio/mp3/` instead.
+     - `/document/thumbnail/`: Use `/convert/pdf/thumbnail/` instead.
+ - Tweaks the tests to use new container names that are less likely to conflict with existing containers.
+
+## Previous Versions
+
 **0.2.16 - 2022-09-28**
 
 Features:
  - Adds /utils/document-number/pdf/ service that returns the PACER document number from a RECAP PDF document.
-
-## Previous Versions
 
 **0.2.15 - 2022-07-27**
 

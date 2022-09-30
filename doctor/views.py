@@ -59,27 +59,6 @@ def heartbeat(request) -> HttpResponse:
     return HttpResponse("Heartbeat detected.")
 
 
-def extract_pdf(request) -> HttpResponse:
-    """"""
-
-    try:
-        form = DocumentForm(request.GET, request.FILES)
-        if not form.is_valid():
-            validation_message = form.errors.get_json_data()["__all__"][0][
-                "message"
-            ]
-            return HttpResponse(validation_message, status=BAD_REQUEST)
-        fp = form.cleaned_data["fp"]
-        ocr_available = form.cleaned_data["ocr_available"]
-        content, err, returncode, extracted_by_ocr = extract_from_pdf(
-            fp, ocr_available
-        )
-        cleanup_form(form)
-        return HttpResponse(f"{content}")
-    except Exception as e:
-        return HttpResponse(str(e), status=INTERNAL_SERVER_ERROR)
-
-
 def image_to_pdf(request) -> HttpResponse:
     """"""
 
@@ -129,7 +108,7 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
 
     # Get page count if you can
     page_count = get_page_count(fp, extension)
-    os.remove(form.cleaned_data["fp"])
+    cleanup_form(form)
     return JsonResponse(
         {
             "content": content,
@@ -186,18 +165,6 @@ def extract_mime_type(request) -> Union[JsonResponse, HttpResponse]:
     mimetype = magic.from_file(form.cleaned_data["fp"], mime=mime)
     cleanup_form(form)
     return JsonResponse({"mimetype": mimetype})
-
-
-def extract_mime_from_buffer(request) -> HttpResponse:
-    """Extract mime from buffer request"""
-    form = MimeForm(request.POST, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-
-    file_buffer = form.cleaned_data["file"].read()
-    mime = magic.from_buffer(file_buffer, mime=True)
-    extension = mimetypes.guess_extension(mime)
-    return JsonResponse({"mime": mime, "extension": extension})
 
 
 def extract_extension(request) -> HttpResponse:
