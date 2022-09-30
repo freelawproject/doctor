@@ -1,30 +1,32 @@
-## Notes
-
-As this is a microservice of Courtlistener, tests are designed to be run from a Mock Courtlistener instance
-to verify that the service works as expected and also works across a docker network.  
+This is a microservice, so tests are designed to be run from a mock web 
+application that calls to this service.  
 
 ## Quick start
 
+To build the microservice and start it up, run:
+
     docker-compose -f docker-compose.dev.yml up --build -d
+
+To see logs:
+
+    ocker-compose -f docker-compose.dev.yml logs -f
 
 
 ## Testing
 
-Testing is setup with the following default that our tests are run from
-a container on the same network as the Doctor machine.  This is modeled after
-how we plan to use the Doctor image for CL.
+Once the above compose file is running, you can use the `mock_web_app` 
+container to run the tests against the `doctor` container:
 
-    docker-compose -f docker-compose.dev.yml up --build -d
+    docker exec -it mock_web_app_doctor python3 -m unittest doctor.tests
 
-Starts the Doctor Container and the Mock CL Container that we run our tests from.
-
-    docker exec -it mock_cl_doctor python3 -m unittest doctor.tests
-
-This is a duplicate of the Doctor container, which we use for simplicity, but it
-makes the requests across the docker network.
 
 ## Building Images
 
-1. Bump the version number in version.txt.
+Generally, images are automatically built and pushed to the docker repo when 
+PRs are merged. If it needs to happen manually, try this:
 
-2. Run `make image --file docker/Makefile` to build or run `make push--file docker/Makefile` to push.
+`make image --file docker/Makefile`
+
+And pushed with:
+
+`make push--file docker/Makefile`
