@@ -2,11 +2,11 @@
 Doctor
 ------------------------------------
 
-Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifiying documents and audio files.
+Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifying documents and audio files.
 
 At a high level, this service provides you with high-performance HTTP endpoints that can:
 
- - Extract text from documents in various formats
+ - Extract text from various types of documents
  - Convert audio files from one format to another while stripping messy metadata
  - Create thumbnails of PDFs
 
@@ -46,19 +46,20 @@ ENDPOINTS
 
 The service currently supports the following tools:
 
+1. Extract text from PDF, RTF, DOC, DOCX, or WPD, HTML, TXT files.
+1. OCR text from a scanned PDF.
+1. Get page count for a PDF document.
 1. Convert audio files from wma, ogg, wav to MP3.
-2. Convert an image or images to a PDF.
-3. Identify the mime type of a file.
-4. OCR text from an image PDF.
-5. Extract text from PDF, RTF, DOC, DOCX, or WPD, HTML, TXT files.
-6. Create a thumbnail of the first page of a PDF.
-7. Get page count for a document.
+1. Create a thumbnail of the first page of a PDF (for use in Open Graph tags)
+1. Convert an image or images to a PDF.
+1. Identify the mime type of a file.
+
 
 A brief description and curl command for each endpoint is provided below.
 
 ## Extractors
 
-##### Endpoint: /extract/doc/text/
+### Endpoint: /extract/doc/text/
 
 Given a document, extract out the text and assorted metadata. Supports the following document types:
 
@@ -96,12 +97,11 @@ Valid requests will receive a JSON response with the following keys:
  - `extension`: The sniffed extension of the file.
  - `extracted_by_ocr`: Whether OCR was needed and used during processing.
  - `page_count`: The number of pages, if it applies.
-}
 
 
 ## Utilities
 
-#### Endpoint: /utils/page-count/pdf/
+### Endpoint: /utils/page-count/pdf/
 
 This method takes a document and returns the page count.
 
@@ -111,7 +111,7 @@ This method takes a document and returns the page count.
 
 This will return an HTTP response with page count.  In the above example it would return __2__.
 
-#### Endpoint: /utils/mime-type/
+### Endpoint: /utils/mime-type/
 
 This method takes a document and returns the mime type.
 
@@ -145,7 +145,7 @@ returns
 
 This method is useful for identifying the type of document, incorrect documents and weird documents.
 
-#### Endpoint: /utils/add/text/pdf/
+### Endpoint: /utils/add/text/pdf/
 
 This method will take an image PDF and return the PDF with transparent text overlayed on the document.
 This allows users to copy and paste (more or less) from our OCRd text.
@@ -155,7 +155,7 @@ This allows users to copy and paste (more or less) from our OCRd text.
      -F "file=@doctor/test_assets/image-pdf.pdf" \
      -o image-pdf-with-embedded-text.pdf
 
-#### Endpoint: /utils/audio/duration/
+### Endpoint: /utils/audio/duration/
 
 This endpoint returns the duration of an MP3 file.
 
@@ -163,9 +163,9 @@ This endpoint returns the duration of an MP3 file.
      -X 'POST' \
      -F "file=@doctor/test_assets/1.mp3"
 
-#### Endpoint: /utils/document-number/pdf/
+### Endpoint: /utils/document-number/pdf/
 
-This method takes a RECAP document and returns its PACER document number.
+This method takes a document from the federal filing system and returns its document entry number.
 
     curl 'http://localhost:5050/utils/document-number/pdf/' \
      -X 'POST' \
@@ -176,9 +176,9 @@ This will return an HTTP response with the document number.  In the above exampl
 
 ## Converters
 
-#### Endpoint: /convert/image/pdf/
+### Endpoint: /convert/image/pdf/
 
-Given an image or indeterminate length, this endpoint will convert it to a pdf.
+Given an image of indeterminate length, this endpoint will convert it to a pdf with reasonable page breaks. This is meant for extremely long images that represent multi-page documents, but can be used to convert a smaller image to a one-page PDF.
 
     curl 'http://localhost:5050/convert/image/pdf/' \
      -X 'POST' \
@@ -187,9 +187,9 @@ Given an image or indeterminate length, this endpoint will convert it to a pdf.
 
 Keep in mind that this curl will write the file to the current directory.
 
-#### Endpoint: /convert/images/pdf/
+### Endpoint: /convert/images/pdf/
 
-Given a list of urls for images, this endpoint will convert them to a pdf.
+Given a list of urls for images, this endpoint will convert them to a pdf. This can be used to convert multiple images to a multi-page PDF. We use this to convert financial disclosure images to simple PDFs.
 
     curl 'http://localhost:5050/convert/images/pdf/?sorted_urls=%5B%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_1.tiff%22%2C+%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_2.tiff%22%5D' \
         -X POST \
@@ -197,9 +197,8 @@ Given a list of urls for images, this endpoint will convert them to a pdf.
 
 This returns the binary data of the pdf.
 
-This method is used almost exclusively for financial disclosures.
 
-#### Endpoint: /convert/pdf/thumbnail/
+### Endpoint: /convert/pdf/thumbnail/
 
 Thumbnail takes a pdf and returns a png thumbnail of the first page.
 
@@ -212,10 +211,10 @@ This returns the binary data of the thumbnail.
 
 Keep in mind that this curl will also write the file to the current directory.
 
-#### Endpoint: /convert/pdf/thumbnails/
+### Endpoint: /convert/pdf/thumbnails/
 
 Give a PDF and a range or pages, this endpoint will return a zip file containing thumbnails
-for each page requested.  For example if you want thumbnails for the first four pages you
+for each page requested.  For example if you want thumbnails for the first four pages:
 
     curl 'http://localhost:5050/convert/pdf/thumbnails/?max_dimension=350&pages=%5B1%2C+2%2C+3%2C+4%5D' \
      -X 'POST' \
@@ -224,7 +223,7 @@ for each page requested.  For example if you want thumbnails for the first four 
 
 This will return four thumbnails in a zip file.
 
-#### Endpoint: /convert/audio/mp3/
+### Endpoint: /convert/audio/mp3/
 
 This endpoint takes an audio file and converts it to an MP3 file.  This is used to convert different audio formats
 from courts across the country and standardizes the format for our end users.  
