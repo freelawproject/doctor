@@ -391,9 +391,7 @@ class AudioConversionTests(unittest.TestCase):
             "http://doctor:5050/utils/audio/duration/",
             files=files,
         )
-        self.assertEqual(
-            51.64773161867487, float(response.text), msg="Bad duration"
-        )
+        self.assertEqual(51.64, float(response.text), msg="Bad duration")
 
 
 class TestFailedValidations(unittest.TestCase):
