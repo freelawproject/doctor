@@ -16,8 +16,10 @@ asset_path = f"{Path.cwd()}/doctor/test_assets"
 class HeartbeatTests(unittest.TestCase):
     def test_heartbeat(self):
         """Can we curl the heartbeat endpoint?"""
-        response = requests.get("http://cl-doctor:5050/")
-        self.assertEqual(response.text, "Heartbeat detected.", msg="Heartbeat failed")
+        response = requests.get("http://doctor:5050/")
+        self.assertEqual(
+            response.text, "Heartbeat detected.", msg="Heartbeat failed"
+        )
 
 
 class ExtractionTests(unittest.TestCase):
@@ -26,9 +28,9 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": True}
         response = requests.post(
-            "http://cl-doctor:5050/extract/pdf/text/", files=files, data=data
+            "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
-        text = response.text[:100].replace("\n", "").strip()
+        text = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(200, response.status_code, msg="Wrong status code")
         self.assertEqual(
             text,
@@ -41,7 +43,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
+            "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
@@ -63,7 +65,9 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"ocr_available": True}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/", files=files, params=params
+            "http://doctor:5050/extract/doc/text/",
+            files=files,
+            params=params,
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
@@ -81,7 +85,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/",
+            "http://doctor:5050/extract/doc/text/",
             files=files,
             params=params,
         )
@@ -96,7 +100,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-doc.doc")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
+            "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
@@ -115,7 +119,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-perfect.wpd")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://cl-doctor:5050/extract/doc/text/", files=files, data=data
+            "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertIn(
@@ -148,7 +152,7 @@ class ThumbnailTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
         response = requests.post(
-            "http://cl-doctor:5050/convert/pdf/thumbnail/",
+            "http://doctor:5050/convert/pdf/thumbnail/",
             files=files,
             data=data,
         )
@@ -158,7 +162,7 @@ class ThumbnailTests(unittest.TestCase):
 
         files = make_file(filename="image-pdf-2.pdf")
         response = requests.post(
-            "http://cl-doctor:5050/convert/pdf/thumbnail/", files=files
+            "http://doctor:5050/convert/pdf/thumbnail/", files=files
         )
         with open("doctor/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
             second_answer = f.read()
@@ -166,7 +170,7 @@ class ThumbnailTests(unittest.TestCase):
 
         files = make_file(filename="empty.pdf")
         response = requests.post(
-            "http://cl-doctor:5050/convert/pdf/thumbnail/", files=files
+            "http://doctor:5050/convert/pdf/thumbnail/", files=files
         )
         self.assertEqual(response.status_code, 400, msg="Wrong status code")
 
@@ -178,7 +182,7 @@ class MetadataTests(unittest.TestCase):
         """"""
         files = make_file(filename="image-pdf.pdf")
         page_count = requests.post(
-            "http://cl-doctor:5050/utils/page-count/pdf/", files=files
+            "http://doctor:5050/utils/page-count/pdf/", files=files
         ).text
         self.assertEqual(int(page_count), 2, "Failed to get page count")
 
@@ -187,13 +191,15 @@ class MetadataTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://cl-doctor:5050/utils/mime-type/",
+            "http://doctor:5050/utils/mime-type/",
             files=files,
             params=params,
         ).json()
         print(response)
         self.assertEqual(
-            response["mimetype"], "application/pdf", msg="Failed to get mime type"
+            response["mimetype"],
+            "application/pdf",
+            msg="Failed to get mime type",
         )
 
     def test_broken_mime_type(self):
@@ -201,7 +207,7 @@ class MetadataTests(unittest.TestCase):
         files = make_buffer(filename="broken-mime.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/extension/",
+            "http://doctor:5050/utils/file/extension/",
             files=files,
             params=params,
         )
@@ -210,7 +216,7 @@ class MetadataTests(unittest.TestCase):
         files = make_buffer(filename="missouri.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/extension/",
+            "http://doctor:5050/utils/file/extension/",
             files=files,
             params=params,
         )
@@ -220,31 +226,32 @@ class MetadataTests(unittest.TestCase):
         """"""
         files = make_buffer(filename="image-pdf.pdf")
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/mime/",
+            "http://doctor:5050/utils/mime-type/",
             files=files,
             params={"mime": True},
         ).json()
         self.assertEqual(
-            response["mime"], "application/pdf", msg="Failed to get mime type"
+            response["mimetype"],
+            "application/pdf",
+            msg="Failed to get mime type",
         )
-        self.assertEqual(response["extension"], ".pdf", msg="Failed to get extension")
 
     def test_get_extension(self):
         """"""
         files = make_buffer(filename="image-pdf.pdf")
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/extension/", files=files
+            "http://doctor:5050/utils/file/extension/", files=files
         )
         self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
 
         files = make_buffer(filename="word-docx.docx")
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/extension/", files=files
+            "http://doctor:5050/utils/file/extension/", files=files
         )
         self.assertEqual(response.text, ".docx", msg="Failed to get mime type")
         files = make_buffer(filename="word-doc.doc")
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/extension/", files=files
+            "http://doctor:5050/utils/file/extension/", files=files
         )
         self.assertEqual(response.text, ".doc", msg="Failed to get mime type")
 
@@ -254,15 +261,17 @@ class MetadataTests(unittest.TestCase):
 
         files = make_file(filename="image-pdf.pdf")
         image_response = requests.post(
-            "http://cl-doctor:5050/extract/pdf/text/", files=files, data=data
+            "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         self.assertEqual(
-            "", image_response.text.strip("\x0c\x0c"), msg="PDF should have no text"
+            "",
+            image_response.json()["content"].strip("\x0c\x0c"),
+            msg="PDF should have no text",
         )
 
         # Embed text into the image pdf and check that we get some text
         new_pdf = requests.post(
-            "http://cl-doctor:5050/utils/add/text/pdf/", files=files
+            "http://doctor:5050/utils/add/text/pdf/", files=files
         )
         with NamedTemporaryFile(suffix=".pdf") as tmp:
             with open(tmp.name, "wb") as f:
@@ -272,14 +281,14 @@ class MetadataTests(unittest.TestCase):
 
             # Confirm that text is now embedded in the PDF
             response = requests.post(
-                "http://cl-doctor:5050/extract/pdf/text/",
+                "http://doctor:5050/extract/doc/text/",
                 files=files,
                 data=data,
             )
             self.assertIn(
                 "(SlipOpinion)             OCTOBER TERM, 2012",
-                response.text,
-                msg=response.text,
+                response.json()["content"],
+                msg=f"Got {response.json()}",
             )
 
     def test_get_document_number(self):
@@ -298,7 +307,8 @@ class MetadataTests(unittest.TestCase):
                 files = {"file": (filename, f.read())}
 
                 document_number = requests.post(
-                    "http://cl-doctor:5050/utils/document-number/pdf/", files=files
+                    "http://doctor:5050/utils/document-number/pdf/",
+                    files=files,
                 ).text
 
             self.assertEqual(doc_num, document_number)
@@ -314,7 +324,7 @@ class ImageDisclosuresTest(unittest.TestCase):
         ]
         params = {"sorted_urls": json.dumps(sorted_urls)}
         response = requests.post(
-            "http://cl-doctor:5050/convert/images/pdf/",
+            "http://doctor:5050/convert/images/pdf/",
             params=params,
         )
         self.assertEqual(response.status_code, 200, msg="Failed status code.")
@@ -347,7 +357,7 @@ class AudioConversionTests(unittest.TestCase):
 
         files = make_file(filename="1.wma")
         response = requests.post(
-            "http://cl-doctor:5050/convert/audio/mp3/",
+            "http://doctor:5050/convert/audio/mp3/",
             files=files,
             params=audio_details,
         )
@@ -378,34 +388,36 @@ class AudioConversionTests(unittest.TestCase):
     def test_audio_duration(self):
         files = make_file(filename="1.mp3")
         response = requests.post(
-            "http://cl-doctor:5050/utils/audio/duration/",
+            "http://doctor:5050/utils/audio/duration/",
             files=files,
         )
-        self.assertEqual(51.64773161867487, float(response.text), msg="Bad duration")
+        self.assertEqual(51.64, float(response.text), msg="Bad duration")
 
 
 class TestFailedValidations(unittest.TestCase):
     def test_for_400s(self):
         """Test validation for missing audio file"""
         response = requests.post(
-            "http://cl-doctor:5050/utils/audio/duration/",
+            "http://doctor:5050/utils/audio/duration/",
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
     def test_pdf_400s(self):
         """Test validation for missing PDF file"""
         response = requests.post(
-            "http://cl-doctor:5050/extract/pdf/text/",
+            "http://doctor:5050/extract/doc/text/",
         )
         self.assertEqual(
-            "File is missing.", response.text, msg="Wrong validation error"
+            "Failed validation",
+            response.text,
+            msg="Wrong validation error",
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
     def test_pdf_400_mime(self):
-        "Test return 400 on missing file for mime extraction"
+        """Test return 400 on missing file for mime extraction"""
         response = requests.post(
-            "http://cl-doctor:5050/utils/file/mime/",
+            "http://doctor:5050/utils/mime-type/",
             params={"mime": True},
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")

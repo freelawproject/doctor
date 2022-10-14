@@ -1,13 +1,9 @@
 Django==3.2.6
 gunicorn==20.1.0
 PyPDF2[crypto]
-Pillow
-requests
-pdf2image
 certifi
 chardet>=3.0.4
 eyed3
-ipython
 python-magic
 idna==2.10
 img2pdf

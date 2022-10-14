@@ -162,14 +162,6 @@ def get_page_count(path, extension):
     return None
 
 
-# def extract_from_pdf(tmp_tiff):
-#     pipe = subprocess.PIPE
-#     tesseract_cmd = ["tesseract", tmp_tiff, "stdout", "-l", "eng"]
-#     process = subprocess.Popen(tesseract_cmd, stdout=pipe, stderr=pipe)
-#     content, err = process.communicate()
-#     return content.decode("utf-8"), err, process.returncode
-
-
 def extract_from_pdf(
     path: str,
     ocr_available: bool = False,
@@ -184,7 +176,6 @@ def extract_from_pdf(
     If a text-based PDF we fix corrupt PDFs from ca9.
 
     :param path: The path to the PDF
-    :param opinion: The Opinion associated with the PDF
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """
@@ -332,7 +323,9 @@ def extract_from_html(path):
 
 def get_clean_body_content(content):
     """Parse out the body from an html string, clean it up, and send it along."""
-    cleaner = Cleaner(style=True, remove_tags=["a", "body", "font", "noscript", "img"])
+    cleaner = Cleaner(
+        style=True, remove_tags=["a", "body", "font", "noscript", "img"]
+    )
     try:
         return cleaner.clean_html(content)
     except XMLSyntaxError:
@@ -409,7 +402,9 @@ def download_images(sorted_urls) -> List:
     async def main(urls):
         image_list = []
         loop = asyncio.get_event_loop()
-        futures = [loop.run_in_executor(None, requests.get, url) for url in urls]
+        futures = [
+            loop.run_in_executor(None, requests.get, url) for url in urls
+        ]
         for response in await asyncio.gather(*futures):
             image_list.append(response.content)
         return image_list
@@ -454,7 +449,9 @@ def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
     return output_path
 
 
-def set_mp3_meta_data(audio_data: Dict, mp3_path: AnyStr) -> eyed3.core.AudioFile:
+def set_mp3_meta_data(
+    audio_data: Dict, mp3_path: AnyStr
+) -> eyed3.core.AudioFile:
     """Set the metadata in audio_data to an mp3 at path.
 
     :param audio_data: The new metadata to embed in the mp3.
