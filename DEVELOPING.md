@@ -9,7 +9,9 @@ To build the microservice and start it up, run:
 
 To see logs:
 
-    ocker-compose -f docker-compose.dev.yml logs -f
+    docker-compose -f docker-compose.dev.yml logs -f
+
+If you want to see debug logs, set `DEBUG` to `True` in `settings.py`.
 
 
 ## Testing
