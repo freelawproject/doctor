@@ -16,7 +16,7 @@ from eyed3 import id3
 from lxml.etree import XMLSyntaxError
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
-from PyPDF2 import PdfFileMerger, PdfFileReader
+from PyPDF2 import PdfMerger, PdfReader
 from PyPDF2.errors import PdfReadError
 from seal_rookery.search import seal, ImageSizes
 
@@ -38,9 +38,9 @@ def strip_metadata_from_bytes(pdf_bytes):
     :param pdf_bytes: PDF as binary content
     :return: PDF bytes with metadata removed.
     """
-    pdf_merger = PdfFileMerger()
+    pdf_merger = PdfMerger()
     pdf_merger.append(io.BytesIO(pdf_bytes))
-    pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
+    pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
     byte_writer = io.BytesIO()
     pdf_merger.write(byte_writer)
     return force_bytes(byte_writer.getvalue())
@@ -135,8 +135,8 @@ def get_page_count(path, extension):
     """
     if extension == "pdf":
         try:
-            reader = PdfFileReader(path)
-            return int(reader.getNumPages())
+            reader = PdfReader(path)
+            return len(reader.pages)
         except (
             IOError,
             ValueError,

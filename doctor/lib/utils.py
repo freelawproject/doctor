@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import six
-from PyPDF2 import PdfFileMerger
+from PyPDF2 import PdfMerger
 from reportlab.pdfgen import canvas
 
 
@@ -244,9 +244,9 @@ def strip_metadata_from_path(file_path):
     :return: PDF bytes with metadata removed.
     """
     with open(file_path, "rb") as f:
-        pdf_merger = PdfFileMerger()
+        pdf_merger = PdfMerger()
         pdf_merger.append(io.BytesIO(f.read()))
-        pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
+        pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
         byte_writer = io.BytesIO()
         pdf_merger.write(byte_writer)
         return force_bytes(byte_writer.getvalue())
@@ -260,9 +260,9 @@ def strip_metadata_from_bytes(pdf_bytes):
     :param pdf_bytes: PDF as binary content
     :return: PDF bytes with metadata removed.
     """
-    pdf_merger = PdfFileMerger()
+    pdf_merger = PdfMerger()
     pdf_merger.append(io.BytesIO(pdf_bytes))
-    pdf_merger.addMetadata({"/CreationDate": "", "/ModDate": ""})
+    pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
     byte_writer = io.BytesIO()
     pdf_merger.write(byte_writer)
     return force_bytes(byte_writer.getvalue())
@@ -297,7 +297,7 @@ def pdf_has_images(path: str) -> bool:
     """
     with open(path, "rb") as pdf_file:
         pdf_bytes = pdf_file.read()
-        return True if re.search(rb"/Image ?/", pdf_bytes) else False
+        return True if re.search(rb"/Image ?", pdf_bytes) else False
 
 
 def ocr_needed(path: str, content: str) -> bool:

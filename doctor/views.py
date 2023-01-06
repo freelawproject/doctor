@@ -11,7 +11,7 @@ import pytesseract
 import requests
 from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image
-from PyPDF2 import PdfFileReader, PdfFileWriter
+from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
 import eyed3
 
@@ -314,14 +314,14 @@ def embed_text(request) -> Union[FileResponse, HttpResponse]:
         )
         image = Image.open(destination.name)
         w, h = image.width, image.height
-        output = PdfFileWriter()
-        existing_pdf = PdfFileReader(open(fp, "rb"))
-        for page in range(0, existing_pdf.getNumPages()):
+        output = PdfWriter()
+        existing_pdf = PdfReader(open(fp, "rb"))
+        for page in range(0, len(existing_pdf.pages)):
             packet = make_page_with_text(page + 1, data, h, w)
-            new_pdf = PdfFileReader(packet)
-            page = existing_pdf.getPage(page)
-            page.mergePage(new_pdf.getPage(0))
-            output.addPage(page)
+            new_pdf = PdfReader(packet)
+            page = existing_pdf.pages[page]
+            page.merge_page(new_pdf.pages[0])
+            output.add_page(page)
 
         with NamedTemporaryFile(suffix=".pdf") as pdf_destination:
             outputStream = open(pdf_destination.name, "wb")

@@ -81,6 +81,26 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract by OCR",
         )
 
+    def test_pdf_v2_ocr_extraction(self):
+        files = make_file(filename="ocr_pdf_variation.pdf")
+        params = {"ocr_available": True}
+        response = requests.post(
+            "http://doctor:5050/extract/doc/text/",
+            files=files,
+            params=params,
+        )
+        self.assertTrue(response.ok, msg="Content extraction failed")
+        content = response.json()["content"][:100].replace("\n", "").strip()
+        self.assertIn(
+            "UNITED",
+            content,
+            msg="Failed to extract content from ocr_pdf_variation .pdf file",
+        )
+        self.assertTrue(
+            response.json()["extracted_by_ocr"],
+            msg="Failed to extract by OCR",
+        )
+
     def test_docx_format(self):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}
