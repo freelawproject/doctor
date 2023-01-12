@@ -39,5 +39,5 @@ CMD gunicorn doctor.wsgi:application \
       --workers ${DOCTOR_WORKERS:-1} \
       --max-requests 1000 \
       --max-requests-jitter 100 \
-      --timeout 3600 \
+      --timeout 5400 \
       --bind 0.0.0.0:5050
