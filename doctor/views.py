@@ -152,20 +152,19 @@ def make_png_thumbnails_from_range(request) -> HttpResponse:
         return HttpResponse("Failed validation", status=BAD_REQUEST)
 
     directory = TemporaryDirectory()
+    with NamedTemporaryFile(suffix=".pdf", mode="r+b") as temp_pdf:
+        temp_pdf.write(form.cleaned_data["file"].read())
 
-    tmp_file = NamedTemporaryFile(suffix=".pdf")
-    with open(tmp_file.name, "wb") as f:
-        f.write(form.cleaned_data["file"].read())
+        make_png_thumbnails(
+            temp_pdf.name,
+            form.cleaned_data["max_dimension"],
+            form.cleaned_data["pages"],
+            directory,
+        )
 
-    make_png_thumbnails(
-        tmp_file.name,
-        form.cleaned_data["max_dimension"],
-        form.cleaned_data["pages"],
-        directory,
-    )
-    with NamedTemporaryFile(suffix=".zip") as tmp:
+    with NamedTemporaryFile(suffix=".zip") as tmp_zip:
         filename = shutil.make_archive(
-            f"{tmp.name[:-4]}", "zip", directory.name
+            f"{tmp_zip.name[:-4]}", "zip", directory.name
         )
         return FileResponse(open(filename, "rb"))
 
