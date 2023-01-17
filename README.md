@@ -214,8 +214,8 @@ Keep in mind that this curl will also write the file to the current directory.
 ### Endpoint: /convert/pdf/thumbnails/
 
 Given a PDF and a range or pages, this endpoint will return a zip file containing thumbnails
-for each page requested. This endpoint also takes an optional parameter called max_dimension, 
-this property scales the long side of each thumbnail (width for landscape pages, height for 
+for each page requested. This endpoint also takes an optional parameter called max_dimension,
+this property scales the long side of each thumbnail (width for landscape pages, height for
 portrait pages) to fit in the specified number of pixels.
 
 For example if you want thumbnails for the first four pages:
