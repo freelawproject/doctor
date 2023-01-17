@@ -214,13 +214,10 @@ class ThumbnailTests(unittest.TestCase):
                 f.write(response.content)
             with ZipFile(tmp.name, "r") as zipObj:
                 listOfiles = sorted(zipObj.namelist())
-        self.assertEqual(
-            len(listOfiles), 4, msg="Failed to generate thumbnails"
-        )
+        self.assertEqual(len(listOfiles), 4)
         self.assertEqual(
             ["thumb-1.png", "thumb-2.png", "thumb-3.png", "thumb-4.png"],
             listOfiles,
-            msg="thumbnails not generated",
         )
 
 
