@@ -1,5 +1,12 @@
 ## Current
 
+**0.3.1 - 2023-01-17**
+
+Features:
+ - Adds /convert/pdf/thumbnails/ service that returns a zip file with thumbnails from a PDF document.
+
+## Previous Versions
+
 **0.3.0 - 2022-09-30**
 
 Features:
@@ -21,8 +28,6 @@ Changes:
      - `/convert-audio/`: Use `/convert/audio/mp3/` instead.
      - `/document/thumbnail/`: Use `/convert/pdf/thumbnail/` instead.
  - Tweaks the tests to use new container names that are less likely to conflict with existing containers.
-
-## Previous Versions
 
 **0.2.16 - 2022-09-28**
 
