@@ -223,7 +223,7 @@ For example if you want thumbnails for the first four pages:
     curl 'http://localhost:5050/convert/pdf/thumbnails/' \
      -X 'POST' \
      -F "file=@doctor/test_assets/vector-pdf.pdf" \
-     -F 'pages="[1,2,3,4]"' \ 
+     -F 'pages="[1,2,3,4]"' \
      -F 'max_dimension=350' \
      -o thumbnails.zip
 
