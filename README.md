@@ -213,12 +213,18 @@ Keep in mind that this curl will also write the file to the current directory.
 
 ### Endpoint: /convert/pdf/thumbnails/
 
-Give a PDF and a range or pages, this endpoint will return a zip file containing thumbnails
-for each page requested.  For example if you want thumbnails for the first four pages:
+Given a PDF and a range or pages, this endpoint will return a zip file containing thumbnails
+for each page requested. This endpoint also takes an optional parameter called max_dimension,
+this property scales the long side of each thumbnail (width for landscape pages, height for
+portrait pages) to fit in the specified number of pixels.
 
-    curl 'http://localhost:5050/convert/pdf/thumbnails/?max_dimension=350&pages=%5B1%2C+2%2C+3%2C+4%5D' \
+For example if you want thumbnails for the first four pages:
+
+    curl 'http://localhost:5050/convert/pdf/thumbnails/' \
      -X 'POST' \
      -F "file=@doctor/test_assets/vector-pdf.pdf" \
+     -F 'pages="[1,2,3,4]"' \
+     -F 'max_dimension=350' \
      -o thumbnails.zip
 
 This will return four thumbnails in a zip file.

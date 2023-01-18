@@ -1,7 +1,7 @@
 import os
 import re
 from http.client import BAD_REQUEST, INTERNAL_SERVER_ERROR
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Union
 
 import img2pdf
@@ -9,6 +9,7 @@ import magic
 import mimetypes
 import pytesseract
 import requests
+import shutil
 from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
@@ -28,6 +29,7 @@ from doctor.forms import (
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
+    make_png_thumbnails,
     make_png_thumbnail_for_instance,
     strip_metadata_from_path,
 )
@@ -137,6 +139,34 @@ def make_png_thumbnail(request) -> HttpResponse:
             tmp.name, form.cleaned_data["max_dimension"]
         )
         return HttpResponse(thumbnail)
+
+
+def make_png_thumbnails_from_range(request) -> HttpResponse:
+    """Make a zip file that contains a thumbnail for each page requested.
+
+    :return: A response containing our zip and any errors
+    :type: HTTPS response
+    """
+    form = ThumbnailForm(request.POST, request.FILES)
+    if not form.is_valid():
+        return HttpResponse("Failed validation", status=BAD_REQUEST)
+
+    directory = TemporaryDirectory()
+    with NamedTemporaryFile(suffix=".pdf", mode="r+b") as temp_pdf:
+        temp_pdf.write(form.cleaned_data["file"].read())
+
+        make_png_thumbnails(
+            temp_pdf.name,
+            form.cleaned_data["max_dimension"],
+            form.cleaned_data["pages"],
+            directory,
+        )
+
+    with NamedTemporaryFile(suffix=".zip") as tmp_zip:
+        filename = shutil.make_archive(
+            f"{tmp_zip.name[:-4]}", "zip", directory.name
+        )
+        return FileResponse(open(filename, "rb"))
 
 
 def page_count(request) -> HttpResponse:

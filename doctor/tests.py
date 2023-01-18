@@ -4,6 +4,7 @@ import glob
 import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from zipfile import ZipFile
 
 import eyed3
 import requests
@@ -193,6 +194,31 @@ class ThumbnailTests(unittest.TestCase):
             "http://doctor:5050/convert/pdf/thumbnail/", files=files
         )
         self.assertEqual(response.status_code, 400, msg="Wrong status code")
+
+    def test_thumbnail_range(self):
+        """Can we generate a thumbnail for a range of pages?"""
+        files = make_file(filename="vector-pdf.pdf")
+        pages = [1, 2, 3, 4]
+        data = {
+            "max_dimension": 350,
+            "pages": json.dumps(pages),
+        }
+
+        response = requests.post(
+            "http://doctor:5050/convert/pdf/thumbnails/",
+            files=files,
+            data=data,
+        )
+        with NamedTemporaryFile(suffix=".zip") as tmp:
+            with open(tmp.name, "wb") as f:
+                f.write(response.content)
+            with ZipFile(tmp.name, "r") as zipObj:
+                listOfiles = sorted(zipObj.namelist())
+        self.assertEqual(len(listOfiles), 4)
+        self.assertEqual(
+            ["thumb-1.png", "thumb-2.png", "thumb-3.png", "thumb-4.png"],
+            listOfiles,
+        )
 
 
 class MetadataTests(unittest.TestCase):
