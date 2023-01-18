@@ -4,6 +4,7 @@ import uuid
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 
 
 class BaseAudioFile(forms.Form):
@@ -74,7 +75,11 @@ class MimeForm(forms.Form):
 
 
 class ThumbnailForm(forms.Form):
-    file = forms.FileField(label="document", required=True)
+    file = forms.FileField(
+        label="document",
+        required=True,
+        validators=[FileExtensionValidator(["pdf"])],
+    )
     max_dimension = forms.IntegerField(label="max-dimension", required=False)
     pages = forms.Field(label="pages", required=False)
 
