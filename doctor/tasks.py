@@ -592,6 +592,8 @@ def get_document_number_from_pdf(path: str) -> str:
     regex = r"Document:(.[0-9.\-.\#]+)|Document(.[0-9.\-.\#]+)|Doc:(.[0-9.\-.\#]+)|DktEntry:(.[0-9.\-.\#]+)"
     document_number_matches = re.findall(regex, header_stamp)
 
-    # If not matches are found, let's fail it loud
+    # If not matches return a empty string.
+    if not document_number_matches:
+        return ""
     document_number = [dn for dn in document_number_matches[0] if dn]
     return clean_document_number(document_number[0])
