@@ -422,7 +422,6 @@ assets_dir = os.path.join(root, "assets")
 
 
 def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
-
     """Convert audio bytes to mp3 at temporary path
 
     :param output_path: Audio file bytes sent to Doctor

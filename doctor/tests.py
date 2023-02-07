@@ -344,7 +344,6 @@ class MetadataTests(unittest.TestCase):
 
         filepath = f"{Path.cwd()}/doctor/test_assets/recap_documents/"
         for file in glob.glob(os.path.join(filepath, "*.pdf")):
-
             filename = os.path.relpath(file, filepath)
             filename_sans_ext = filename.split(".")[0]
             doc_num = filename_sans_ext.split("_")[1]
