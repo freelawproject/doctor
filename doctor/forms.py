@@ -52,7 +52,6 @@ class AudioForm(BaseAudioFile):
 
 
 class ImagePdfForm(forms.Form):
-
     sorted_urls = forms.CharField(required=True, label="sorted-urls")
 
     def clean(self):
@@ -94,7 +93,6 @@ class ThumbnailForm(forms.Form):
 
 
 class DocumentForm(BaseFileForm):
-
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
     mime = forms.BooleanField(label="mime", required=False)
 
