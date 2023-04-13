@@ -360,6 +360,42 @@ class MetadataTests(unittest.TestCase):
 
 
 class ImageDisclosuresTest(unittest.TestCase):
+    def test_xray_yes_pdf(self):
+        """Are we able to discover bad redacts?"""
+        filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
+        for file in glob.glob(os.path.join(filepath, "*yes*.pdf")):
+            filename = os.path.relpath(file, filepath)
+            filename_sans_ext = filename.split(".")[0]
+
+            with open(file, "rb") as f:
+                files = {"file": (filename, f.read())}
+                response = requests.post(
+                    "http://doctor:5050/utils/x-ray/pdf/",
+                    files=files,
+                )
+            bb = response.json()
+            self.assertTrue(
+                response.ok and not bb["error"] and len(bb["results"]) > 0
+            )
+
+    def test_xray_no_pdf(self):
+        """Are we able to discover bad redacts?"""
+        filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
+        for file in glob.glob(os.path.join(filepath, "*no*.pdf")):
+            filename = os.path.relpath(file, filepath)
+            filename_sans_ext = filename.split(".")[0]
+
+            with open(file, "rb") as f:
+                files = {"file": (filename, f.read())}
+                response = requests.post(
+                    "http://doctor:5050/utils/x-ray/pdf/",
+                    files=files,
+                )
+            bb = response.json()
+            self.assertTrue(
+                response.ok and not bb["error"] and len(bb["results"]) == 0
+            )
+
     def test_images_to_pdf(self):
         """Do we create a PDF from several tiffs successfully?"""
         base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"

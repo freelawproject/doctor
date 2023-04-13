@@ -15,6 +15,7 @@ from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
 import eyed3
+import json
 
 from django.core.exceptions import BadRequest
 
@@ -49,6 +50,7 @@ from doctor.tasks import (
     rasterize_pdf,
     set_mp3_meta_data,
     strip_metadata_from_bytes,
+    get_xray,
 )
 
 
@@ -167,6 +169,28 @@ def make_png_thumbnails_from_range(request) -> HttpResponse:
             f"{tmp_zip.name[:-4]}", "zip", directory.name
         )
         return FileResponse(open(filename, "rb"))
+
+
+def xray(request) -> JsonResponse:
+    """Check PDF for bad redactions
+
+    :return: json with bounding boxes and text
+    """
+    form = DocumentForm(request.POST, request.FILES)
+    if not form.is_valid():
+        return JsonResponse(
+            {"error": True, "msg": "Failed validation"}, status=BAD_REQUEST
+        )
+    extension = form.cleaned_data["extension"]
+    if "pdf".casefold() != extension.casefold():
+        return JsonResponse(
+            {"error": True, "msg": "Failed file type"}, status=BAD_REQUEST
+        )
+    results = get_xray(form.cleaned_data["fp"])
+    if results.get("error", False):
+        return JsonResponse(results, status=BAD_REQUEST)
+    cleanup_form(form)
+    return JsonResponse({"error": False, "results": results})
 
 
 def page_count(request) -> HttpResponse:
