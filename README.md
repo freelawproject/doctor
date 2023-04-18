@@ -121,14 +121,14 @@ redactions as well as any discovered text.
     curl 'http://localhost:5050/utils/check-redactions/pdf/' \
 	  -X 'POST' \
 	  -F "file=@doctor/test_assets/x-ray/rectangles_yes.pdf"
-	  
+
 returns as JSON response with bounding box(es) and text recovered.
 
 The "error" field is set if there was an issue processing the PDF.
 
 If "results" is empty there were no bad redactions found
 
-See: https://github.com/freelawproject/x-ray/#readme 
+See: https://github.com/freelawproject/x-ray/#readme
 
 ### Endpoint: /utils/mime-type/
 
