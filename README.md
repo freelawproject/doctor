@@ -123,10 +123,47 @@ redactions as well as any discovered text.
 	  -F "file=@doctor/test_assets/x-ray/rectangles_yes.pdf"
 
 returns as JSON response with bounding box(es) and text recovered.
+```
+{
+  "error": false,
+  "results": {
+    "1": [
+      {
+        "bbox": [
+          412.54998779296875,
+          480.6099853515625,
+          437.8699951171875,
+          494.39996337890625
+        ],
+        "text": "“No”"
+      },
+      {
+        "bbox": [
+          273.3500061035156,
+          315,
+          536.8599853515625,
+          328.79998779296875
+        ],
+        "text": "“Yes”, but did not disclose all relevant medical history"
+      },
+      {
+        "bbox": [
+          141.22999572753906,
+          232.20001220703125,
+          166.54998779296875,
+          246
+        ],
+        "text": "“No”"
+      }
+    ]
+  }
+}
+```
 
 The "error" field is set if there was an issue processing the PDF.
 
-If "results" is empty there were no bad redactions found
+If "results" is empty there were no bad redactions found otherwise it
+is a list of bounding box along with the text recovered.
 
 See: https://github.com/freelawproject/x-ray/#readme
 
