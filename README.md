@@ -50,7 +50,7 @@ The service currently supports the following tools:
 1. Extract text from PDF, RTF, DOC, DOCX, or WPD, HTML, TXT files.
 1. OCR text from a scanned PDF.
 1. Get page count for a PDF document.
-1. Check for bad edactions in a PDF document.
+1. Check for bad redactions in a PDF document.
 1. Convert audio files from wma, ogg, wav to MP3.
 1. Create a thumbnail of the first page of a PDF (for use in Open Graph tags)
 1. Convert an image or images to a PDF.
