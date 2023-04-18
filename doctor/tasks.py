@@ -5,6 +5,7 @@ import os
 import pdfplumber
 import re
 import subprocess
+import xray
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr, ByteString, Dict, List
 
@@ -124,6 +125,30 @@ def rasterize_pdf(path, destination):
     )
     stdout, stderr = p.communicate()
     return stdout, stderr, p.returncode
+
+
+def get_xray(path):
+    """Get bad redactions
+
+    :param path: A path to the file
+
+    :return: dictionary of bounding boxes.
+    """
+    try:
+        bad_redactions = xray.inspect(path)
+        return bad_redactions
+    except (
+        IOError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AssertionError,
+        PdfReadError,
+    ):
+        return {"error": True, "msg": "Exception"}
+    except Exception as e:
+        return {"error": True, "msg": "Exception"}
+    # not reached
 
 
 def get_page_count(path, extension):

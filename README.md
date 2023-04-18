@@ -9,6 +9,7 @@ At a high level, this service provides you with high-performance HTTP endpoints 
  - Extract text from various types of documents
  - Convert audio files from one format to another while stripping messy metadata
  - Create thumbnails of PDFs
+ - Provide metadata about PDFs
 
 Under the hood, Doctor uses gunicorn to connect to a django service. The django service uses
 carefully configured implementations of `ffmpeg`, `pdftotext`, `tesseract`, `ghostscript`, and a
@@ -49,6 +50,7 @@ The service currently supports the following tools:
 1. Extract text from PDF, RTF, DOC, DOCX, or WPD, HTML, TXT files.
 1. OCR text from a scanned PDF.
 1. Get page count for a PDF document.
+1. Check for bad redactions in a PDF document.
 1. Convert audio files from wma, ogg, wav to MP3.
 1. Create a thumbnail of the first page of a PDF (for use in Open Graph tags)
 1. Convert an image or images to a PDF.
@@ -110,6 +112,60 @@ This method takes a document and returns the page count.
      -F "file=@doctor/test_assets/image-pdf.pdf"
 
 This will return an HTTP response with page count.  In the above example it would return __2__.
+
+### Endpoint: /utils/check-redactions/pdf/
+
+This method takes a document and returns the bounding boxes of bad
+redactions as well as any discovered text.
+
+    curl 'http://localhost:5050/utils/check-redactions/pdf/' \
+	  -X 'POST' \
+	  -F "file=@doctor/test_assets/x-ray/rectangles_yes.pdf"
+
+returns as JSON response with bounding box(es) and text recovered.
+```
+{
+  "error": false,
+  "results": {
+    "1": [
+      {
+        "bbox": [
+          412.54998779296875,
+          480.6099853515625,
+          437.8699951171875,
+          494.39996337890625
+        ],
+        "text": "“No”"
+      },
+      {
+        "bbox": [
+          273.3500061035156,
+          315,
+          536.8599853515625,
+          328.79998779296875
+        ],
+        "text": "“Yes”, but did not disclose all relevant medical history"
+      },
+      {
+        "bbox": [
+          141.22999572753906,
+          232.20001220703125,
+          166.54998779296875,
+          246
+        ],
+        "text": "“No”"
+      }
+    ]
+  }
+}
+```
+
+The "error" field is set if there was an issue processing the PDF.
+
+If "results" is empty there were no bad redactions found otherwise it
+is a list of bounding box along with the text recovered.
+
+See: https://github.com/freelawproject/x-ray/#readme
 
 ### Endpoint: /utils/mime-type/
 

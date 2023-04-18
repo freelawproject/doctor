@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import glob
 import unittest
 from pathlib import Path
@@ -357,6 +358,37 @@ class MetadataTests(unittest.TestCase):
                 ).text
 
             self.assertEqual(doc_num, document_number)
+
+
+class RedactionTest(unittest.TestCase):
+    def test_xray_no_pdf(self):
+        """Are we able to discover bad redacts?"""
+        filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
+        test_files = (
+            "*yes*.pdf",
+            "*no*.pdf",
+        )
+        for pattern in test_files:
+            direction = re.search("yes", pattern)
+            for file in glob.glob(os.path.join(filepath, pattern)):
+                filename = os.path.relpath(file, filepath)
+                filename_sans_ext = filename.split(".")[0]
+
+                with open(file, "rb") as f:
+                    files = {"file": (filename, f.read())}
+                    response = requests.post(
+                        "http://doctor:5050/utils/check-redactions/pdf/",
+                        files=files,
+                    )
+                    # Break up the assertion so that testers can see which
+                    # part is actually failing
+                    self.assertTrue(response.ok)
+                    bb = response.json()
+                    self.assertFalse(bb["error"])
+                    if not direction:
+                        self.assertTrue(len(bb["results"]) == 0)
+                    else:
+                        self.assertFalse(len(bb["results"]) == 0)
 
 
 class ImageDisclosuresTest(unittest.TestCase):
