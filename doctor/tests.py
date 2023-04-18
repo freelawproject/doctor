@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import glob
 import unittest
 from pathlib import Path
@@ -359,43 +360,38 @@ class MetadataTests(unittest.TestCase):
             self.assertEqual(doc_num, document_number)
 
 
-class ImageDisclosuresTest(unittest.TestCase):
-    def test_xray_yes_pdf(self):
-        """Are we able to discover bad redacts?"""
-        filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
-        for file in glob.glob(os.path.join(filepath, "*yes*.pdf")):
-            filename = os.path.relpath(file, filepath)
-            filename_sans_ext = filename.split(".")[0]
-
-            with open(file, "rb") as f:
-                files = {"file": (filename, f.read())}
-                response = requests.post(
-                    "http://doctor:5050/utils/x-ray/pdf/",
-                    files=files,
-                )
-            bb = response.json()
-            self.assertTrue(
-                response.ok and not bb["error"] and len(bb["results"]) > 0
-            )
-
+class RedactionTest(unittest.TestCase):
     def test_xray_no_pdf(self):
         """Are we able to discover bad redacts?"""
         filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
-        for file in glob.glob(os.path.join(filepath, "*no*.pdf")):
-            filename = os.path.relpath(file, filepath)
-            filename_sans_ext = filename.split(".")[0]
+        test_files = (
+            "*yes*.pdf",
+            "*no*.pdf",
+        )
+        for pattern in test_files:
+            direction = re.search("yes", pattern)
+            for file in glob.glob(os.path.join(filepath, pattern)):
+                filename = os.path.relpath(file, filepath)
+                filename_sans_ext = filename.split(".")[0]
 
-            with open(file, "rb") as f:
-                files = {"file": (filename, f.read())}
-                response = requests.post(
-                    "http://doctor:5050/utils/x-ray/pdf/",
-                    files=files,
-                )
-            bb = response.json()
-            self.assertTrue(
-                response.ok and not bb["error"] and len(bb["results"]) == 0
-            )
+                with open(file, "rb") as f:
+                    files = {"file": (filename, f.read())}
+                    response = requests.post(
+                        "http://doctor:5050/utils/check-redactions/pdf/",
+                        files=files,
+                    )
+                    # Break up the assertion so that testers can see which
+                    # part is actually failing
+                    self.assertTrue(response.ok)
+                    bb = response.json()
+                    self.assertFalse(bb["error"])
+                    if not direction:
+                        self.assertTrue(len(bb["results"]) == 0)
+                    else:
+                        self.assertFalse(len(bb["results"]) == 0)
 
+
+class ImageDisclosuresTest(unittest.TestCase):
     def test_images_to_pdf(self):
         """Do we create a PDF from several tiffs successfully?"""
         base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"

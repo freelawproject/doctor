@@ -35,5 +35,5 @@ urlpatterns = [
         views.get_document_number,
         name="document-number-pdf",
     ),
-    path("utils/x-ray/pdf/", views.xray, name="xray-pdf"),
+    path("utils/check-redactions/pdf/", views.xray, name="xray-pdf"),
 ]

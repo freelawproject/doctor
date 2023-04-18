@@ -182,14 +182,17 @@ def xray(request) -> JsonResponse:
             {"error": True, "msg": "Failed validation"}, status=BAD_REQUEST
         )
     extension = form.cleaned_data["extension"]
-    if "pdf".casefold() != extension.casefold():
+    if "pdf" != extension.casefold():
         return JsonResponse(
             {"error": True, "msg": "Failed file type"}, status=BAD_REQUEST
         )
     results = get_xray(form.cleaned_data["fp"])
     if results.get("error", False):
         return JsonResponse(results, status=BAD_REQUEST)
-    cleanup_form(form)
+    try:
+        cleanup_form(form)
+    except FileNotFoundError:
+        pass
     return JsonResponse({"error": False, "results": results})
 
 
