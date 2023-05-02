@@ -264,6 +264,16 @@ def extract_extension(request) -> HttpResponse:
         mime = magic.from_buffer(content.strip(b"%%EOF\r"), mime=True)
         extension = mimetypes.guess_extension(mime)
 
+    # The extension is still .bin, look in the content if we can infer the
+    # content type
+    if extension == ".bin":
+        # Check if %PDF-X.X is in the first 1024 bytes of content
+        pattern = rb'%PDF-[0-9]+(\.[0-9]+)?'
+        matches = re.search(pattern, content[:1024])
+        if matches:
+            # Document contains a pdf version, so the file must be a pdf
+            extension = ".pdf"
+
     fixes = {
         ".htm": ".html",
         ".xml": ".html",
