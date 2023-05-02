@@ -35,7 +35,11 @@ COPY manage.py /opt/app/
 WORKDIR /opt/app
 
 EXPOSE 5050
-CMD gunicorn doctor.wsgi:application \
+
+ARG options
+ENV OPTIONS $options
+
+CMD gunicorn $OPTIONS doctor.wsgi:application \
       --workers ${DOCTOR_WORKERS:-1} \
       --max-requests 1000 \
       --max-requests-jitter 100 \
