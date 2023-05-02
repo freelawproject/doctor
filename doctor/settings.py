@@ -18,7 +18,7 @@ from sentry_sdk.integrations.django import DjangoIntegration
 env = environ.FileAwareEnv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEBUG = False
+DEBUG = env.bool("DEBUG", default=False)
 SECRET_KEY = "this-is-a-not-so-secret-key"
 ALLOWED_HOSTS = ["doctor", "0.0.0.0", "localhost"]
 INSTALLED_APPS = []

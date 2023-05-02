@@ -20,7 +20,16 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
+
+    - name: Create the .env settings file
+      run: cp .env.example .env.dev
+
+    - name: Update .env.dev file
+      run: |
+        echo 'DEBUG=on' >> .env.dev
+
     - name: Build Image
       run: docker-compose -f docker-compose.dev.yml up --build -d
+
     - name: Run tests
       run: docker exec mock_web_app python3 -m unittest doctor.tests
