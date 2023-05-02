@@ -10,10 +10,10 @@ import img2pdf
 import magic
 import pytesseract
 import requests
-from PIL import Image
-from PyPDF2 import PdfReader, PdfWriter
 from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
+from PIL import Image
+from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
 
 from doctor.forms import (
@@ -255,14 +255,9 @@ def extract_extension(request) -> HttpResponse:
             extension = ".pdf"
         else:
             extension = ".wpd"
-    # We started seeing PDFs with whitespace in the bytes at the beginning
-    # of the file. Removing the \r from the file helps identify it correctly.
-    if extension == ".bin":
-        mime = magic.from_buffer(content.strip(b"%%EOF\r"), mime=True)
-        extension = mimetypes.guess_extension(mime)
 
-    # The extension is still .bin, look in the content if we can infer the
-    # content type
+    # The extension is .bin, look in the content if we can infer the
+    # content type as pdf
     if extension == ".bin":
         # Check if %PDF-X.X is in the first 1024 bytes of content
         pattern = rb"%PDF-[0-9]+(\.[0-9]+)?"
