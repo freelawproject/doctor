@@ -126,3 +126,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Ignore JetBrains files
+.idea
+
+# Env file
+.env.dev
