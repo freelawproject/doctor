@@ -1,23 +1,20 @@
-import os
+import mimetypes
 import re
-from http.client import BAD_REQUEST, INTERNAL_SERVER_ERROR
+import shutil
+from http.client import BAD_REQUEST
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Union
 
+import eyed3
 import img2pdf
 import magic
-import mimetypes
 import pytesseract
 import requests
-import shutil
+from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
-import eyed3
-import json
-
-from django.core.exceptions import BadRequest
 
 from doctor.forms import (
     AudioForm,
@@ -30,27 +27,27 @@ from doctor.forms import (
 from doctor.lib.utils import (
     cleanup_form,
     make_page_with_text,
-    make_png_thumbnails,
     make_png_thumbnail_for_instance,
+    make_png_thumbnails,
     strip_metadata_from_path,
 )
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
     convert_to_mp3,
     download_images,
-    get_document_number_from_pdf,
     extract_from_doc,
     extract_from_docx,
     extract_from_html,
     extract_from_pdf,
     extract_from_txt,
     extract_from_wpd,
+    get_document_number_from_pdf,
     get_page_count,
+    get_xray,
     make_pdftotext_process,
     rasterize_pdf,
     set_mp3_meta_data,
     strip_metadata_from_bytes,
-    get_xray,
 )
 
 
@@ -258,11 +255,16 @@ def extract_extension(request) -> HttpResponse:
             extension = ".pdf"
         else:
             extension = ".wpd"
-    # We started seeing PDFs with whitespace in the bytes at the beginning
-    # of the file. Removing the \r from the file helps identify it correctly.
+
+    # The extension is .bin, look in the content if we can infer the
+    # content type as pdf. See: https://bugs.astron.com/view.php?id=446
     if extension == ".bin":
-        mime = magic.from_buffer(content.strip(b"%%EOF\r"), mime=True)
-        extension = mimetypes.guess_extension(mime)
+        # Check if %PDF-X.X is in the first 1024 bytes of content
+        pattern = rb"%PDF-[0-9]+(\.[0-9]+)?"
+        matches = re.search(pattern, content[:1024])
+        if matches:
+            # Document contains a pdf version, so the file must be a pdf
+            extension = ".pdf"
 
     fixes = {
         ".htm": ".html",
