@@ -257,7 +257,7 @@ def extract_extension(request) -> HttpResponse:
             extension = ".wpd"
 
     # The extension is .bin, look in the content if we can infer the
-    # content type as pdf
+    # content type as pdf. See: https://bugs.astron.com/view.php?id=446
     if extension == ".bin":
         # Check if %PDF-X.X is in the first 1024 bytes of content
         pattern = rb"%PDF-[0-9]+(\.[0-9]+)?"
