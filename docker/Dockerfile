@@ -18,7 +18,7 @@ RUN apt-get update --option "Acquire::Retries=3" --quiet=2 && \
         `# Image & OCR tools` \
         imagemagick \
         `# Other dependencies` \
-        libffi-dev libxml2-dev libxslt-dev python-dev
+        libffi-dev libxml2-dev libxslt-dev
 
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

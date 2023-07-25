@@ -21,13 +21,13 @@ repos:
        args: [--markdown-linebreak-ext=md]
 
   - repo: https://github.com/ikamensh/flynt/
-    rev: '0.78'
+    rev: '1.0.0'
     hooks:
      - id: flynt
        args: [--line-length=79, --transform-concats]
 
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 23.7.0
     hooks:
      - id: black
 
