@@ -159,16 +159,6 @@ class ExtractionTests(unittest.TestCase):
 class ThumbnailTests(unittest.TestCase):
     """Can we generate thumbnail images from PDF files"""
 
-    # def test_locally(self):
-    #     c = Client()
-    #     with open(f"{asset_path}/image-pdf.pdf", "rb") as fp:
-    #         response = c.post(
-    #             "/convert/pdf/thumbnail/",
-    #             {"max_dimension": 350, "file": fp},
-    #         )
-    #
-    #     self.assertEqual(200, response.status_code)
-
     def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate four thumbanils a pdf?"""
         files = make_file(filename="image-pdf.pdf")
@@ -372,7 +362,6 @@ class RedactionTest(unittest.TestCase):
             direction = re.search("yes", pattern)
             for file in glob.glob(os.path.join(filepath, pattern)):
                 filename = os.path.relpath(file, filepath)
-                filename_sans_ext = filename.split(".")[0]
 
                 with open(file, "rb") as f:
                     files = {"file": (filename, f.read())}
