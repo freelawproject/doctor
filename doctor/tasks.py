@@ -146,7 +146,7 @@ def get_xray(path):
         PdfReadError,
     ):
         return {"error": True, "msg": "Exception"}
-    except Exception as e:
+    except Exception:
         return {"error": True, "msg": "Exception"}
     # not reached
 

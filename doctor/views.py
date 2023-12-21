@@ -342,7 +342,6 @@ def convert_audio(request) -> Union[FileResponse, HttpResponse]:
 
     :return: Converted audio
     """
-    # try:
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
@@ -354,8 +353,6 @@ def convert_audio(request) -> Union[FileResponse, HttpResponse]:
     response = FileResponse(open(filepath, "rb"))
     cleanup_form(form)
     return response
-    # except Exception as e:
-    #     return HttpResponse(str(e))
 
 
 def embed_text(request) -> Union[FileResponse, HttpResponse]:
