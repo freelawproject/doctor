@@ -340,7 +340,7 @@ def extract_from_html(path):
             content = get_clean_body_content(content)
             content = force_text(content, encoding=encoding)
             return content, "", 0
-        except DoctorUnicodeDecodeError:
+        except (UnicodeDecodeError, DoctorUnicodeDecodeError):
             pass
     # Fell through, therefore unable to decode the string.
     return "", "Could not encode content properly", 1
