@@ -24,6 +24,7 @@ from seal_rookery.search import seal, ImageSizes
 from doctor.lib.mojibake import fix_mojibake
 from doctor.lib.utils import (
     DoctorUnicodeDecodeError,
+    extract_pdf_text,
     force_bytes,
     force_text,
     ocr_needed,
@@ -189,44 +190,39 @@ def get_page_count(path, extension):
 
 def extract_from_pdf(
     path: str,
+    page_count: int,
     ocr_available: bool = False,
+    strip_margin: bool = False,
 ) -> Any:
     """Extract text from pdfs.
 
-    Start with pdftotext. If we we enabled OCR - and the the content is empty
-    or the PDF contains images, use tesseract. This pattern occurs because PDFs
-    can be images, text-based and a mix of the two. We check for images to
-    make sure we do OCR on mix-type PDFs.
-
     If a text-based PDF we fix corrupt PDFs from ca9.
+
+    Extract the text from the document and if ocr available OCR the document
 
     :param path: The path to the PDF
     :param ocr_available: Whether we should do OCR stuff
+    :param strip_margin: Whether to remove 1 inch margin from text extraction
     :return Tuple of the content itself and any errors we received
     """
-    content, err, returncode = make_pdftotext_process(path)
-    extracted_by_ocr = False
-    if err is not None:
-        err = err.decode()
+    content = extract_pdf_text(path, strip_margin)
 
-    if not ocr_available:
+    extracted_by_ocr = False
+    is_ocr_needed, err = ocr_needed(path, content, page_count)
+
+    if is_ocr_needed and ocr_available:
+        success, ocr_content = extract_by_ocr(path)
+        if success:
+            extracted_by_ocr = True
+            content = ocr_content
+        elif content == "" or not success:
+            content = "Unable to extract document content."
+    elif not ocr_available:
         if "e" not in content:
             # It's a corrupt PDF from ca9. Fix it.
             content = fix_mojibake(content)
-    else:
-        if ocr_needed(path, content):
-            success, ocr_content = extract_by_ocr(path)
-            if success:
-                # Check content length and take the longer of the two
-                if len(ocr_content) > len(content):
-                    content = ocr_content
-                    # opinion.extracted_by_ocr = True
-                    extracted_by_ocr = True
-            elif content == "" or not success:
-                content = "Unable to extract document content."
 
-    return content, err, returncode, extracted_by_ocr
-
+    return content, extracted_by_ocr, err
 
 def extract_by_ocr(path: str) -> (bool, str):
     """Extract the contents of a PDF using OCR."""

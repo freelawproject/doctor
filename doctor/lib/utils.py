@@ -6,6 +6,10 @@ import subprocess
 import warnings
 from collections import namedtuple
 from decimal import Decimal
+from typing import Any
+
+import pdfplumber
+from pdfplumber.ctm import CTM
 from pathlib import Path
 
 import six
@@ -288,30 +292,22 @@ def make_buffer(filename, dir=None):
 def pdf_has_images(path: str) -> bool:
     """Check raw PDF for embedded images.
 
-    We need to check if a PDF contains any images.  If a PDF contains images it
-    likely has content that needs to be scanned.
+    We need to check if a PDF contains any large images.
+    If a PDF contains images them we need to scan it.
+
+    But somteimes a pdf can contain lots of small images as lines and we dont
+    want to necessarily scan those so we should check the size of the images for
+    anything substantial.
 
     :param path: Location of PDF to process.
     :return: Does the PDF contain images?
-    :type: bool
     """
-    with open(path, "rb") as pdf_file:
-        pdf_bytes = pdf_file.read()
-        return True if re.search(rb"/Image ?", pdf_bytes) else False
 
-
-def ocr_needed(path: str, content: str) -> bool:
-    """Check if OCR is needed on a PDF
-
-    Check if images are in PDF or content is empty.
-
-    :param path: The path to the PDF
-    :param content: The content extracted from the PDF.
-    :return: Whether OCR should be run on the document.
-    """
-    if content.strip() == "" or pdf_has_images(path):
-        return True
-    return False
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            for img in page.images:
+                if img.get("width") / page.width * img.get("height") / page.height > 0.1:
+                    return True
 
 
 def make_page_with_text(page, data, h, w):
@@ -354,3 +350,121 @@ def make_page_with_text(page, data, h, w):
     can.save()
     packet.seek(0)
     return packet
+
+def skew(obj):
+    """"""
+    if (matrix := obj.get("matrix")) is None:
+        return True
+
+    # Remove Skew
+    my_char_ctm = CTM(*matrix)
+    if my_char_ctm.skew_x != 0:
+        return False
+    return True
+
+
+def detect_words_per_page(document_text, page_count) -> float:
+    """Calculate word page frequency for the document
+
+    Generally - less than ten words is a suspect document for the length
+    of an entire document
+
+    :param document_text: the docuemnt text
+    :param page_count: number of pages
+    :return: average words per page
+    """
+    word_matches = re.findall(r"(\b([A-Z]?[a-z]){1,20}\b)", document_text)
+    list_of_words = list(set([matches[0] for matches in word_matches]))
+    return len(list_of_words) / page_count
+
+
+def page_has_text_annotations(path) -> bool:
+    """Page contains annotations
+
+    :param path: the path to the document
+    :return: True if free text or widget annotations in PDF
+    """
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            if page.annots:
+                anno_types = [
+                    str(annot.get("data").get("Subtype")) for annot in page.annots
+                ]
+                if "/'FreeText'" in anno_types or "/'Widget'" in anno_types:
+                    return True
+    return False
+
+
+def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool):
+    """Extract page text
+
+    Using pdf plumber extract out the text of the document that is not
+    skewed (ie a stamp of approval) and extract out text removing blue text
+
+    :param page: pdf plumber page
+    :param strip_margin: a flag to crop out the margin of a document and skewed content
+    :return: text
+    """
+    if strip_margin:
+        # Crop margins and remove skewed text
+        bbox = ((1 / 8.5 * page.width), (1 / 11 * page.height), (7.5 / 8.5 * page.width), (10 / 11 * page.height))
+        doc_text = (
+            page
+            .crop(bbox)
+            .filter(skew)
+            .extract_text(layout=True, keep_blank_chars=True)
+        )
+    else:
+        doc_text = page.extract_text(layout=True, keep_blank_chars=False)
+    return doc_text
+
+
+def extract_pdf_text(path: str, strip_margin: bool) -> str:
+    """Extract content from a PDF per page
+
+    :param path: Path to the pdf file
+    :param strip_margin: If this is a recap document to strip margins
+    :return: text on page
+    """
+    page_content = []
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            text = get_page_text(page, strip_margin=strip_margin).strip()
+            page_content.append(text)
+    return "\n".join(page_content)
+
+
+def ocr_needed(path: str, content: str, page_count: int) -> [bool, Any]:
+    """Check if OCR is needed on a PDF
+
+    Check if images are in PDF or content is empty.
+    This consists of a few different checks
+    Reasons something should be OCR'd
+
+    A pdf contains images
+    A pdf contains freetext annotations or
+    A pdf contains widgets that could have text that alters a document
+    A pdf contains no text inside the margins
+    A pdf contains garbled text due to lack of font embedding
+    A pdf contains less than ten words on a page (normally around 90 to 200
+
+    When calculating the words on a page - we should look at words inside
+    the margin that contain lower case letters that are not skewed.
+
+    :param path: The path to the PDF
+    :param content: The content extracted from the PDF
+    :param page_count: Length of PDF
+    :return: Whether OCR should be run on the document and the error reason
+    """
+
+    if not content.strip():
+        return True, "No content"
+    elif "(cid:" in content:
+        return True, "PDF missing fonts"
+    elif pdf_has_images(path):
+        return True, "PDF contains images"
+    elif page_has_text_annotations(path):
+        return True, "Pdf contains text annotations"
+    elif detect_words_per_page(content, page_count) < 10:
+        return True, "PDF likely gibberish"
+    return False, ""

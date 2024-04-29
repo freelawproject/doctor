@@ -94,6 +94,7 @@ class ThumbnailForm(forms.Form):
 
 class DocumentForm(BaseFileForm):
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
+    strip_margin = forms.BooleanField(label="strip-margin", required=False)
     mime = forms.BooleanField(label="mime", required=False)
 
     def clean(self):

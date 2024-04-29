@@ -85,13 +85,17 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
-    ocr_available = form.cleaned_data["ocr_available"]
+    ocr_available = form.cleaned_data.get("ocr_available", False)
+    strip_margin = form.cleaned_data.get("strip_margin", False)
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
     extracted_by_ocr = False
+
+    # Get page count if you can
+    page_count = get_page_count(fp, extension)
     if extension == "pdf":
-        content, err, returncode, extracted_by_ocr = extract_from_pdf(
-            fp, ocr_available
+        content, extracted_by_ocr, err = extract_from_pdf(
+            fp, page_count, ocr_available, strip_margin
         )
     elif extension == "doc":
         content, err, returncode = extract_from_doc(fp)
@@ -107,8 +111,6 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
         content = ""
         err = "Unable to extract content due to unknown extension"
 
-    # Get page count if you can
-    page_count = get_page_count(fp, extension)
     cleanup_form(form)
     return JsonResponse(
         {
