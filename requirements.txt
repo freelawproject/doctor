@@ -8,6 +8,7 @@ python-magic
 idna==2.10
 img2pdf
 lxml>=4.5.2
+lxml_html_clean
 numpy>=1.19.1
 opencv-python>=4.2.0.32
 pandas>=1.1.1
