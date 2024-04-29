@@ -224,6 +224,7 @@ def extract_from_pdf(
 
     return content, extracted_by_ocr, err
 
+
 def extract_by_ocr(path: str) -> (bool, str):
     """Extract the contents of a PDF using OCR."""
     fail_msg = (

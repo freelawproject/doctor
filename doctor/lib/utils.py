@@ -306,7 +306,13 @@ def pdf_has_images(path: str) -> bool:
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
             for img in page.images:
-                if img.get("width") / page.width * img.get("height") / page.height > 0.1:
+                if (
+                    img.get("width")
+                    / page.width
+                    * img.get("height")
+                    / page.height
+                    > 0.1
+                ):
                     return True
 
 
@@ -351,6 +357,7 @@ def make_page_with_text(page, data, h, w):
     packet.seek(0)
     return packet
 
+
 def skew(obj):
     """"""
     if (matrix := obj.get("matrix")) is None:
@@ -388,7 +395,8 @@ def page_has_text_annotations(path) -> bool:
         for page in pdf.pages:
             if page.annots:
                 anno_types = [
-                    str(annot.get("data").get("Subtype")) for annot in page.annots
+                    str(annot.get("data").get("Subtype"))
+                    for annot in page.annots
                 ]
                 if "/'FreeText'" in anno_types or "/'Widget'" in anno_types:
                     return True
@@ -407,10 +415,14 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool):
     """
     if strip_margin:
         # Crop margins and remove skewed text
-        bbox = ((1 / 8.5 * page.width), (1 / 11 * page.height), (7.5 / 8.5 * page.width), (10 / 11 * page.height))
+        bbox = (
+            (1 / 8.5 * page.width),
+            (1 / 11 * page.height),
+            (7.5 / 8.5 * page.width),
+            (10 / 11 * page.height),
+        )
         doc_text = (
-            page
-            .crop(bbox)
+            page.crop(bbox)
             .filter(skew)
             .extract_text(layout=True, keep_blank_chars=True)
         )

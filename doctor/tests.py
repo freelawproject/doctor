@@ -44,9 +44,13 @@ class ExtractionTests(unittest.TestCase):
         response = requests.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
-        doc_content = response.json()['content']
+        doc_content = response.json()["content"]
         self.assertTrue(response.ok, msg="Content extraction failed")
-        self.assertIn("(Slip Opinion)", doc_content[:100], msg="Failed to extract content from .pdf file")
+        self.assertIn(
+            "(Slip Opinion)",
+            doc_content[:100],
+            msg="Failed to extract content from .pdf file",
+        )
         self.assertFalse(
             response.json()["extracted_by_ocr"],
             msg="Failed to extract by OCR",
@@ -56,7 +60,6 @@ class ExtractionTests(unittest.TestCase):
             28,
             msg="Failed to extract by OCR",
         )
-
 
     def test_pdf_ocr_extraction(self):
         files = make_file(filename="image-pdf.pdf")
@@ -152,7 +155,9 @@ class ExtractionTests(unittest.TestCase):
 
     def test_recap_document_with_content_in_margin(self):
         """Can we avoid content in the margin and return no content"""
-        filepath = Path("doctor/test_assets/recap_issues/gov.uscourts.cand.16711.581.0.pdf")
+        filepath = Path(
+            "doctor/test_assets/recap_issues/gov.uscourts.cand.16711.581.0.pdf"
+        )
         response = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
@@ -169,7 +174,9 @@ class ExtractionTests(unittest.TestCase):
 
     def test_recap_pdf_with_images_and_annotations(self):
         """Test PDF with images and text annotations"""
-        filepath = Path("doctor/test_assets/recap_issues/gov.uscourts.cand.203343.17.0.pdf")
+        filepath = Path(
+            "doctor/test_assets/recap_issues/gov.uscourts.cand.203343.17.0.pdf"
+        )
         r1 = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
@@ -186,7 +193,9 @@ class ExtractionTests(unittest.TestCase):
 
     def test_pdf_with_missing_fonts(self):
         """Test PDF with missing fonts"""
-        filepath = Path("doctor/test_assets/recap_issues/gov.uscourts.nysd.413994.212.0.pdf")
+        filepath = Path(
+            "doctor/test_assets/recap_issues/gov.uscourts.nysd.413994.212.0.pdf"
+        )
         r1 = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
@@ -203,7 +212,9 @@ class ExtractionTests(unittest.TestCase):
 
     def test_margin_excluding_recap_documents(self):
         """Test strip_margin flag will exclude margin bates stamp"""
-        filepath = Path("doctor/test_assets/recap_issues/gov.uscourts.njd.387907.32.0.pdf")
+        filepath = Path(
+            "doctor/test_assets/recap_issues/gov.uscourts.njd.387907.32.0.pdf"
+        )
         r1 = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
@@ -236,7 +247,9 @@ class ExtractionTests(unittest.TestCase):
 
     def test_recap_contains_image_page(self):
         """Can we recognize a partial scan partial text as needing OCR"""
-        filepath = Path("doctor/test_assets/recap_issues/gov.uscourts.nysd.413741.11.0.pdf")
+        filepath = Path(
+            "doctor/test_assets/recap_issues/gov.uscourts.nysd.413741.11.0.pdf"
+        )
         response = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
@@ -253,7 +266,9 @@ class ExtractionTests(unittest.TestCase):
 
     def test_skewed_recap_document(self):
         """Can we remove sideways text in the margin"""
-        filepath = Path("doctor/test_assets/recap_issues/gov.uscourts.cand.16711.199.0.pdf")
+        filepath = Path(
+            "doctor/test_assets/recap_issues/gov.uscourts.cand.16711.199.0.pdf"
+        )
         response = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
@@ -263,7 +278,7 @@ class ExtractionTests(unittest.TestCase):
             },
         )
         # The sideways font returns backwards
-        self.assertIn("truoC", response.json()['content'][:50])
+        self.assertIn("truoC", response.json()["content"][:50])
 
         response = requests.post(
             url="http://doctor:5050/extract/doc/text/",
@@ -273,7 +288,7 @@ class ExtractionTests(unittest.TestCase):
                 "strip_margin": True,
             },
         )
-        self.assertNotIn("truoC", response.json()['content'][:50])
+        self.assertNotIn("truoC", response.json()["content"][:50])
 
 
 class ThumbnailTests(unittest.TestCase):
