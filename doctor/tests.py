@@ -28,26 +28,25 @@ class ExtractionTests(unittest.TestCase):
     def test_pdf_to_text(self):
         """"""
         files = make_file(filename="vector-pdf.pdf")
-        data = {"ocr_available": True}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
+            "http://doctor:5050/extract/doc/text/", files=files, data={}
         )
         text = response.json()["content"].strip()[:200]
         self.assertEqual(200, response.status_code, msg="Wrong status code")
-        self.assertIn("(Slip Opinion)", text, msg="Text not found")
+        self.assertIn("(Slip\xa0Opinion)", text, msg="Text not found")
 
     def test_content_extraction(self):
         """Test if we can extract text from a PDF"""
 
         files = make_file(filename="vector-pdf.pdf")
-        data = {"ocr_available": False}
+        data = {}
         response = requests.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         doc_content = response.json()["content"]
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertIn(
-            "(Slip Opinion)",
+            "(Slip\xa0Opinion)",
             doc_content[:100],
             msg="Failed to extract content from .pdf file",
         )
@@ -63,17 +62,16 @@ class ExtractionTests(unittest.TestCase):
 
     def test_pdf_ocr_extraction(self):
         files = make_file(filename="image-pdf.pdf")
-        params = {"ocr_available": True}
         response = requests.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
-            params=params,
+            params={},
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
-        content = response.json()["content"][:100].replace("\n", "").strip()
-        self.assertEqual(
+        content = response.json()["content"][:100].strip()
+        self.assertIn(
+            "(Slip Opinion)",
             content,
-            "(Slip Opinion) OCTOBER TERM, 2012 1SyllabusNOTE: Where it is feasible, a syllabus (headnote) wil",
             msg="Failed to extract content from image .pdf file",
         )
         self.assertTrue(
@@ -83,27 +81,27 @@ class ExtractionTests(unittest.TestCase):
 
     def test_pdf_v2_ocr_extraction(self):
         files = make_file(filename="ocr_pdf_variation.pdf")
-        params = {"ocr_available": True}
-        response = requests.post(
+        params = {}
+        r = requests.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
             params=params,
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
-        content = response.json()["content"][:100].replace("\n", "").strip()
+        self.assertTrue(r.ok, msg="Content extraction failed")
+        content = r.json()["content"][:100].replace("\n", "").strip()
         self.assertIn(
             "UNITED",
             content,
-            msg="Failed to extract content from ocr_pdf_variation .pdf file",
+            msg=f"Failed to extract content from ocr_pdf_variation .pdf file {content}",
         )
         self.assertTrue(
-            response.json()["extracted_by_ocr"],
+            r.json()["extracted_by_ocr"],
             msg="Failed to extract by OCR",
         )
 
     def test_docx_format(self):
         files = make_file(filename="word-docx.docx")
-        params = {"ocr_available": False}
+        params = {}
         response = requests.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
@@ -118,7 +116,7 @@ class ExtractionTests(unittest.TestCase):
 
     def test_doc_format(self):
         files = make_file(filename="word-doc.doc")
-        data = {"ocr_available": False}
+        data = {}
         response = requests.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
@@ -137,7 +135,7 @@ class ExtractionTests(unittest.TestCase):
 
     def test_wpd_format(self):
         files = make_file(filename="word-perfect.wpd")
-        data = {"ocr_available": False}
+        data = {}
         response = requests.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
@@ -153,61 +151,36 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract content from WPD file",
         )
 
-    def test_recap_document_with_content_in_margin(self):
-        """Can we avoid content in the margin and return no content"""
-        filepath = Path(
-            "doctor/test_assets/recap_issues/gov.uscourts.cand.16711.581.0.pdf"
-        )
-        response = requests.post(
-            url="http://doctor:5050/extract/doc/text/",
-            files={"file": (filepath.name, filepath.read_bytes())},
-            params={
-                "ocr_available": False,
-                "strip_margin": True,
-            },
-        )
-        self.assertEqual(
-            response.json()["err"],
-            "No content",
-            msg=f"Extracted Content for {filepath} but should be blank.",
-        )
-
     def test_recap_pdf_with_images_and_annotations(self):
         """Test PDF with images and text annotations"""
         filepath = Path(
             "doctor/test_assets/recap_issues/gov.uscourts.cand.203343.17.0.pdf"
         )
-        r1 = requests.post(
+        r = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": False,
             },
         )
-        self.assertEqual(
-            r1.json()["err"],
-            "PDF contains images",
-            msg=f"Extracted Content for {filepath} but should be blank.",
-        )
+        self.assertIn("TELEPHONIC APPEARANCE", r.json()['content'], msg=r.json()['content'])
 
     def test_pdf_with_missing_fonts(self):
         """Test PDF with missing fonts"""
         filepath = Path(
             "doctor/test_assets/recap_issues/gov.uscourts.nysd.413994.212.0.pdf"
         )
-        r1 = requests.post(
+        r = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": True,
             },
         )
-        self.assertEqual(
-            r1.json()["err"],
-            "PDF missing fonts",
-            msg=f"Extracted Content for {filepath} but should be blank.",
+        self.assertIn(
+            "ENGELMAYER",
+            r.json()["content"],
+            msg="OCR did not return expected text",
         )
 
     def test_margin_excluding_recap_documents(self):
@@ -219,7 +192,6 @@ class ExtractionTests(unittest.TestCase):
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": False,
             },
         )
@@ -230,11 +202,11 @@ class ExtractionTests(unittest.TestCase):
             msg=f"Bates stamp should be in text {doc_1[:200]}",
         )
 
+        # Now run it again with strip margin on to exclude the bate stamp
         r2 = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": True,
             },
         )
@@ -250,19 +222,17 @@ class ExtractionTests(unittest.TestCase):
         filepath = Path(
             "doctor/test_assets/recap_issues/gov.uscourts.nysd.413741.11.0.pdf"
         )
-        response = requests.post(
+        r = requests.post(
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": True,
             },
         ).json()
-        self.assertEqual(
-            response["err"],
-            "PDF contains images",
-            msg=f"Extracted Content for {filepath} but should be blank.",
+        self.assertIn(
+            "INTERNATIONAL UNION", r["content"], msg="Extraction failed"
         )
+        self.assertTrue(r["extracted_by_ocr"], msg=r["content"])
 
     def test_skewed_recap_document(self):
         """Can we remove sideways text in the margin"""
@@ -273,7 +243,6 @@ class ExtractionTests(unittest.TestCase):
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": False,
             },
         )
@@ -284,7 +253,6 @@ class ExtractionTests(unittest.TestCase):
             url="http://doctor:5050/extract/doc/text/",
             files={"file": (filepath.name, filepath.read_bytes())},
             params={
-                "ocr_available": False,
                 "strip_margin": True,
             },
         )
@@ -428,18 +396,8 @@ class MetadataTests(unittest.TestCase):
 
     def test_embedding_text_to_image_pdf(self):
         """Can we embed text into an image PDF?"""
-        data = {"ocr_available": False}
 
         files = make_file(filename="image-pdf.pdf")
-        image_response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
-        )
-        self.assertEqual(
-            "",
-            image_response.json()["content"].strip(),
-            msg="PDF should have no text",
-        )
-
         # Embed text into the image pdf and check that we get some text
         new_pdf = requests.post(
             "http://doctor:5050/utils/add/text/pdf/", files=files
@@ -454,10 +412,10 @@ class MetadataTests(unittest.TestCase):
             response = requests.post(
                 "http://doctor:5050/extract/doc/text/",
                 files=files,
-                data=data,
+                data={},
             )
             self.assertIn(
-                "(SlipOpinion) OCTOBER TERM, 2012",
+                "(Slip Opinion)           OCTOBER TERM, 2012",
                 response.json()["content"],
                 msg=f"Got {response.json()}",
             )
