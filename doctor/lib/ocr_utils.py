@@ -8,8 +8,11 @@ import pandas as pd
 from PIL import Image
 
 
-def deskew(obj) -> bool:
+def deskew(obj: dict) -> bool:
     """Remove skewed text from a page
+
+    CTM stands for current transformation matrix.
+    Pdf plumber has a method to calculate the angle of text which we use here
 
     Traditionally this is only seen in circular stamps which confuses the
     content, or in perpendicular text of the ninth circuit courts which also
@@ -25,7 +28,7 @@ def deskew(obj) -> bool:
     return True
 
 
-def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool):
+def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
     """Extract page text
 
     Using pdf plumber extract out the text of the document that is not
@@ -58,7 +61,7 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool):
     return doc_text
 
 
-def page_images(page):
+def page_images(page: pdfplumber.pdf.Page) -> bool:
     """Does the page have images of a certain size
 
     Meant to exclude images that might be lines
@@ -72,7 +75,7 @@ def page_images(page):
     return False
 
 
-def page_annotations(page):
+def page_annotations(page: pdfplumber.pdf.Page) -> bool:
     """Does the page have annotations which could contain text
 
     :param page: pdf plumber
@@ -86,7 +89,7 @@ def page_annotations(page):
     return False
 
 
-def find_average_char_width(block_data):
+def find_average_char_width(block_data: pd.Series) -> int:
     """Average character width for a block of text
 
     :param block_data:
@@ -96,50 +99,15 @@ def find_average_char_width(block_data):
     return (fd.width / fd.text.str.len()).mean()
 
 
-# def validate_ocr_text(row, img):
-#     """Review OCR results for low confidence and reprocess if necessary
-#
-#     :param row:
-#     :param img:
-#     :return:
-#     """
-#     # If low confidence in the margins of drop character as likely artifact
-#     if row["left"] < 370 and row["conf"] <= 40:
-#         row["text"] = " " * len(row["text"])
-#     # if very low confidence and small - reprocess word with OCR for single line
-#     # this will give us a better chance to get the word right or remove junk
-#     elif row["conf"] < 10 and len(row["text"]) >= 3:
-#         # Give us a buffer around the word to increase OCR-ability
-#         bbox = (
-#             row["left"] - 5,
-#             row["top"] - 3,
-#             row["left"] + row["width"] + 5,
-#             row["top"] + row["height"] + 3,
-#         )
-#         config = "f'-c preserve_interword_spaces=1x1 --psm 7 -l eng'"
-#         word_df = pd.DataFrame(
-#             pytesseract.image_to_data(
-#                 img.crop(bbox), config=config, output_type=Output.DICT
-#             )
-#         )
-#         # If new word above low confidence - use new word
-#         new_words = " ".join(
-#             word_df.loc[word_df["conf"] > 10, "text"].tolist()
-#         )
-#         if new_words:
-#             row["text"] = new_words
-#         else:
-#             # Otherwise identify unknown word/words with empty box
-#             row["text"] = "□" * len(row["text"])
-#     return row
+def validate_ocr_text(row: pd.Series, img: Image) -> pd.Series:
+    """Validate the OCR results
 
+    Take a look at our OCR and remove the bad results
+    and if possible reprocess words one by one
 
-def validate_ocr_text(row, img):
-    """
-
-    :param row:
-    :param img:
-    :return:
+    :param row: row of ocr results
+    :param img: Page image
+    :return: Updated row if necessary
     """
     if row["left"] < 370 and row["conf"] <= 40:
         row["text"] = " " * len(row["text"])
@@ -170,7 +138,7 @@ def validate_ocr_text(row, img):
 def add_newlines(row: pd.Series, state: dict) -> dict:
     """Add new linebreaks into the ocr'd page
 
-    identify where line breaks should be added
+    Identify where line breaks should be added
 
     :param row: the row of data from tesseract
     :param state: the location data used to decide where line breaks should be
