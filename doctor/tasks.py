@@ -22,12 +22,16 @@ from PyPDF2.errors import PdfReadError
 from seal_rookery.search import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
+from doctor.lib.ocr_utils import (
+    get_page_text,
+    page_needs_ocr,
+    process_page_with_ocr,
+    remove_excess_whitespace,
+)
 from doctor.lib.utils import (
     DoctorUnicodeDecodeError,
-    extract_pdf_text,
     force_bytes,
     force_text,
-    ocr_needed,
     smart_text,
 )
 
@@ -186,43 +190,6 @@ def get_page_count(path, extension):
         # itself: http://stackoverflow.com/a/12972502/64911
         pass
     return None
-
-
-def extract_from_pdf(
-    path: str,
-    page_count: int,
-    ocr_available: bool = False,
-    strip_margin: bool = False,
-) -> Any:
-    """Extract text from pdfs.
-
-    If a text-based PDF we fix corrupt PDFs from ca9.
-
-    Extract the text from the document and if ocr available OCR the document
-
-    :param path: The path to the PDF
-    :param ocr_available: Whether we should do OCR stuff
-    :param strip_margin: Whether to remove 1 inch margin from text extraction
-    :return Tuple of the content itself and any errors we received
-    """
-    content = extract_pdf_text(path, strip_margin)
-
-    extracted_by_ocr = False
-    is_ocr_needed, err = ocr_needed(path, content, page_count)
-
-    if is_ocr_needed and ocr_available:
-        success, ocr_content = extract_by_ocr(path)
-        if success:
-            extracted_by_ocr = True
-            content = ocr_content
-        elif content == "" or not success:
-            content = "Unable to extract document content."
-    elif not ocr_available:
-        if "e" not in content:
-            # It's a corrupt PDF from ca9. Fix it.
-            content = fix_mojibake(content)
-
-    return content, extracted_by_ocr, err
 
 
 def extract_by_ocr(path: str) -> (bool, str):
@@ -618,3 +585,28 @@ def get_document_number_from_pdf(path: str) -> str:
         return ""
     document_number = [dn for dn in document_number_matches[0] if dn]
     return clean_document_number(document_number[0])
+
+
+def extract_from_pdf(
+    path: str,
+    strip_margin: bool = False,
+) -> tuple[str, bool]:
+    """Extract from PDF
+
+    :param path: The path to the PDF
+    :param strip_margin: Whether to remove 1 inch margin from text extraction
+    """
+    content = ""
+    extracted_by_ocr = False
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            page_text = get_page_text(page, strip_margin=strip_margin)
+            if page_needs_ocr(page, page_text):
+                extracted_by_ocr = True
+                page_text = process_page_with_ocr(page)
+            elif "e" not in content:
+                # It's a corrupt PDF from ca9. Fix it.
+                page_text = fix_mojibake(page_text)
+            content += "\n" + page_text
+    content = remove_excess_whitespace(content)
+    return content, extracted_by_ocr
