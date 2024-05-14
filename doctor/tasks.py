@@ -607,6 +607,6 @@ def extract_from_pdf(
             elif "e" not in content:
                 # It's a corrupt PDF from ca9. Fix it.
                 page_text = fix_mojibake(page_text)
-            content += "\n" + page_text
+            content += f"\n{page_text}"
     content = remove_excess_whitespace(content)
     return content, extracted_by_ocr

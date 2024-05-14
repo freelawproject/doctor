@@ -163,7 +163,11 @@ class ExtractionTests(unittest.TestCase):
                 "strip_margin": False,
             },
         )
-        self.assertIn("TELEPHONIC APPEARANCE", r.json()['content'], msg=r.json()['content'])
+        self.assertIn(
+            "TELEPHONIC APPEARANCE",
+            r.json()["content"],
+            msg=r.json()["content"],
+        )
 
     def test_pdf_with_missing_fonts(self):
         """Test PDF with missing fonts"""

@@ -7,6 +7,7 @@ from pytesseract import Output
 import pandas as pd
 from PIL import Image
 
+
 def deskew(obj) -> bool:
     """Remove skewed text from a page
 
@@ -166,7 +167,6 @@ def validate_ocr_text(row, img):
     return row["text"] + " "
 
 
-
 def add_newlines(row: pd.Series, state: dict) -> dict:
     """Add new linebreaks into the ocr'd page
 
@@ -176,28 +176,28 @@ def add_newlines(row: pd.Series, state: dict) -> dict:
     :param state: the location data used to decide where line breaks should be
     :return:
     """
-    prev = state['prev_row']
-    max_y = state['max_y']
-    new_line = prev['line_num'] != row["line_num"] if max_y > 0 else True
-    new_paragraph = prev['par_num'] != row["par_num"] if max_y > 0 else True
+    prev = state["prev_row"]
+    max_y = state["max_y"]
+    new_line = prev["line_num"] != row["line_num"] if max_y > 0 else True
+    new_paragraph = prev["par_num"] != row["par_num"] if max_y > 0 else True
 
     if new_line:
-        state['page_text'] += '\n'
-        state['indent'] = 0
+        state["page_text"] += "\n"
+        state["indent"] = 0
     if new_paragraph:
         # Add a second line break for new paragraphs for good measure
-        state['page_text'] += '\n'
-        state['indent'] = 0
+        state["page_text"] += "\n"
+        state["indent"] = 0
 
-    if new_line and not new_paragraph and state['max_y'] > 0:
-        diff = row['top'] - state['max_y']
+    if new_line and not new_paragraph and state["max_y"] > 0:
+        diff = row["top"] - state["max_y"]
         if 200 > diff > 130:
-            state['page_text'] += "\n"
+            state["page_text"] += "\n"
         elif diff > 200:
-            state['page_text'] += "\n\n"
+            state["page_text"] += "\n\n"
         state["max_y"] = 0
 
-    state['max_y'] = max(state['max_y'], row['top'] + row['height'])
+    state["max_y"] = max(state["max_y"], row["top"] + row["height"])
     return state
 
 
@@ -208,16 +208,16 @@ def insert_indentation(row: pd.Series, state: dict) -> dict:
     :param state: dictionary of position text data
     :return: dictionary of position text data
     """
-    indent = int((row['left']) / state['char_width']) - state['indent']
-    prev = state['prev_row']
+    indent = int((row["left"]) / state["char_width"]) - state["indent"]
+    prev = state["prev_row"]
     if prev is not None:
         spacing = row.get("left") - (prev.get("left") + prev.get("width"))
     else:
         spacing = 0
-    if (spacing > 25 or state['indent'] == 0) and indent >= 8:
-        state['page_text'] += ' ' * indent
-    state['indent'] += len(row['text']) + indent + 1
-    state['prev_row'] = row
+    if (spacing > 25 or state["indent"] == 0) and indent >= 8:
+        state["page_text"] += " " * indent
+    state["indent"] += len(row["text"]) + indent + 1
+    state["prev_row"] = row
     return state
 
 
@@ -238,16 +238,16 @@ def format_text_by_block(block: pd.DataFrame, img: Image) -> str:
         "char_width": find_average_char_width(block),
         "prev_row": None,
         "indent": 0,
-        "max_y": 0
+        "max_y": 0,
     }
 
     for index, row in block.iterrows():
         state = add_newlines(row, state)
         state = insert_indentation(row, state)
-        state['page_text'] += validate_ocr_text(row, img)
+        state["page_text"] += validate_ocr_text(row, img)
         # state['prev_row'] = row
 
-    page_text = re.sub(r"^ +$", "", state['page_text'], flags=re.MULTILINE)
+    page_text = re.sub(r"^ +$", "", state["page_text"], flags=re.MULTILINE)
     return page_text.strip("\n")
 
 
