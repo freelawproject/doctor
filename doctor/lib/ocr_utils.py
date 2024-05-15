@@ -201,9 +201,7 @@ def insert_indentation(row: pd.Series, state: dict) -> dict:
     return state
 
 
-def format_text_by_block(
-    block: pd.DataFrame, img: Image
-) -> str:
+def format_text_by_block(block: pd.DataFrame, img: Image) -> str:
     """Process blocks of text
 
     Insert whitespace and validate the OCR results
