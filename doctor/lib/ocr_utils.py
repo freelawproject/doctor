@@ -132,6 +132,18 @@ def validate_ocr_text(row: pd.Series, img: Image) -> pd.Series:
             row["text"] = new_words
         else:
             row["text"] = "□" * len(row["text"])
+    elif row["conf"] < 10:
+        # if the confidence is under 10 and its just three characters - box it
+        row["text"] = "□"
+    elif (
+        row["conf"] < 20
+        and len(row["text"]) == 1
+        and not row["text"].isalnum()
+    ):
+        # Artifacts from scans often appear as lone symbols
+        # if conf is low and they are all alone drop them
+        row["text"] = " "
+
     return row["text"] + " "
 
 
@@ -189,7 +201,9 @@ def insert_indentation(row: pd.Series, state: dict) -> dict:
     return state
 
 
-def format_text_by_block(block: pd.DataFrame, img: Image) -> str:
+def format_text_by_block(
+    block: pd.DataFrame, img: Image
+) -> str:
     """Process blocks of text
 
     Insert whitespace and validate the OCR results
@@ -250,7 +264,49 @@ def process_page_with_ocr(page: pdfplumber.PDF.pages) -> str:
     page_text = ""
     for block in ordered_page_blocks:
         page_text += format_text_by_block(block, image)
+
+    if page.page_number == 1:
+        page_text = adjust_caption_lines(page_text)
     page_text = re.sub(r"^\s+\n|$", "", page_text, 1, flags=re.MULTILINE)
+    return page_text
+
+
+def adjust_caption_lines(page_text: str) -> str:
+    """Adjust the alignment of ) or : or § used to align content
+
+    § is used in texas courts
+    : is used in NY courts
+    ) is used in many courts
+
+    :param page_text: The text of the first page
+    :return: The page text
+    """
+    for separator in [r"\)", "§", ":"]:
+        matches = list(re.finditer(rf"(.* +{separator} .*\n)", page_text))
+        central_matches = [
+            match
+            for match in matches
+            if 30 <= match.group().rindex(separator[-1]) <= 70
+        ]
+        if len(central_matches) < 3:
+            continue  # Skip this separator if less than 3 matches found
+        # Determine the longest position of the separator
+        longest = max(
+            match.group().rindex(separator[-1]) for match in central_matches
+        )
+        adjust = 0
+        for match in central_matches:
+            match_text = match.group()
+            index = match_text.rindex(separator[-1])
+            location = match.start() + adjust + index
+            # Adjust the page text by adding spaces to align the separators
+            page_text = (
+                page_text[:location]
+                + " " * (longest - index)
+                + page_text[location:]
+            )
+            adjust += longest - index
+        return page_text
     return page_text
 
 
