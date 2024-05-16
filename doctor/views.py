@@ -108,8 +108,6 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     else:
         content = ""
         err = "Unable to extract content due to unknown extension"
-    if extension != "pdf":
-        page_count = get_page_count(fp, extension)
     cleanup_form(form)
     return JsonResponse(
         {
