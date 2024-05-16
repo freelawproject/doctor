@@ -22,7 +22,7 @@ from PyPDF2.errors import PdfReadError
 from seal_rookery.search import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
-from doctor.lib.ocr_utils import (
+from doctor.lib.text_extraction import (
     get_page_text,
     page_needs_ocr,
     process_page_with_ocr,
