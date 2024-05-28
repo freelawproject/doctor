@@ -10,6 +10,11 @@ urlpatterns = [
         views.extract_doc_content,
         name="convert-doc-to-text",
     ),
+    path(
+        "extract/recap/text/",
+        views.extract_recap_document,
+        name="extract-recap-document",
+    ),
     path("convert/image/pdf/", views.image_to_pdf, name="image-to-pdf"),
     path("convert/images/pdf/", views.images_to_pdf, name="images-to-pdf"),
     path("convert/pdf/thumbnail/", views.make_png_thumbnail, name="thumbnail"),

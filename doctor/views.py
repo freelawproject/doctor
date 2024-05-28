@@ -48,6 +48,7 @@ from doctor.tasks import (
     rasterize_pdf,
     set_mp3_meta_data,
     strip_metadata_from_bytes,
+    extract_recap_pdf,
 )
 
 
@@ -74,6 +75,35 @@ def image_to_pdf(request) -> HttpResponse:
             f.write(cleaned_pdf_bytes)
         cleanup_form(form)
         return HttpResponse(cleaned_pdf_bytes)
+
+
+def extract_recap_document(request) -> JsonResponse:
+    """Extract Recap Documents
+
+    :param request: The request object
+    :return: JsonResponse
+    """
+    form = DocumentForm(request.GET, request.FILES)
+    if not form.is_valid():
+        return JsonResponse(
+            {
+                "err": "Failed validation",
+            },
+            status=BAD_REQUEST,
+        )
+    filepath = form.cleaned_data["fp"]
+    strip_margin = form.cleaned_data["strip_margin"]
+    content, extracted_by_ocr = extract_recap_pdf(
+        filepath=filepath,
+        strip_margin=strip_margin,
+    )
+    cleanup_form(form)
+    return JsonResponse(
+        {
+            "content": content,
+            "extracted_by_ocr": extracted_by_ocr,
+        }
+    )
 
 
 def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:

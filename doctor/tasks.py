@@ -22,6 +22,12 @@ from PyPDF2.errors import PdfReadError
 from seal_rookery.search import seal, ImageSizes
 
 from doctor.lib.mojibake import fix_mojibake
+from doctor.lib.text_extraction import (
+    get_page_text,
+    page_needs_ocr,
+    extract_with_ocr,
+    remove_excess_whitespace,
+)
 from doctor.lib.utils import (
     DoctorUnicodeDecodeError,
     force_bytes,
@@ -621,3 +627,29 @@ def get_document_number_from_pdf(path: str) -> str:
         return ""
     document_number = [dn for dn in document_number_matches[0] if dn]
     return clean_document_number(document_number[0])
+
+
+def extract_recap_pdf(
+    filepath: str,
+    strip_margin: bool = False,
+) -> tuple[str, bool]:
+    """Extract from RECAP PDF
+
+    :param filepath: The path to the PDF
+    :param strip_margin: Whether to remove 1 inch margin from text extraction
+    :return: A tuple containing the text and a boolean indicating ocr usage
+    """
+    content = ""
+    extracted_by_ocr = False
+    with pdfplumber.open(filepath) as pdf:
+        for page in pdf.pages:
+            page_text = get_page_text(page, strip_margin=strip_margin)
+            if page_needs_ocr(page, page_text):
+                extracted_by_ocr = True
+                page_text = extract_with_ocr(page, strip_margin=strip_margin)
+            if "e" not in page_text:
+                # It's a corrupt PDF from ca9. Fix it.
+                page_text = fix_mojibake(page_text)
+            content += f"\n{page_text}"
+    content = remove_excess_whitespace(content)
+    return content, extracted_by_ocr
