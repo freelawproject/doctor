@@ -24,6 +24,64 @@ class HeartbeatTests(unittest.TestCase):
         )
 
 
+class RECAPExtractionTests(unittest.TestCase):
+    def test_recap_extraction(self):
+        """Can we extract from the new recap text endpoint"""
+        files = make_file(
+            filename="recap_extract/gov.uscourts.cand.203070.27.0.pdf"
+        )
+        params = {"strip_margin": False}
+        response = requests.post(
+            "http://doctor:5050/extract/recap/text/",
+            files=files,
+            params=params,
+        )
+        first_line = response.json()["content"].splitlines()[0].strip()
+        self.assertEqual(200, response.status_code, msg="Wrong status code")
+        self.assertTrue(
+            response.json()["extracted_by_ocr"], msg="Not extracted correctly"
+        )
+        self.assertEqual(
+            "aséakOS- 08-0220 A25BA  BAD GDoonene 2627  Filed  OL/2B/DE0IP adgeahefi2of 2",
+            first_line,
+            msg="Wrong Text",
+        )
+
+    def test_recap_extraction_with_strip_margin(self):
+        """Can we extract from the new recap text endpoint with strip margin?"""
+        files = make_file(
+            filename="recap_extract/gov.uscourts.cand.203070.27.0.pdf"
+        )
+        params = {"strip_margin": True}
+        response = requests.post(
+            "http://doctor:5050/extract/recap/text/",
+            files=files,
+            params=params,
+        )
+        first_line = response.json()["content"].splitlines()[0].strip()
+        self.assertEqual(200, response.status_code, msg="Wrong status code")
+        self.assertEqual(
+            "1  || DONALD W. CARLSON  [Bar No. 79258]",
+            first_line,
+            msg="Wrong Text",
+        )
+
+    def test_strip_margin_without_ocr(self):
+        """Can we extract from the new recap text endpoint with strip margin?"""
+        files = make_file(
+            filename="recap_extract/gov.uscourts.cacd.652774.40.0.pdf"
+        )
+        params = {"strip_margin": True}
+        response = requests.post(
+            "http://doctor:5050/extract/recap/text/",
+            files=files,
+            params=params,
+        )
+        first_line = response.json()["content"].splitlines()[0].strip()
+        self.assertEqual(200, response.status_code, msg="Wrong status code")
+        self.assertEqual("1", first_line, msg="Wrong Text")
+
+
 class ExtractionTests(unittest.TestCase):
     def test_pdf_to_text(self):
         """"""
