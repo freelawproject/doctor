@@ -44,15 +44,17 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
     if strip_margin:
         # Crop margins and remove skewed text
         _, _, width, height = page.bbox
+        pixels_per_inch = width / 8.5
         bbox = (
-            (1 / 8.5 * width),
-            (1 / 11 * height),
-            (7.5 / 8.5 * width),
-            (10 / 11 * height),
+            pixels_per_inch * 1,  # 1 inch from left edge
+            pixels_per_inch * 1,  # 1 inch down from top
+            pixels_per_inch
+            * 7.5,  # 7.5 inches from left edge (1 inch from right)
+            pixels_per_inch * 10,  # 10 inches from top (1 inch from bottom)
         )
         doc_text = (
             page.crop(bbox)
-            .filter(deskew)
+            .filter(is_skewed)
             .extract_text(
                 layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
             )
@@ -65,18 +67,18 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
 
 
 def page_images(page: pdfplumber.pdf.Page) -> bool:
-    """Does the page have images of a certain size
+    """Does the page have images that are large enough to contain text
 
-    :param page: pdf plumber
+    :param page: pdf plumber page
     :return: True if page contains images of a certain size
     """
-    for img in page.images:
-        if (
-            img.get("width") / page.width * img.get("height") / page.height
-            > 0.1
-        ) or img.get("width") * img.get("width") > 10:
-            return True
-    return False
+    return any(
+        [
+            image
+            for image in page.images
+            if image["width"] > 10 and image["height"] > 10
+        ]
+    )
 
 
 def page_annotations(page: pdfplumber.pdf.Page) -> bool:
@@ -154,25 +156,23 @@ def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
 def convert_pdf_page_to_image(
     page: pdfplumber.pdf.Page, strip_margin: bool
 ) -> Image:
-    """Conver page to image and crop margin if applicable
+    """Convert page to image and crop margin if applicable
 
-    :param page:Pdf Plumber
-    :param strip_margin: bool
-    :return: The formatted image
+    :param page: the pdf page
+    :param strip_margin: whether to crop the margin
+    :return: The cropped page image
     """
     img = page.to_image(resolution=300)
     _, _, w, h = page.bbox
     width = w * img.scale
-    height = h * img.scale
 
     if strip_margin == True:
-        # Because this is OCR - I think its reasonable to crop half the standard
-        # 1 inch margin - this leads to much better results and helps reduce
+        pixels_per_inch = width / 8.5
         bbox = (
-            (1 / (8.5 * 2) * width),
-            (1 / (11 * 2) * height),
-            (16 / (8.5 * 2) * width),
-            (21 / (11 * 2) * height),
+            pixels_per_inch * 0.5,  # .5"  from left edge
+            pixels_per_inch * 0.5,  # .5" down from top
+            pixels_per_inch * 8,  # 8" from left edge (.5" from right)
+            pixels_per_inch * 10.5,  # 10.5" from top (.5" from bottom)
         )
         image = img.original.crop(bbox)
     else:
@@ -321,9 +321,23 @@ def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
 def cleanup_content(content: str, page_number: int) -> str:
     """Reduce legal document line clutter
 
-    Scans containing line numbers or bad scans have pipe issues this simply
-    tries to reduce the noise and artifacts and align caption lines
-    if easy
+    This function performs several operations to clean up the text extracted from legal documents:
+
+    1. On the first page, it smooths out vertical lines if they are detected.
+    2. It removes pipes ('|') that might start a line repeatedly.
+    3. It removes artifacts that appear at the end of a line of text, specifically single characters
+       following at least 10 whitespace characters, reducing right margin edge artifacts.
+    4. It removes excess left margin whitespace to improve readability and formatting.
+
+    Example:
+    If the pipes below represent the page edge (not characters):
+    |       we can remove the
+    |    the left whitespace
+    |    and shift this entire
+    |    page over four characters
+    |    which keeps formatting and
+    |    makes the text easier to
+    |    read and process with the API.
 
     :param content: the page content extracted
     :param page_number: the page number
@@ -341,6 +355,7 @@ def cleanup_content(content: str, page_number: int) -> str:
     pattern = r"\s{10,}[a-zA-Z0-9|] $"
     content = re.sub(pattern, "", content, flags=re.MULTILINE)
 
+    # shift text left if possible and remove excess start and end whitespace
     content = remove_excess_whitespace(content)
     return f"{content}\n"
 
@@ -349,6 +364,7 @@ def remove_excess_whitespace(document: str) -> str:
     """Remove excess whitespace from OCR
 
     This function removes empty lines of text at the start and end of a document
+    and shifts the page left if possible
 
     :param document: text of the document
     :return: Document with excess whitespace removed
