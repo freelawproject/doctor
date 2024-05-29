@@ -8,8 +8,8 @@ import pandas as pd
 from PIL import Image
 
 
-def deskew(obj: dict) -> bool:
-    """Remove skewed text from a page
+def is_skewed(obj: dict) -> bool:
+    """Check if a PDF plumber dict is skewed
 
     CTM stands for current transformation matrix.
     Pdf plumber has a method to calculate the angle of text which we use here
