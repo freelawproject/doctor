@@ -1,4 +1,5 @@
 import re
+from statistics import mean
 
 import pdfplumber
 from pdfplumber.ctm import CTM
@@ -119,20 +120,13 @@ def adjust_caption_lines(page_text: str) -> str:
         longest = max(
             match.group().rindex(separator[-1]) for match in central_matches
         )
-        adjust = 0
-        for match in central_matches:
-            match_text = match.group()
-            index = match_text.rindex(separator[-1])
-            location = match.start() + adjust + index
-            # Adjust the page text by adding spaces to align the separators
-            page_text = (
-                page_text[:location]
-                + " " * (longest - index)
-                + page_text[location:]
-            )
-            adjust += longest - index
-        return page_text
-    return page_text
+        page = []
+        for row in page_text.splitlines():
+            index = row.find(f" {separator[-1]} ")
+            addition = (longest - index) * " "
+            row = row.replace(f" {separator[-1]} ", f"{addition}{separator[-1]} ")
+            page.append(row)
+        return "\n".join(page)
 
 
 def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
@@ -343,9 +337,6 @@ def cleanup_content(content: str, page_number: int) -> str:
     :param page_number: the page number
     :return: the cleaned up text
     """
-    if page_number == 1:
-        content = adjust_caption_lines(content)
-
     # remove floating pipes
     pattern = r"\s{4,}\| $"
     # Substitute the matched pipe with an empty string
@@ -357,6 +348,9 @@ def cleanup_content(content: str, page_number: int) -> str:
 
     # shift text left if possible and remove excess start and end whitespace
     content = remove_excess_whitespace(content)
+    if page_number == 1:
+        content = adjust_caption_lines(content)
+
     return f"{content}\n"
 
 
