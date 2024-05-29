@@ -788,8 +788,6 @@ class TestCleanupContent(unittest.TestCase):
         result = cleanup_content(content, 2)
         self.assertEqual(result, expected_result)
 
-
-class TestRECAPCaptionAdjustments(unittest.TestCase):
     def test_adjust_caption(self):
         """Test if we can align the caption correctly"""
         content = """             10
@@ -816,6 +814,8 @@ class TestRECAPCaptionAdjustments(unittest.TestCase):
              15               Defendant                     )
              16                                             ) """
         content = adjust_caption_lines(content)
+        print(content)
+        print(expected_result)
         self.assertEqual(expected_result, content)
 
 
