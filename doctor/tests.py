@@ -3,6 +3,7 @@ import os
 import re
 import glob
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from zipfile import ZipFile
@@ -10,6 +11,13 @@ from zipfile import ZipFile
 import eyed3
 import requests
 
+from doctor.lib.text_extraction import (
+    insert_whitespace,
+    get_word,
+    remove_excess_whitespace,
+    cleanup_content,
+    adjust_caption_lines,
+)
 from doctor.lib.utils import make_file, make_buffer
 
 asset_path = f"{Path.cwd()}/doctor/test_assets"
@@ -545,6 +553,268 @@ class TestFailedValidations(unittest.TestCase):
             params={"mime": True},
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
+
+
+class TestRecapWhitespaceInsertions(unittest.TestCase):
+    """Test our whitespace insertion code"""
+
+    def test_insert_whitespace_new_line(self):
+        content = "foo"
+        word = {
+            "line_num": 2,
+            "par_num": 1,
+            "left": 50,
+            "top": 200,
+            "width": 10,
+            "height": 20,
+        }
+        prev = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 10,
+            "top": 100,
+            "width": 30,
+            "height": 20,
+        }
+        result = insert_whitespace(content, word, prev)
+        self.assertEqual(result, "foo\n  ")
+
+    def test_insert_whitespace_new_paragraph(self):
+        content = "foo"
+        word = {
+            "line_num": 1,
+            "par_num": 2,
+            "left": 50,
+            "top": 200,
+            "width": 10,
+            "height": 20,
+        }
+        prev = {
+            "line_num": 2,
+            "par_num": 1,
+            "left": 10,
+            "top": 100,
+            "width": 30,
+            "height": 20,
+        }
+        result = insert_whitespace(content, word, prev)
+        self.assertEqual(result, "foo\n  ")
+
+    def test_insert_whitespace_vertical_gap(self):
+        content = "foo"
+        word = {
+            "line_num": 2,
+            "par_num": 1,
+            "left": 50,
+            "top": 300,
+            "width": 10,
+            "height": 20,
+        }
+        prev = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 10,
+            "top": 100,
+            "width": 30,
+            "height": 20,
+        }
+        result = insert_whitespace(content, word, prev)
+        self.assertEqual(result, "foo\n\n  ")
+
+    def test_insert_whitespace_horizontal_gap(self):
+        content = "foo"
+        word = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 200,
+            "top": 100,
+            "width": 10,
+            "height": 20,
+        }
+        prev = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 10,
+            "top": 100,
+            "width": 30,
+            "height": 20,
+        }
+        result = insert_whitespace(content, word, prev)
+        self.assertEqual(result, "foo      ")
+
+    def test_insert_whitespace_no_gap(self):
+        content = "foo"
+        word = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 50,
+            "top": 100,
+            "width": 10,
+            "height": 20,
+        }
+        prev = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 40,
+            "top": 100,
+            "width": 10,
+            "height": 20,
+        }
+        result = insert_whitespace(content, word, prev)
+        self.assertEqual(result, "foo")
+
+
+class TestOCRConfidenceTests(unittest.TestCase):
+    """Test our OCR confidence checking functions."""
+
+    def test_confidence_zero(self):
+        word_dict = {"text": "foo", "conf": 0, "left": 10, "width": 30}
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "    ")
+
+    def test_confidence_low_and_in_margin(self):
+        word_dict = {"text": "foo", "conf": 30, "left": 5, "width": 20}
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "    ")
+
+    def test_confidence_below_threshold_short_word(self):
+        word_dict = {"text": "foo", "conf": 3, "left": 200, "width": 20}
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "□□□ ")
+
+    def test_confidence_below_threshold_long_word(self):
+        word_dict = {
+            "text": "foobarbazfoobarbazfoobar",
+            "conf": 3,
+            "left": 200,
+            "width": 200,
+        }
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "□□□□□□□□□□□□□□□□□□□□□□□□ ")
+
+    def test_confidence_below_threshold_in_right_margin(self):
+        word_dict = {"text": "foo", "conf": 30, "left": 580, "width": 10}
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "□□□ ")
+
+    def test_valid_word_high_confidence(self):
+        word_dict = {"text": "foo", "conf": 90, "left": 50, "width": 20}
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "foo ")
+
+    def test_word_on_left_edge(self):
+        word_dict = {"text": "foo", "conf": 50, "left": 0, "width": 20}
+        result = get_word(word_dict, 612, True)
+        self.assertEqual(result, "    ")
+
+
+class TestWhiteSpaceRemoval(unittest.TestCase):
+
+    def test_left_shift(self):
+        """Can we properly shift our text left?"""
+        document = """
+        foo 
+    bar 
+    foo
+    bar"""
+        expected_result = """    foo 
+bar 
+foo
+bar"""
+        result = remove_excess_whitespace(document)
+        self.assertEqual(result, expected_result)
+
+    def test_left_shift_when_artifact_exists(self):
+        """Shift left once"""
+        document = """
+        foo 
+    bar 
+ |  foo
+    bar"""
+        expected_result = """       foo 
+   bar 
+|  foo
+   bar"""
+        result = remove_excess_whitespace(document)
+        self.assertEqual(result, expected_result)
+
+
+class TestCleanupContent(unittest.TestCase):
+
+    def setUp(self):
+        # Patch the functions before each test method
+        patcher1 = patch(
+            "doctor.lib.text_extraction.adjust_caption_lines",
+            side_effect=lambda x: x,
+        )
+        patcher2 = patch(
+            "doctor.lib.text_extraction.remove_excess_whitespace",
+            side_effect=lambda x: x,
+        )
+        self.mock_adjust = patcher1.start()
+        self.mock_remove_whitespace = patcher2.start()
+        self.addCleanup(patcher1.stop)
+        self.addCleanup(patcher2.stop)
+
+    def test_remove_floating_pipes(self):
+        """Can we remove a pipe"""
+        content = "This is a test line     | \nAnother line"
+        expected_result = "This is a test line\nAnother line\n"
+        result = cleanup_content(content, 2)
+        self.assertEqual(result, expected_result)
+
+    def test_remove_floating_artifacts_right_side(self):
+        """Can we remove an artifact on the far right"""
+        content = "This is a test line          e \nAnother line"
+        expected_result = "This is a test line\nAnother line\n"
+        result = cleanup_content(content, 2)
+        self.assertEqual(result, expected_result)
+
+    def test_remove_floating_pipes_and_artifacts(self):
+        """Test to remove just the period"""
+        content = "This is a test line     | and the content continues\nThis is another test line              e \nFinal line"
+        expected_result = "This is a test line     | and the content continues\nThis is another test line\nFinal line\n"
+        result = cleanup_content(content, 2)
+        self.assertEqual(result, expected_result)
+
+    def test_no_floating_pipes_or_artifacts(self):
+        """Test that no floating pipes are an issue"""
+        content = (
+            "This is a test line                     JW-6\nAnother line\n"
+        )
+        expected_result = (
+            "This is a test line                     JW-6\nAnother line\n\n"
+        )
+        result = cleanup_content(content, 2)
+        self.assertEqual(result, expected_result)
+
+    def test_adjust_caption(self):
+        """Test if we can align the caption correctly"""
+        content = """             10 
+                 LESLIE MASSEY,                    )  Case No.:  2:16-cv-05001 GJS 
+                                                       ) 
+                                 oe                    )  PROPOSED} ORDER AWARDING 
+             12               Plaintiff,                    )   EQUAL ACCESS TO JUSTICE ACT 
+                                                )    ATTORNEY FEES AND EXPENSES 
+             13         VS.                              )  PURSUANT TO 28 U.S.C. § 2412(d) 
+                 NANCY A. BERRYHILL, Acting      )  AND COSTS PURSUANT TO 28 
+             14 || Commissioner of Social Security,       )  U.S.C. §  1920 
+             15               Defendant                 ) 
+             16                                         ) """
+
+        expected_result = """             10 
+                 LESLIE MASSEY,                             )  Case No.:  2:16-cv-05001 GJS 
+                                                            ) 
+                                 oe                         )  PROPOSED} ORDER AWARDING 
+             12               Plaintiff,                    )   EQUAL ACCESS TO JUSTICE ACT 
+                                                            )    ATTORNEY FEES AND EXPENSES 
+             13         VS.                                 )  PURSUANT TO 28 U.S.C. § 2412(d) 
+                 NANCY A. BERRYHILL, Acting                 )  AND COSTS PURSUANT TO 28 
+             14 || Commissioner of Social Security,         )  U.S.C. §  1920 
+             15               Defendant                     ) 
+             16                                             ) """
+        content = adjust_caption_lines(content)
+        self.assertEqual(expected_result, content)
 
 
 if __name__ == "__main__":

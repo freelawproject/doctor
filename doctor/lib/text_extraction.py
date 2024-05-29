@@ -124,7 +124,9 @@ def adjust_caption_lines(page_text: str) -> str:
         for row in page_text.splitlines():
             index = row.find(f" {separator[-1]} ")
             addition = (longest - index) * " "
-            row = row.replace(f" {separator[-1]} ", f"{addition}{separator[-1]} ")
+            row = row.replace(
+                f" {separator[-1]} ", f"{addition}{separator[-1]} "
+            )
             page.append(row)
         return "\n".join(page)
 
