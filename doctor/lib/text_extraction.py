@@ -183,6 +183,20 @@ def convert_pdf_page_to_image(
 def ocr_image_to_data(image: Image) -> list[pd.DataFrame]:
     """Perform OCR on an image to extract data
 
+    Detailed Parameters for `pytesseract.image_to_data`:
+    - config: str
+        Additional Tesseract configuration options.
+        - `-c preserve_interword_spaces=1`: Preserve spaces between words as they appear in the image.
+        - `-c tessedit_do_invert=0`: Do not invert the image colors.
+        - `--psm 6`: Page segmentation mode 6, which assumes a single uniform block of text.
+        - `-l eng`: Use the English language for OCR.
+    - output_type: pytesseract.Output.DICT
+        Specifies that the output should be a dictionary of OCR data.
+
+    Reference:
+    Tesseract OCR documentation: https://github.com/tesseract-ocr/tesseract/blob/master/doc/tesseract.1.asc
+
+
     Convert the image of the pdf page to OCR data
     :param image: Pil Image
     :return: A list of DataFrames, each containing OCR data for a block of text
