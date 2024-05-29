@@ -713,12 +713,12 @@ class TestWhiteSpaceRemoval(unittest.TestCase):
     def test_left_shift(self):
         """Can we properly shift our text left?"""
         document = """
-        foo 
-    bar 
+        foo
+    bar
     foo
     bar"""
-        expected_result = """    foo 
-bar 
+        expected_result = """    foo
+bar
 foo
 bar"""
         result = remove_excess_whitespace(document)
@@ -727,12 +727,12 @@ bar"""
     def test_left_shift_when_artifact_exists(self):
         """Shift left once"""
         document = """
-        foo 
-    bar 
+        foo
+    bar
  |  foo
     bar"""
-        expected_result = """       foo 
-   bar 
+        expected_result = """       foo
+   bar
 |  foo
    bar"""
         result = remove_excess_whitespace(document)
@@ -790,28 +790,28 @@ class TestCleanupContent(unittest.TestCase):
 
     def test_adjust_caption(self):
         """Test if we can align the caption correctly"""
-        content = """             10 
-                 LESLIE MASSEY,                    )  Case No.:  2:16-cv-05001 GJS 
-                                                       ) 
-                                 oe                    )  PROPOSED} ORDER AWARDING 
-             12               Plaintiff,                    )   EQUAL ACCESS TO JUSTICE ACT 
-                                                )    ATTORNEY FEES AND EXPENSES 
-             13         VS.                              )  PURSUANT TO 28 U.S.C. § 2412(d) 
-                 NANCY A. BERRYHILL, Acting      )  AND COSTS PURSUANT TO 28 
-             14 || Commissioner of Social Security,       )  U.S.C. §  1920 
-             15               Defendant                 ) 
+        content = """             10
+                 LESLIE MASSEY,                    )  Case No.:  2:16-cv-05001 GJS
+                                                       )
+                                 oe                    )  PROPOSED} ORDER AWARDING
+             12               Plaintiff,                    )   EQUAL ACCESS TO JUSTICE ACT
+                                                )    ATTORNEY FEES AND EXPENSES
+             13         VS.                              )  PURSUANT TO 28 U.S.C. § 2412(d)
+                 NANCY A. BERRYHILL, Acting      )  AND COSTS PURSUANT TO 28
+             14 || Commissioner of Social Security,       )  U.S.C. §  1920
+             15               Defendant                 )
              16                                         ) """
 
-        expected_result = """             10 
-                 LESLIE MASSEY,                             )  Case No.:  2:16-cv-05001 GJS 
-                                                            ) 
-                                 oe                         )  PROPOSED} ORDER AWARDING 
-             12               Plaintiff,                    )   EQUAL ACCESS TO JUSTICE ACT 
-                                                            )    ATTORNEY FEES AND EXPENSES 
-             13         VS.                                 )  PURSUANT TO 28 U.S.C. § 2412(d) 
-                 NANCY A. BERRYHILL, Acting                 )  AND COSTS PURSUANT TO 28 
-             14 || Commissioner of Social Security,         )  U.S.C. §  1920 
-             15               Defendant                     ) 
+        expected_result = """             10
+                 LESLIE MASSEY,                             )  Case No.:  2:16-cv-05001 GJS
+                                                            )
+                                 oe                         )  PROPOSED} ORDER AWARDING
+             12               Plaintiff,                    )   EQUAL ACCESS TO JUSTICE ACT
+                                                            )    ATTORNEY FEES AND EXPENSES
+             13         VS.                                 )  PURSUANT TO 28 U.S.C. § 2412(d)
+                 NANCY A. BERRYHILL, Acting                 )  AND COSTS PURSUANT TO 28
+             14 || Commissioner of Social Security,         )  U.S.C. §  1920
+             15               Defendant                     )
              16                                             ) """
         content = adjust_caption_lines(content)
         self.assertEqual(expected_result, content)
