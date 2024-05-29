@@ -279,7 +279,7 @@ def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
     elif conf < 40 and word_dict["left"] > right_margin:
         word = "□" * len(word)
 
-    return word + " "
+    return f"{word} "
 
 
 def cleanup_content(content: str, page_number: int) -> str:
@@ -306,7 +306,7 @@ def cleanup_content(content: str, page_number: int) -> str:
     content = re.sub(pattern, "", content, flags=re.MULTILINE)
 
     content = remove_excess_whitespace(content)
-    return content + "\n"
+    return f"{content}\n"
 
 
 def remove_excess_whitespace(document: str) -> str:
