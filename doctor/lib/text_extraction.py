@@ -270,6 +270,28 @@ def insert_whitespace(content: str, word: dict, prev: dict) -> str:
 def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
     """Append word to content
 
+    This function determines if a word should be added to the page content
+    and adds the word.
+
+    tesseract provides confidence values for its OCR outputs.  We use those
+    confidence values to determine if something is a good OCR output, a
+    likely artifact and should be excluded or is bad ocr but not an artifact.
+
+    If a word has a zero confidence or starts on the left most edge of the paper
+    we return it as an empty string.  It is likely an artifact.
+
+    If a word has confidence below 40, a number that usually equates to 3 to 5
+    standard deviations from confidences found in other words is entirely in the
+    margin of the page - its likely an artifact as well.
+
+    If a confidence is below 5 - for a very short word - or for a very long word
+    its likely part of the document but we have no idea so we return a square
+    box to indicate that.  This is often caused by stamps or lines in case captions
+
+    Finally if a low confidence word starts in the right margin - its likely a
+    bad OCR that is multiple standard deviations away so we return the word as
+    empty squares.
+
     :param word_dict: the word object from tesseract
     :param width: The width of the document
     :param strip_margin: should we strip the margin
