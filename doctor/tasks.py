@@ -647,9 +647,6 @@ def extract_recap_pdf(
             if page_needs_ocr(page, page_text):
                 extracted_by_ocr = True
                 page_text = extract_with_ocr(page, strip_margin=strip_margin)
-            if "e" not in page_text:
-                # It's a corrupt PDF from ca9. Fix it.
-                page_text = fix_mojibake(page_text)
             content += f"\n{page_text}"
     content = remove_excess_whitespace(content)
     return content, extracted_by_ocr
