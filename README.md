@@ -100,6 +100,25 @@ Valid requests will receive a JSON response with the following keys:
  - `extracted_by_ocr`: Whether OCR was needed and used during processing.
  - `page_count`: The number of pages, if it applies.
 
+### Endpoint: /extract/recap/text/
+
+Given a RECAP pdf, extract out the text using PDF Plumber, OCR or a combination of the two
+
+Parameters:
+
+ - `strip_margin`: Whether doctor should crop the edges of the recap document during processing. With PDF plumber it will ignore traditional 1 inch margin.  With an OCR it lowers the threshold for hiding OCR gibberish. To enable it, set strip_margin to `True`:
+
+```bash
+curl 'http://localhost:5050/extract/recap/text/?strip_margin=True' \
+  -X 'POST' \
+  -F "file=@doctor/recap_extract/gov.uscourts.cacd.652774.40.0.pdf"
+```
+
+Valid requests will receive a JSON response with the following keys:
+
+ - `content`: The utf-8 encoded text of the file
+ - `extracted_by_ocr`: Whether OCR was needed and used during processing.
+
 
 ## Utilities
 
