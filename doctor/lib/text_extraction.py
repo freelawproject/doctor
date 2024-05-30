@@ -67,7 +67,7 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
     return doc_text
 
 
-def page_images(page: pdfplumber.pdf.Page) -> bool:
+def has_images(page: pdfplumber.pdf.Page) -> bool:
     """Does the page have images that are large enough to contain text
 
     :param page: pdf plumber page
@@ -82,7 +82,7 @@ def page_images(page: pdfplumber.pdf.Page) -> bool:
     )
 
 
-def page_annotations(page: pdfplumber.pdf.Page) -> bool:
+def has_text_annotations(page: pdfplumber.pdf.Page) -> bool:
     """Does the page have annotations which could contain text
 
     :param page: pdf plumber
@@ -107,25 +107,24 @@ def adjust_caption_lines(page_text: str) -> str:
     :param page_text: The text of the first page
     :return: The page text
     """
-    for separator in [r"\)", "§", ":"]:
-        matches = list(re.finditer(rf"(.* +{separator} .*\n)", page_text))
+    for separator in [r")", "§", ":"]:
+        pattern = rf"(.* +{re.escape(separator)} .*\n)"
+        matches = list(re.finditer(pattern, page_text))
         central_matches = [
-            match
+            match.group().rindex(separator)
             for match in matches
-            if 30 <= match.group().rindex(separator[-1]) <= 70
+            if 30 <= match.group().rindex(separator) <= 70
         ]
         if len(central_matches) < 3:
             continue  # Skip this separator if less than 3 matches found
         # Determine the longest position of the separator
-        longest = max(
-            match.group().rindex(separator[-1]) for match in central_matches
-        )
+        longest = max(central_matches)
         page = []
         for row in page_text.splitlines():
-            index = row.find(f" {separator[-1]}")
+            index = row.find(f" {separator}")
             addition = (longest - index) * " "
             row = row.replace(
-                f" {separator[-1]}", f"{addition}{separator[-1]}"
+                f" {separator}", f"{addition}{separator}"
             )
             page.append(row)
         return "\n".join(page)
@@ -141,8 +140,8 @@ def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
     if (
         page_text.strip() == ""
         or "(cid:" in page_text
-        or page_annotations(page)
-        or page_images(page)
+        or has_text_annotations(page)
+        or has_images(page)
         or len(page.curves) > 10
     ):
         return True
@@ -179,24 +178,24 @@ def convert_pdf_page_to_image(
 def ocr_image_to_data(image: Image) -> list[pd.DataFrame]:
     """Perform OCR on an image to extract data
 
-    Detailed Parameters for `pytesseract.image_to_data`:
-    - config: str
-        Additional Tesseract configuration options.
-        - `-c preserve_interword_spaces=1`: Preserve spaces between words as they appear in the image.
-        - `-c tessedit_do_invert=0`: Do not invert the image colors.
-        - `--psm 6`: Page segmentation mode 6, which assumes a single uniform block of text.
-        - `-l eng`: Use the English language for OCR.
-    - output_type: pytesseract.Output.DICT
-        Specifies that the output should be a dictionary of OCR data.
-
-    Reference:
-    Tesseract OCR documentation: https://github.com/tesseract-ocr/tesseract/blob/master/doc/tesseract.1.asc
-
-
     Convert the image of the pdf page to OCR data
     :param image: Pil Image
     :return: A list of DataFrames, each containing OCR data for a block of text
     """
+
+    #  Detailed Parameters for `pytesseract.image_to_data`:
+    #  - config: str
+    #      Additional Tesseract configuration options.
+    #      - `-c preserve_interword_spaces=1`: Preserve spaces between words as they appear in the image.
+    #      - `-c tessedit_do_invert=0`: Do not invert the image colors.
+    #      - `--psm 6`: Page segmentation mode 6, which assumes a single uniform block of text.
+    #      - `-l eng`: Use the English language for OCR.
+    #  - output_type: pytesseract.Output.DICT
+    #      Specifies that the output should be a dictionary of OCR data.
+    #
+    #  Reference:
+    #  Tesseract OCR documentation: https://github.com/tesseract-ocr/tesseract/blob/master/doc/tesseract.1.asc
+    
     data_dict = pytesseract.image_to_data(
         image,
         config="-c preserve_interword_spaces=1x1 -c tessedit_do_invert=0 --psm 6 -l eng",
@@ -269,46 +268,49 @@ def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
     This function determines if a word should be added to the page content
     and adds the word.
 
-    tesseract provides confidence values for its OCR outputs.  We use those
-    confidence values to determine if something is a good OCR output, a
-    likely artifact and should be excluded or is bad ocr but not an artifact.
-
-    If a word has a zero confidence or starts on the left most edge of the paper
-    we return it as an empty string.  It is likely an artifact.
-
-    If a word has confidence below 40, a number that usually equates to 3 to 5
-    standard deviations from confidences found in other words is entirely in the
-    margin of the page - its likely an artifact as well.
-
-    If a confidence is below 5 - for a very short word - or for a very long word
-    its likely part of the document but we have no idea so we return a square
-    box to indicate that.  This is often caused by stamps or lines in case captions
-
-    Finally if a low confidence word starts in the right margin - its likely a
-    bad OCR that is multiple standard deviations away so we return the word as
-    empty squares.
-
     :param word_dict: the word object from tesseract
     :param width: The width of the document
     :param strip_margin: should we strip the margin
     :return: The text with space
     """
+    pixels_per_inch = width / 8.5
     if strip_margin:
-        left_margin = (1 / 8.5) * width
-        right_margin = (7.5 / 8.5) * width
+        left_margin = 1 * pixels_per_inch #
+        right_margin = 7.5 * pixels_per_inch
     else:
-        left_margin = (0.5 / 8.5) * width
-        right_margin = (8.0 / 8.5) * width
+        left_margin = 0.5 * pixels_per_inch
+        right_margin = 8.0 * pixels_per_inch
+
+    # tesseract provides confidence values for its OCR outputs. We use those
+    # confidence values to determine if something is a good OCR output, a
+    # likely artifact and should be excluded or is bad ocr but not an artifact.
 
     word = word_dict["text"]
     conf = word_dict["conf"]
-    if word_dict["left"] + word_dict["width"] < left_margin and conf < 40:
+
+    no_confidence = 0
+    very_low_confidence = 5
+    low_confidence = 40
+    short_word_len = 3
+    long_word_len = 20
+    if word_dict["left"] + word_dict["width"] < left_margin and conf < low_confidence:
+        # If a word has confidence below 40, a number that usually equates to 3 to 5
+        # standard deviations from confidences found in other words is entirely in the
+        # margin of the page - its likely an artifact as well.
         word = " " * len(word)
-    elif (conf == 0 and len(word) < 4) or word_dict["left"] == 0:
+    elif (conf == no_confidence and len(word) < short_word_len) or word_dict["left"] == 0:
+        # If a word has a zero confidence or starts on the left most edge of the paper
+        # we return it as an empty string. It is likely an artifact.
         word = " " * len(word)
-    elif conf < 5 and (len(word) < 4 or len(word) > 20):
+    elif conf < very_low_confidence and (len(word) < short_word_len or len(word) > long_word_len):
+        # If a confidence is below 5 - for a very short word - or for a very long word
+        # its likely part of the document but we have no idea so we return a square
+        # box to indicate that. This is often caused by stamps or lines in case captions
         word = "□" * len(word)
-    elif conf < 40 and word_dict["left"] > right_margin:
+    elif conf < low_confidence and word_dict["left"] > right_margin:
+        # Finally if a low confidence word starts in the right margin - its likely a
+        # bad OCR that is multiple standard deviations away so we return the word as
+        # empty squares.
         word = "□" * len(word)
 
     return f"{word} "
