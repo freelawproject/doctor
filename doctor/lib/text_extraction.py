@@ -299,14 +299,14 @@ def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
         # standard deviations from confidences found in other words is entirely in the
         # margin of the page - its likely an artifact as well.
         word = " " * len(word)
-    elif (conf == no_confidence and len(word) < short_word_len) or word_dict[
+    elif (conf == no_confidence and len(word) <= short_word_len) or word_dict[
         "left"
     ] == 0:
         # If a word has a zero confidence or starts on the left most edge of the paper
         # we return it as an empty string. It is likely an artifact.
         word = " " * len(word)
     elif conf < very_low_confidence and (
-        len(word) < short_word_len or len(word) > long_word_len
+        len(word) <= short_word_len or len(word) > long_word_len
     ):
         # If a confidence is below 5 - for a very short word - or for a very long word
         # its likely part of the document but we have no idea so we return a square
