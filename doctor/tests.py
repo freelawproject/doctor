@@ -298,7 +298,6 @@ class MetadataTests(unittest.TestCase):
             files=files,
             params=params,
         ).json()
-        print(response)
         self.assertEqual(
             response["mimetype"],
             "application/pdf",
@@ -814,8 +813,6 @@ class TestCleanupContent(unittest.TestCase):
              15               Defendant                     )
              16                                             ) """
         content = adjust_caption_lines(content)
-        print(content)
-        print(expected_result)
         self.assertEqual(expected_result, content)
 
 
