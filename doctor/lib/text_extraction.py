@@ -123,9 +123,7 @@ def adjust_caption_lines(page_text: str) -> str:
         for row in page_text.splitlines():
             index = row.find(f" {separator}")
             addition = (longest - index) * " "
-            row = row.replace(
-                f" {separator}", f"{addition}{separator}"
-            )
+            row = row.replace(f" {separator}", f"{addition}{separator}")
             page.append(row)
         return "\n".join(page)
 
@@ -195,7 +193,7 @@ def ocr_image_to_data(image: Image) -> list[pd.DataFrame]:
     #
     #  Reference:
     #  Tesseract OCR documentation: https://github.com/tesseract-ocr/tesseract/blob/master/doc/tesseract.1.asc
-    
+
     data_dict = pytesseract.image_to_data(
         image,
         config="-c preserve_interword_spaces=1x1 -c tessedit_do_invert=0 --psm 6 -l eng",
@@ -275,7 +273,7 @@ def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
     """
     pixels_per_inch = width / 8.5
     if strip_margin:
-        left_margin = 1 * pixels_per_inch #
+        left_margin = 1 * pixels_per_inch  #
         right_margin = 7.5 * pixels_per_inch
     else:
         left_margin = 0.5 * pixels_per_inch
@@ -293,16 +291,23 @@ def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
     low_confidence = 40
     short_word_len = 3
     long_word_len = 20
-    if word_dict["left"] + word_dict["width"] < left_margin and conf < low_confidence:
+    if (
+        word_dict["left"] + word_dict["width"] < left_margin
+        and conf < low_confidence
+    ):
         # If a word has confidence below 40, a number that usually equates to 3 to 5
         # standard deviations from confidences found in other words is entirely in the
         # margin of the page - its likely an artifact as well.
         word = " " * len(word)
-    elif (conf == no_confidence and len(word) < short_word_len) or word_dict["left"] == 0:
+    elif (conf == no_confidence and len(word) < short_word_len) or word_dict[
+        "left"
+    ] == 0:
         # If a word has a zero confidence or starts on the left most edge of the paper
         # we return it as an empty string. It is likely an artifact.
         word = " " * len(word)
-    elif conf < very_low_confidence and (len(word) < short_word_len or len(word) > long_word_len):
+    elif conf < very_low_confidence and (
+        len(word) < short_word_len or len(word) > long_word_len
+    ):
         # If a confidence is below 5 - for a very short word - or for a very long word
         # its likely part of the document but we have no idea so we return a square
         # box to indicate that. This is often caused by stamps or lines in case captions
