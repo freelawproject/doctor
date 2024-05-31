@@ -1,5 +1,4 @@
 import re
-from statistics import mean
 
 import pdfplumber
 from pdfplumber.ctm import CTM
@@ -38,6 +37,8 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
     Using pdf plumber extract out the text of the document that is not
     skewed (ie a stamp of approval) and extract out text removing blue text
 
+    Strip margin refers only to top and bottom margin here
+
     :param page: PdfPlumber page
     :param strip_margin: a flag to crop out the margin of a document and skewed content
     :return: Text from the pdf plumber page
@@ -47,13 +48,12 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
         _, _, width, height = page.bbox
         pixels_per_inch = width / 8.5
         bbox = (
-            pixels_per_inch * 1,  # 1 inch from left edge
+            0,
             pixels_per_inch * 1,  # 1 inch down from top
-            pixels_per_inch
-            * 7.5,  # 7.5 inches from left edge (1 inch from right)
+            width, #
             pixels_per_inch * 10,  # 10 inches from top (1 inch from bottom)
         )
-        doc_text = (
+        page_text = (
             page.crop(bbox)
             .filter(is_skewed)
             .extract_text(
@@ -61,10 +61,11 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
             )
         )
     else:
-        doc_text = page.extract_text(
+        page_text = page.extract_text(
             layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
         )
-    return doc_text
+    page_text = remove_excess_whitespace(page_text)
+    return page_text
 
 
 def has_images(page: pdfplumber.pdf.Page) -> bool:
@@ -126,7 +127,7 @@ def adjust_caption_lines(page_text: str) -> str:
             row = row.replace(f" {separator}", f"{addition}{separator}")
             page.append(row)
         return "\n".join(page)
-
+    return page_text
 
 def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
     """Does the page need OCR
