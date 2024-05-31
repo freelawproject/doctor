@@ -50,7 +50,7 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
         bbox = (
             0,
             pixels_per_inch * 1,  # 1 inch down from top
-            width, #
+            width,  #
             pixels_per_inch * 10,  # 10 inches from top (1 inch from bottom)
         )
         page_text = (
@@ -128,6 +128,7 @@ def adjust_caption_lines(page_text: str) -> str:
             page.append(row)
         return "\n".join(page)
     return page_text
+
 
 def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
     """Does the page need OCR
