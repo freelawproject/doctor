@@ -58,7 +58,10 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
                 page.crop(bbox)
                 .filter(is_skewed)
                 .extract_text(
-                    layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
+                    layout=True,
+                    keep_blank_chars=True,
+                    y_tolerance=5,
+                    y_density=25,
                 )
             )
         except ValueError:
