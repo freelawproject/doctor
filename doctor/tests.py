@@ -74,6 +74,26 @@ class RECAPExtractionTests(unittest.TestCase):
             msg="Wrong Text",
         )
 
+    def test_recap_strip_marign_with_multiple_shaped_pdfs(self):
+        """Can we extract atypical shape pdf with strip margin?"""
+
+        files = make_file(
+            filename="recap_extract/gov.uscourts.azd.1085839.3.0.pdf"
+        )
+        params = {"strip_margin": True}
+        response = requests.post(
+            "http://doctor:5050/extract/recap/text/",
+            files=files,
+            params=params,
+        )
+        first_line = response.json()["content"].splitlines()[0].strip()
+        self.assertEqual(200, response.status_code, msg="Wrong status code")
+        self.assertEqual(
+            "1   WO",
+            first_line,
+            msg="Wrong Text",
+        )
+
     def test_strip_margin_without_ocr(self):
         """Can we extract from the new recap text endpoint with strip margin?"""
         files = make_file(

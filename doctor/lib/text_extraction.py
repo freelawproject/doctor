@@ -53,13 +53,20 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
             width,  #
             pixels_per_inch * 10,  # 10 inches from top (1 inch from bottom)
         )
-        page_text = (
-            page.crop(bbox)
-            .filter(is_skewed)
-            .extract_text(
+        try:
+            page_text = (
+                page.crop(bbox)
+                .filter(is_skewed)
+                .extract_text(
+                    layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
+                )
+            )
+        except ValueError:
+            # If bounding box is non standard we do not want to apply strip margin
+            page_text = page.extract_text(
                 layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
             )
-        )
+
     else:
         page_text = page.extract_text(
             layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
