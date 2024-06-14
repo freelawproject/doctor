@@ -43,9 +43,9 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
     :param strip_margin: a flag to crop out the margin of a document and skewed content
     :return: Text from the pdf plumber page
     """
-    if strip_margin:
+    _, _, width, height = page.bbox
+    if strip_margin and (height > width):
         # Crop margins and remove skewed text
-        _, _, width, height = page.bbox
         pixels_per_inch = width / 8.5
         bbox = (
             0,
@@ -57,7 +57,10 @@ def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
             page.crop(bbox)
             .filter(is_skewed)
             .extract_text(
-                layout=True, keep_blank_chars=True, y_tolerance=5, y_density=25
+                layout=True,
+                keep_blank_chars=True,
+                y_tolerance=5,
+                y_density=25,
             )
         )
     else:
