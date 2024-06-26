@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from . import views
 
@@ -23,7 +23,7 @@ urlpatterns = [
         views.make_png_thumbnails_from_range,
         name="thumbnails",
     ),
-    path("convert/audio/mp3/", views.convert_audio, name="convert-audio"),
+    re_path("convert/audio/(mp3|ogg)/", views.convert_audio, name="convert-audio"),
     path("utils/page-count/pdf/", views.page_count, name="page_count"),
     path("utils/mime-type/", views.extract_mime_type, name="mime_type"),
     path(

@@ -34,6 +34,7 @@ from doctor.lib.utils import (
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
     convert_to_mp3,
+    convert_to_ogg,
     download_images,
     extract_from_doc,
     extract_from_docx,
@@ -367,8 +368,9 @@ def fetch_audio_duration(request) -> HttpResponse:
         return HttpResponse(str(e))
 
 
-def convert_audio(request) -> Union[FileResponse, HttpResponse]:
-    """Convert audio file to MP3 and update metadata on mp3.
+def convert_audio(request, output_format: str) -> Union[FileResponse, HttpResponse]:
+    """Converts an uploaded audio file to the specified output format and
+    updates its metadata.
 
     :return: Converted audio
     """
@@ -378,8 +380,14 @@ def convert_audio(request) -> Union[FileResponse, HttpResponse]:
     filepath = form.cleaned_data["fp"]
     media_file = form.cleaned_data["file"]
     audio_data = {k: v[0] for k, v in dict(request.GET).items()}
-    convert_to_mp3(filepath, media_file)
-    set_mp3_meta_data(audio_data, filepath)
+    match output_format:
+        case 'mp3':
+            convert_to_mp3(filepath, media_file)
+            set_mp3_meta_data(audio_data, filepath)
+        case 'ogg':
+            convert_to_ogg(filepath, media_file)
+        case _:
+            raise NotImplemented
     response = FileResponse(open(filepath, "rb"))
     cleanup_form(form)
     return response
