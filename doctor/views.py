@@ -368,7 +368,9 @@ def fetch_audio_duration(request) -> HttpResponse:
         return HttpResponse(str(e))
 
 
-def convert_audio(request, output_format: str) -> Union[FileResponse, HttpResponse]:
+def convert_audio(
+    request, output_format: str
+) -> Union[FileResponse, HttpResponse]:
     """Converts an uploaded audio file to the specified output format and
     updates its metadata.
 
@@ -381,10 +383,10 @@ def convert_audio(request, output_format: str) -> Union[FileResponse, HttpRespon
     media_file = form.cleaned_data["file"]
     audio_data = {k: v[0] for k, v in dict(request.GET).items()}
     match output_format:
-        case 'mp3':
+        case "mp3":
             convert_to_mp3(filepath, media_file)
             set_mp3_meta_data(audio_data, filepath)
-        case 'ogg':
+        case "ogg":
             convert_to_ogg(filepath, media_file)
         case _:
             raise NotImplemented

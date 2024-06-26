@@ -44,7 +44,7 @@ class AudioForm(BaseAudioFile):
     audio_data = forms.JSONField(label="audio-data", required=False)
 
     def clean(self):
-        self.cleaned_data["fp"] = f"/tmp/audio_{uuid.uuid4().hex}.mp3"
+        self.cleaned_data["fp"] = f"/tmp/audio_{uuid.uuid4().hex}"
         if self.cleaned_data.get("file", None):
             filename = self.cleaned_data["file"].name
             self.cleaned_data["extension"] = filename.split(".")[-1]
