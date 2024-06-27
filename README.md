@@ -311,9 +311,20 @@ from courts across the country and standardizes the format for our end users.
 
 This endpoint also adds the SEAL of the court to the MP3 file and updates the metadata to reflect our updates.
 
-This isn't the cleanest of CURLs because we have to convert the large JSON file to a query string, but for proof of concept here is the result
-
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
+     -X 'POST' \
+     -F "file=@doctor/test_assets/1.wma"
+
+This returns the audio file as a file response.
+
+### Endpoint: /convert/audio/ogg/
+
+This endpoint takes an audio file and converts it to an OGG file. The conversion process downsizes files by using
+a single audio channel and fixing the sampling rate to 8 kHz.
+
+This endpoint also optimizes the output for voice over IP applications.
+
+    curl 'http://localhost:5050/convert/audio/ogg/' \
      -X 'POST' \
      -F "file=@doctor/test_assets/1.wma"
 

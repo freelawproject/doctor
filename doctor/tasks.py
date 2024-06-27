@@ -479,6 +479,47 @@ def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
     return output_path
 
 
+def convert_to_ogg(output_path: AnyStr, media: Any) -> None:
+    """Converts audio data to the ogg format (.ogg)
+
+    This function uses ffmpeg to convert the audio data provided in `media` to
+    the ogg format with the following specifications:
+
+    * Single audio channel (`-ac 1`)
+    * 8 kHz sampling rate (`-b:a 8k`)
+    * Optimized for voice over IP applications (`-application voip`)
+
+    :param output_path: Audio file bytes sent to Doctor
+    :param media: Temporary filepath for output of audioprocess
+    :return:
+    """
+    av_command = [
+        "ffmpeg",
+        "-i",
+        "/dev/stdin",
+        "-vn",
+        "-map_metadata",
+        "-1",
+        "-ac",
+        "1",
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "8k",
+        "-application",
+        "voip",
+        "-f",
+        "ogg",
+        output_path,
+    ]
+
+    ffmpeg_cmd = subprocess.Popen(
+        av_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False
+    )
+    ffmpeg_cmd.communicate(media.read())
+    return output_path
+
+
 def set_mp3_meta_data(
     audio_data: Dict, mp3_path: AnyStr
 ) -> eyed3.core.AudioFile:
