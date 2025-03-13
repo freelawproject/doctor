@@ -443,8 +443,12 @@ class TestDocumentNumberExtraction(unittest.TestCase):
             "http://doctor:5050/utils/document-number/pdf/",
         )
         self.assertEqual(response.status_code, 400, msg="Wrong status code")
-        self.assertIn("File is missing", response.text, msg="Wrong validation error message")
-        
+        self.assertIn(
+            "File is missing",
+            response.text,
+            msg="Wrong validation error message",
+        )
+
         # Test with non-PDF file
         with NamedTemporaryFile(suffix=".txt") as tmp:
             tmp.write(b"This is not a PDF file")
