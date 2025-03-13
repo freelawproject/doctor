@@ -437,11 +437,20 @@ def get_document_number(request) -> HttpResponse:
     :return: PACER document number
     """
 
-    form = BaseFileForm(request.GET, request.FILES)
+    form = BaseFileForm(request.POST, request.FILES)
     if not form.is_valid():
-        validation_message = form.errors.get_json_data()["__all__"][0][
-            "message"
-        ]
+        error_data = form.errors.get_json_data()
+        if "__all__" in error_data:
+            validation_message = error_data["__all__"][0]["message"]
+        elif "file" in error_data:
+            validation_message = error_data["file"][0]["message"]
+        else:
+            for field, errors in error_data.items():
+                if errors and errors[0]:
+                    validation_message = errors[0]["message"]
+                    break
+            else:
+                validation_message = "Form validation failed."
         return HttpResponse(validation_message, status=BAD_REQUEST)
     fp = form.cleaned_data["fp"]
     document_number = get_document_number_from_pdf(fp)

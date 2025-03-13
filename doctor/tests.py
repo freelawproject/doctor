@@ -435,6 +435,29 @@ class MetadataTests(unittest.TestCase):
             self.assertEqual(doc_num, document_number)
 
 
+class TestDocumentNumberExtraction(unittest.TestCase):
+    def test_get_document_number_invalid_form(self):
+        """Test that we get a proper response when form validation fails"""
+        # Test with empty request
+        response = requests.post(
+            "http://doctor:5050/utils/document-number/pdf/",
+        )
+        self.assertEqual(response.status_code, 400, msg="Wrong status code")
+        self.assertIn("File is missing", response.text, msg="Wrong validation error message")
+        
+        # Test with non-PDF file
+        with NamedTemporaryFile(suffix=".txt") as tmp:
+            tmp.write(b"This is not a PDF file")
+            tmp.flush()
+            tmp.seek(0)
+            files = {"file": (tmp.name, tmp.read())}
+            response = requests.post(
+                "http://doctor:5050/utils/document-number/pdf/",
+                files=files,
+            )
+        self.assertEqual(response.status_code, 400, msg="Wrong status code")
+
+
 class RedactionTest(unittest.TestCase):
     def test_xray_no_pdf(self):
         """Are we able to discover bad redacts?"""
