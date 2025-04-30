@@ -12,6 +12,9 @@ import six
 from PyPDF2 import PdfMerger
 from reportlab.pdfgen import canvas
 
+import sentry_sdk
+from typing import Literal
+
 
 class DoctorUnicodeDecodeError(UnicodeDecodeError):
     def __init__(self, obj, *args):
@@ -354,3 +357,29 @@ def make_page_with_text(page, data, h, w):
     can.save()
     packet.seek(0)
     return packet
+
+
+def log_sentry_message(
+    message: str,
+    context: dict = None,
+    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = 'warning',
+    **kwargs
+):
+    """Helper function to send a message event to Sentry
+
+    :param message: The main message string to send to Sentry.
+    :param context: A dictionary of extra key-value data to attach to the event.
+    :param level: The severity level for the event (e.g., 'info', 'warning', 'error').
+    :param kwargs: Additional keyword arguments to pass directly to sentry_sdk.capture_message (e.g., `scope`).
+    :return: None
+    """
+    full_context = {}
+    if context:
+        full_context.update(context)
+
+    sentry_sdk.capture_message(
+        message,
+        level=level,
+        extras=full_context,
+        **kwargs
+    )

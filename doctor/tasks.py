@@ -14,7 +14,7 @@ import magic
 import requests
 from django.utils.encoding import force_bytes
 from eyed3 import id3
-from lxml.etree import XMLSyntaxError
+from lxml.etree import XMLSyntaxError, ParserError
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfMerger, PdfReader
@@ -34,6 +34,7 @@ from doctor.lib.utils import (
     force_text,
     ocr_needed,
     smart_text,
+    log_sentry_message,
 )
 
 
@@ -59,7 +60,6 @@ def pdf_bytes_from_images(image_list: List[Image]):
     :param image_list: List of images
     :type image_list: list
     :return: pdf_data
-    :type pdf_data: PDF as bytes
     """
     with io.BytesIO() as output:
         image_list[0].save(
@@ -334,16 +334,22 @@ def extract_from_docx(path):
     return content.decode("utf-8"), err, process.returncode
 
 
-def extract_from_html(path):
-    """Extract from html.
+def extract_from_html(path: str) -> tuple[str, str, int]:
+    """Extract from html file by attempting various encodings
 
     A simple wrapper to go get content, and send it along.
+
+    :param path: The file path to the HTML file.
+    :return: A tuple containing:
+             - The extracted and cleaned text content (str), or an empty string on failure.
+             - An error message (str), or an empty string on success.
+             - A return code (int), typically 0 on success, 1 on failure.
     """
     for encoding in ["utf-8", "ISO8859", "cp1252", "latin-1"]:
         try:
             with open(path, "r", encoding=encoding) as f:
                 content = f.read()
-            content = get_clean_body_content(content)
+            content = get_clean_body_content(content, path)
             content = force_text(content, encoding=encoding)
             return content, "", 0
         except (UnicodeDecodeError, DoctorUnicodeDecodeError):
@@ -352,14 +358,34 @@ def extract_from_html(path):
     return "", "Could not encode content properly", 1
 
 
-def get_clean_body_content(content):
-    """Parse out the body from an html string, clean it up, and send it along."""
+def get_clean_body_content(content: str, path: str) -> str:
+    """Parse out the body from an html string, clean it up, and send it along.
+
+    :param content: The HTML content as a string
+    :param path: The file path of the HTML document, used for logging context
+    :return: The cleaned HTML body content as a string, or a default error string on failure
+    """
     cleaner = Cleaner(
         style=True, remove_tags=["a", "body", "font", "noscript", "img"]
     )
     try:
         return cleaner.clean_html(content)
-    except XMLSyntaxError:
+    except (XMLSyntaxError, ParserError) as e:
+        error_message = "HTML cleaning failed due to ParserError."  # Default message
+        if isinstance(e, XMLSyntaxError):
+            error_message = "HTML cleaning failed due to XMLSyntaxError."
+
+        log_sentry_message(
+            error_message,
+            level='error',
+            context={
+                "filepath": path,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+                "input_content_start": str(content)[:200] if content else "None",
+            }
+        )
+
         return (
             "Unable to extract the content from this file. Please try "
             "reading the original."
@@ -402,12 +428,18 @@ def extract_from_txt(filepath):
     return content, err, error_code
 
 
-def extract_from_wpd(path):
+def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
     """Extract text from a Word Perfect file
 
     Yes, courts still use these, so we extract their text using wpd2html. Once
     that's done, we pull out the body of the HTML, and do some minor cleanup
     on it.
+
+    :param path: The file path to the Word Perfect (.wpd) file.
+    :return: A tuple containing:
+             - The extracted and cleaned text content (str)
+             - The standard error output from the wpd2html subprocess (bytes)
+             - The return code of the wpd2html subprocess (int). Returns 1 on Python-level errors
     """
     process = subprocess.Popen(
         ["wpd2html", path],
@@ -415,10 +447,11 @@ def extract_from_wpd(path):
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
-    content, err = process.communicate()
-    content = get_clean_body_content(content)
+    content_bytes, err = process.communicate()
+    content_str = content_bytes.decode("utf-8")
+    content = get_clean_body_content(content_str, path)
 
-    return content.decode("utf-8"), err, process.returncode
+    return content, err, process.returncode
 
 
 def download_images(sorted_urls) -> List:

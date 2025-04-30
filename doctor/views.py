@@ -29,7 +29,7 @@ from doctor.lib.utils import (
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
-    strip_metadata_from_path,
+    strip_metadata_from_path, log_sentry_message,
 )
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
@@ -137,6 +137,14 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     else:
         content = ""
         err = "Unable to extract content due to unknown extension"
+        log_sentry_message(
+            err,
+            level='warning',
+            context={
+                "filepath": fp.name,
+                "extension": extension,
+            }
+        )
 
     # Get page count if you can
     page_count = get_page_count(fp, extension)
