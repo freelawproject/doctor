@@ -362,8 +362,10 @@ def make_page_with_text(page, data, h, w):
 def log_sentry_message(
     message: str,
     context: dict = None,
-    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = 'warning',
-    **kwargs
+    level: Literal[
+        "fatal", "critical", "error", "warning", "info", "debug"
+    ] = "warning",
+    **kwargs,
 ):
     """Helper function to send a message event to Sentry
 
@@ -378,8 +380,5 @@ def log_sentry_message(
         full_context.update(context)
 
     sentry_sdk.capture_message(
-        message,
-        level=level,
-        extras=full_context,
-        **kwargs
+        message, level=level, extras=full_context, **kwargs
     )
