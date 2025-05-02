@@ -371,19 +371,23 @@ def get_clean_body_content(content: str, path: str) -> str:
     try:
         return cleaner.clean_html(content)
     except (XMLSyntaxError, ParserError) as e:
-        error_message = "HTML cleaning failed due to ParserError."  # Default message
+        error_message = (
+            "HTML cleaning failed due to ParserError."  # Default message
+        )
         if isinstance(e, XMLSyntaxError):
             error_message = "HTML cleaning failed due to XMLSyntaxError."
 
         log_sentry_message(
             error_message,
-            level='error',
+            level="error",
             context={
                 "filepath": path,
                 "exception_type": type(e).__name__,
                 "exception_message": str(e),
-                "input_content_start": str(content)[:200] if content else "None",
-            }
+                "input_content_start": (
+                    str(content)[:200] if content else "None"
+                ),
+            },
         )
 
         return (
