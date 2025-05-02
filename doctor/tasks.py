@@ -334,12 +334,13 @@ def extract_from_docx(path):
     return content.decode("utf-8"), err, process.returncode
 
 
-def extract_from_html(path: str) -> tuple[str, str, int]:
+def extract_from_html(path: str, original_filename: str) -> tuple[str, str, int]:
     """Extract from html file by attempting various encodings
 
     A simple wrapper to go get content, and send it along.
 
     :param path: The file path to the HTML file.
+    :param original_filename: The original file name of the HTML file.
     :return: A tuple containing:
              - The extracted and cleaned text content (str), or an empty string on failure.
              - An error message (str), or an empty string on success.
@@ -349,7 +350,7 @@ def extract_from_html(path: str) -> tuple[str, str, int]:
         try:
             with open(path, "r", encoding=encoding) as f:
                 content = f.read()
-            content = get_clean_body_content(content, path)
+            content = get_clean_body_content(content, original_filename)
             content = force_text(content, encoding=encoding)
             return content, "", 0
         except (UnicodeDecodeError, DoctorUnicodeDecodeError):
@@ -358,11 +359,11 @@ def extract_from_html(path: str) -> tuple[str, str, int]:
     return "", "Could not encode content properly", 1
 
 
-def get_clean_body_content(content: str, path: str) -> str:
+def get_clean_body_content(content: str, original_filename: str) -> str:
     """Parse out the body from an html string, clean it up, and send it along.
 
     :param content: The HTML content as a string
-    :param path: The file path of the HTML document, used for logging context
+    :param original_filename: The original file name of the HTML document, used for logging context
     :return: The cleaned HTML body content as a string, or a default error string on failure
     """
     cleaner = Cleaner(
@@ -381,7 +382,7 @@ def get_clean_body_content(content: str, path: str) -> str:
             error_message,
             level="error",
             context={
-                "filepath": path,
+                "filepath": original_filename,
                 "exception_type": type(e).__name__,
                 "exception_message": str(e),
                 "input_content_start": (
@@ -432,7 +433,7 @@ def extract_from_txt(filepath):
     return content, err, error_code
 
 
-def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
+def extract_from_wpd(path: str, original_filename: str) -> tuple[str, bytes, int]:
     """Extract text from a Word Perfect file
 
     Yes, courts still use these, so we extract their text using wpd2html. Once
@@ -440,6 +441,7 @@ def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
     on it.
 
     :param path: The file path to the Word Perfect (.wpd) file.
+    :param original_filename: The original file name of the Word Perfect (.wpd) file.
     :return: A tuple containing:
              - The extracted and cleaned text content (str)
              - The standard error output from the wpd2html subprocess (bytes)
@@ -453,7 +455,7 @@ def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
     )
     content_bytes, err = process.communicate()
     content_str = content_bytes.decode("utf-8")
-    content = get_clean_body_content(content_str, path)
+    content = get_clean_body_content(content_str, original_filename)
 
     return content, err, process.returncode
 

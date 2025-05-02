@@ -121,6 +121,9 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
     extracted_by_ocr = False
+    # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
+    # or filepath_local (AbstractPDF).
+    original_filename = form.cleaned_data["file"].name
     if extension == "pdf":
         content, err, returncode, extracted_by_ocr = extract_from_pdf(
             fp, ocr_available
@@ -130,11 +133,11 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     elif extension == "docx":
         content, err, returncode = extract_from_docx(fp)
     elif extension == "html":
-        content, err, returncode = extract_from_html(fp)
+        content, err, returncode = extract_from_html(fp, original_filename)
     elif extension == "txt":
         content, err, returncode = extract_from_txt(fp)
     elif extension == "wpd":
-        content, err, returncode = extract_from_wpd(fp)
+        content, err, returncode = extract_from_wpd(fp, original_filename)
     else:
         content = ""
         err = "Unable to extract content due to unknown extension"
@@ -142,7 +145,7 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
             err,
             level="warning",
             context={
-                "filepath": fp.name,
+                "filepath": original_filename,
                 "extension": extension,
             },
         )
