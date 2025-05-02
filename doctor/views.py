@@ -126,7 +126,7 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     original_filename = form.cleaned_data["file"].name
     if extension == "pdf":
         content, err, returncode, extracted_by_ocr = extract_from_pdf(
-            fp, ocr_available
+            fp, original_filename, ocr_available
         )
     elif extension == "doc":
         content, err, returncode = extract_from_doc(fp)

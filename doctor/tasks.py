@@ -195,6 +195,7 @@ def get_page_count(path, extension):
 
 def extract_from_pdf(
     path: str,
+    original_filename: str,
     ocr_available: bool = False,
 ) -> Any:
     """Extract text from pdfs.
@@ -207,6 +208,7 @@ def extract_from_pdf(
     If a text-based PDF we fix corrupt PDFs from ca9.
 
     :param path: The path to the PDF
+    :param original_filename: The original file name of the PDF file.
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """
@@ -230,6 +232,13 @@ def extract_from_pdf(
                     extracted_by_ocr = True
             elif content == "" or not success:
                 content = "Unable to extract document content."
+                log_sentry_message(
+                    content,
+                    level="error",
+                    context={
+                        "filepath": original_filename,
+                    },
+                )
 
     return content, err, returncode, extracted_by_ocr
 
