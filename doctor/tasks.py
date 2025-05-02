@@ -334,7 +334,9 @@ def extract_from_docx(path):
     return content.decode("utf-8"), err, process.returncode
 
 
-def extract_from_html(path: str, original_filename: str) -> tuple[str, str, int]:
+def extract_from_html(
+    path: str, original_filename: str
+) -> tuple[str, str, int]:
     """Extract from html file by attempting various encodings
 
     A simple wrapper to go get content, and send it along.
@@ -433,7 +435,9 @@ def extract_from_txt(filepath):
     return content, err, error_code
 
 
-def extract_from_wpd(path: str, original_filename: str) -> tuple[str, bytes, int]:
+def extract_from_wpd(
+    path: str, original_filename: str
+) -> tuple[str, bytes, int]:
     """Extract text from a Word Perfect file
 
     Yes, courts still use these, so we extract their text using wpd2html. Once
