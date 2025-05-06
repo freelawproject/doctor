@@ -5,11 +5,11 @@ application that calls to this service.
 
 To build the microservice and start it up, run:
 
-    docker-compose -f docker-compose.dev.yml up --build -d
+    docker compose -f docker-compose.dev.yml up --build -d
 
 To see logs:
 
-    docker-compose -f docker-compose.dev.yml logs -f
+    docker compose -f docker-compose.dev.yml logs -f
 
 If you want to see debug logs, set `DEBUG` to `True` in `settings.py`.
 
