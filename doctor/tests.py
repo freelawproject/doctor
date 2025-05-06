@@ -50,7 +50,7 @@ class RECAPExtractionTests(unittest.TestCase):
             response.json()["extracted_by_ocr"], msg="Not extracted correctly"
         )
         self.assertEqual(
-            "aséakOS- 08-0220 A25BA  BAD GDoonene 2627  Filed  OL/2B/DE0IP adgeahefi2of 2",
+            "aséakOS- 08-0220 A25BA  BAD Gooonene 2627  Filed!  OL/2B/DE0IP ageahefi2of 2",
             first_line,
             msg="Wrong Text",
         )
