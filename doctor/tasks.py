@@ -2,30 +2,30 @@ import asyncio
 import base64
 import io
 import os
-import pdfplumber
 import re
 import subprocess
-import xray
+from collections.abc import ByteString
 from tempfile import NamedTemporaryFile
-from typing import Any, AnyStr, ByteString, Dict, List
+from typing import Any, AnyStr
 
 import eyed3
 import magic
+import pdfplumber
 import requests
-from django.utils.encoding import force_bytes
+import xray
 from eyed3 import id3
 from lxml.etree import XMLSyntaxError
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfMerger, PdfReader
 from PyPDF2.errors import PdfReadError
-from seal_rookery.search import seal, ImageSizes
+from seal_rookery.search import ImageSizes, seal
 
 from doctor.lib.mojibake import fix_mojibake
 from doctor.lib.text_extraction import (
+    extract_with_ocr,
     get_page_text,
     page_needs_ocr,
-    extract_with_ocr,
     remove_excess_whitespace,
 )
 from doctor.lib.utils import (
@@ -53,7 +53,7 @@ def strip_metadata_from_bytes(pdf_bytes):
     return force_bytes(byte_writer.getvalue())
 
 
-def pdf_bytes_from_images(image_list: List[Image]):
+def pdf_bytes_from_images(image_list: list[Image]):
     """Make a pdf given an array of Image files
 
     :param image_list: List of images
@@ -144,7 +144,7 @@ def get_xray(path):
         bad_redactions = xray.inspect(path)
         return bad_redactions
     except (
-        IOError,
+        OSError,
         ValueError,
         TypeError,
         KeyError,
@@ -169,7 +169,7 @@ def get_page_count(path, extension):
             reader = PdfReader(path)
             return len(reader.pages)
         except (
-            IOError,
+            OSError,
             ValueError,
             TypeError,
             KeyError,
@@ -341,7 +341,7 @@ def extract_from_html(path):
     """
     for encoding in ["utf-8", "ISO8859", "cp1252", "latin-1"]:
         try:
-            with open(path, "r", encoding=encoding) as f:
+            with open(path, encoding=encoding) as f:
                 content = f.read()
             content = get_clean_body_content(content)
             content = force_text(content, encoding=encoding)
@@ -380,22 +380,23 @@ def extract_from_txt(filepath):
     err = None
     error_code = 0
     try:
-        with open(filepath, mode="r") as f:
+        with open(filepath) as f:
             data = f.read()
         try:
             # Alas, cp1252 is probably still more popular than utf-8.
             content = smart_text(data, encoding="cp1252")
         except DoctorUnicodeDecodeError:
             content = smart_text(data, encoding="utf-8", errors="ignore")
-    except:
+    except Exception:
         try:
-            blob = open(filepath, "rb").read()
+            with open(filepath, "rb") as f:
+                blob = f.read()
             m = magic.Magic(mime_encoding=True)
             encoding = m.from_buffer(blob)
-            with open(filepath, encoding=encoding, mode="r") as f:
+            with open(filepath, encoding=encoding) as f:
                 data = f.read()
             content = smart_text(data, encoding=encoding, errors="ignore")
-        except:
+        except Exception:
             err = "An error occurred extracting txt file."
             content = ""
             error_code = 1
@@ -421,7 +422,7 @@ def extract_from_wpd(path):
     return content.decode("utf-8"), err, process.returncode
 
 
-def download_images(sorted_urls) -> List:
+def download_images(sorted_urls) -> list:
     """Download images and convert to list of PIL images
 
     Once in an array of PIL.images we can easily convert this to a PDF.
@@ -521,7 +522,7 @@ def convert_to_ogg(output_path: AnyStr, media: Any) -> None:
 
 
 def set_mp3_meta_data(
-    audio_data: Dict, mp3_path: AnyStr
+    audio_data: dict, mp3_path: AnyStr
 ) -> eyed3.core.AudioFile:
     """Set the metadata in audio_data to an mp3 at path.
 
@@ -603,7 +604,7 @@ def convert_to_base64(tmp_path: AnyStr) -> AnyStr:
         return base64.b64encode(f.read()).decode()
 
 
-def best_case_name(audio_dict: Dict) -> AnyStr:
+def best_case_name(audio_dict: dict) -> AnyStr:
     """Take an object and return the highest quality case name possible.
 
     In general, this means returning the fields in an order like:
@@ -622,7 +623,7 @@ def best_case_name(audio_dict: Dict) -> AnyStr:
         return audio_dict.get("case_name_short", "")
 
 
-def get_header_stamp(obj: Dict) -> bool:
+def get_header_stamp(obj: dict) -> bool:
     """pdfplumber filter to extract the PDF header stamp.
 
     :param obj: The page object to evaluate.
@@ -633,9 +634,7 @@ def get_header_stamp(obj: Dict) -> bool:
     if "LiberationSans" in obj.get("fontname", ""):
         return True
     # Exception for ca5
-    if obj["y0"] > 750:
-        return True
-    return False
+    return obj["y0"] > 750
 
 
 def clean_document_number(document_number: str) -> str:

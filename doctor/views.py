@@ -3,7 +3,6 @@ import re
 import shutil
 from http.client import BAD_REQUEST
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Union
 
 import eyed3
 import img2pdf
@@ -42,6 +41,7 @@ from doctor.tasks import (
     extract_from_pdf,
     extract_from_txt,
     extract_from_wpd,
+    extract_recap_pdf,
     get_document_number_from_pdf,
     get_page_count,
     get_xray,
@@ -49,7 +49,6 @@ from doctor.tasks import (
     rasterize_pdf,
     set_mp3_meta_data,
     strip_metadata_from_bytes,
-    extract_recap_pdf,
 )
 
 
@@ -107,7 +106,7 @@ def extract_recap_document(request) -> JsonResponse:
     )
 
 
-def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
+def extract_doc_content(request) -> JsonResponse | HttpResponse:
     """Extract txt from different document types.
 
     :return: The content of a document/error message.
@@ -211,14 +210,14 @@ def xray(request) -> JsonResponse:
                 {"error": True, "msg": "Failed validation"}, status=BAD_REQUEST
             )
         extension = form.cleaned_data["extension"]
-        if "pdf" != extension.casefold():
+        if extension.casefold() != "pdf":
             return JsonResponse(
                 {"error": True, "msg": "Failed file type"}, status=BAD_REQUEST
             )
         results = get_xray(form.cleaned_data["fp"])
         if results.get("error", False):
             return JsonResponse(results, status=BAD_REQUEST)
-    except:
+    except Exception:
         pass
     finally:
         cleanup_form(form)
@@ -239,7 +238,7 @@ def page_count(request) -> HttpResponse:
     return HttpResponse(pg_count)
 
 
-def extract_mime_type(request) -> Union[JsonResponse, HttpResponse]:
+def extract_mime_type(request) -> JsonResponse | HttpResponse:
     """Identify the mime type of a document
 
     :return: Mime type
@@ -308,7 +307,7 @@ def extract_extension(request) -> HttpResponse:
     return HttpResponse(fixes.get(extension, extension).lower())
 
 
-def pdf_to_text(request) -> Union[JsonResponse, HttpResponse]:
+def pdf_to_text(request) -> JsonResponse | HttpResponse:
     """Extract text from text based PDFs immediately.
 
     :return:
@@ -368,9 +367,7 @@ def fetch_audio_duration(request) -> HttpResponse:
         return HttpResponse(str(e))
 
 
-def convert_audio(
-    request, output_format: str
-) -> Union[FileResponse, HttpResponse]:
+def convert_audio(request, output_format: str) -> FileResponse | HttpResponse:
     """Converts an uploaded audio file to the specified output format and
     updates its metadata.
 
@@ -389,13 +386,15 @@ def convert_audio(
         case "ogg":
             convert_to_ogg(filepath, media_file)
         case _:
-            raise NotImplemented
-    response = FileResponse(open(filepath, "rb"))
+            raise NotImplementedError
+    response = FileResponse(
+        open(filepath, "rb")  # noqa: SIM115 FileResponse closes the file
+    )
     cleanup_form(form)
     return response
 
 
-def embed_text(request) -> Union[FileResponse, HttpResponse]:
+def embed_text(request) -> FileResponse | HttpResponse:
     """Embed text onto an image PDF.
 
     :return: Embedded PDF
@@ -412,20 +411,23 @@ def embed_text(request) -> Union[FileResponse, HttpResponse]:
         image = Image.open(destination.name)
         w, h = image.width, image.height
         output = PdfWriter()
-        existing_pdf = PdfReader(open(fp, "rb"))
-        for page in range(0, len(existing_pdf.pages)):
-            packet = make_page_with_text(page + 1, data, h, w)
-            new_pdf = PdfReader(packet)
-            page = existing_pdf.pages[page]
-            page.merge_page(new_pdf.pages[0])
-            output.add_page(page)
+        with open(fp, "rb") as f:
+            existing_pdf = PdfReader(f)
+            for page in range(0, len(existing_pdf.pages)):
+                packet = make_page_with_text(page + 1, data, h, w)
+                new_pdf = PdfReader(packet)
+                page = existing_pdf.pages[page]
+                page.merge_page(new_pdf.pages[0])
+                output.add_page(page)
 
         with NamedTemporaryFile(suffix=".pdf") as pdf_destination:
-            outputStream = open(pdf_destination.name, "wb")
-            output.write(outputStream)
-            outputStream.close()
-            img = open(pdf_destination.name, "rb")
-            response = FileResponse(img)
+            with open(pdf_destination.name, "wb") as outputStream:
+                output.write(outputStream)
+            response = FileResponse(
+                open(  # noqa: SIM115 FileResponse closes the file
+                    pdf_destination.name, "rb"
+                )
+            )
             cleanup_form(form)
             return response
 

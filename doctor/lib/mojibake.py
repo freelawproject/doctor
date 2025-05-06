@@ -47,7 +47,6 @@ def fix_mojibake(text):
         "Ò": "N",
         "Ñ": "O",
         "Ð": "P",
-        "": "Q",  # Missing
         "Î": "R",
         "Í": "S",
         "Ì": "T",
