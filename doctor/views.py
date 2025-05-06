@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 import re
 import shutil
@@ -30,7 +31,7 @@ from doctor.lib.utils import (
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
     strip_metadata_from_path,
-    log_sentry_message,
+    log_sentry_event,
 )
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
@@ -53,6 +54,7 @@ from doctor.tasks import (
     extract_recap_pdf,
 )
 
+logger = logging.getLogger(__name__)
 
 def heartbeat(request) -> HttpResponse:
     """Heartbeat endpoint
@@ -123,7 +125,7 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     extracted_by_ocr = False
     # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
     # or filepath_local (AbstractPDF).
-    original_filename = form.cleaned_data["file"].name
+    original_filename = form.cleaned_data["original_filename"]
     if extension == "pdf":
         content, err, returncode, extracted_by_ocr = extract_from_pdf(
             fp, original_filename, ocr_available
@@ -141,13 +143,14 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
     else:
         content = ""
         err = "Unable to extract content due to unknown extension"
-        log_sentry_message(
-            err,
-            level="warning",
-            context={
-                "filepath": original_filename,
-                "extension": extension,
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message=err,
+            extra={
+                "file_name": original_filename,
             },
+            exc_info=True
         )
 
     # Get page count if you can

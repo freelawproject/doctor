@@ -6,6 +6,7 @@ import pdfplumber
 import re
 import subprocess
 import xray
+import logging
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr, ByteString, Dict, List
 
@@ -34,8 +35,10 @@ from doctor.lib.utils import (
     force_text,
     ocr_needed,
     smart_text,
-    log_sentry_message,
+    log_sentry_event,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def strip_metadata_from_bytes(pdf_bytes):
@@ -232,12 +235,14 @@ def extract_from_pdf(
                     extracted_by_ocr = True
             elif content == "" or not success:
                 content = "Unable to extract document content."
-                log_sentry_message(
-                    content,
-                    level="error",
-                    context={
-                        "filepath": original_filename,
+                log_sentry_event(
+                    logger=logger,
+                    level=logging.ERROR,
+                    message="Unable to extract PDF document content",
+                    extra={
+                        "file_name": original_filename,
                     },
+                    exc_info=True
                 )
 
     return content, err, returncode, extracted_by_ocr
@@ -389,17 +394,16 @@ def get_clean_body_content(content: str, original_filename: str) -> str:
         if isinstance(e, XMLSyntaxError):
             error_message = "HTML cleaning failed due to XMLSyntaxError."
 
-        log_sentry_message(
-            error_message,
-            level="error",
-            context={
-                "filepath": original_filename,
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message=error_message,
+            extra={
+                "file_name": original_filename,
                 "exception_type": type(e).__name__,
                 "exception_message": str(e),
-                "input_content_start": (
-                    str(content)[:200] if content else "None"
-                ),
             },
+            exc_info=True
         )
 
         return (

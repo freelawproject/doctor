@@ -1,5 +1,6 @@
 import datetime
 import io
+import logging
 import os
 import re
 import subprocess
@@ -13,7 +14,7 @@ from PyPDF2 import PdfMerger
 from reportlab.pdfgen import canvas
 
 import sentry_sdk
-from typing import Literal
+from typing import Literal, Any, Optional, Dict
 
 
 class DoctorUnicodeDecodeError(UnicodeDecodeError):
@@ -359,26 +360,21 @@ def make_page_with_text(page, data, h, w):
     return packet
 
 
-def log_sentry_message(
+def log_sentry_event(
+    logger: logging.Logger,
+    level: int,
     message: str,
-    context: dict = None,
-    level: Literal[
-        "fatal", "critical", "error", "warning", "info", "debug"
-    ] = "warning",
-    **kwargs,
-):
-    """Helper function to send a message event to Sentry
+    extra: Optional[Dict[str, Any]] = None,
+    **kwargs: Any
+) -> None:
+    """
+    Logs a message using a specified logger, level, message, and optional extra data.
 
-    :param message: The main message string to send to Sentry.
-    :param context: A dictionary of extra key-value data to attach to the event.
-    :param level: The severity level for the event (e.g., 'info', 'warning', 'error').
-    :param kwargs: Additional keyword arguments to pass directly to sentry_sdk.capture_message (e.g., `scope`).
+    :param logger: The logger instance to use (e.g., logging.getLogger(__name__)).
+    :param level: The logging level (e.g., logging.INFO, logging.WARNING, logging.ERROR).
+    :param message: The message string to log.
+    :param extra: A dictionary containing extra data to attach to the log record.
+    :param kwargs: Additional keyword arguments passed to logger.log(), such as exc_info=True.
     :return: None
     """
-    full_context = {}
-    if context:
-        full_context.update(context)
-
-    sentry_sdk.capture_message(
-        message, level=level, extras=full_context, **kwargs
-    )
+    logger.log(level, message, extra=extra, **kwargs)
