@@ -29,7 +29,7 @@ jobs:
         echo 'DEBUG=on' >> .env.dev
 
     - name: Build Image
-      run: docker-compose -f docker-compose.dev.yml up --build -d
+      run: docker compose -f docker-compose.dev.yml up --build -d
 
     - name: Run tests
       run: docker exec mock_web_app python3 -m unittest doctor.tests
