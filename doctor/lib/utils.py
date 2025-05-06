@@ -365,7 +365,7 @@ def log_sentry_event(
     level: int,
     message: str,
     extra: Optional[Dict[str, Any]] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> None:
     """
     Logs a message using a specified logger, level, message, and optional extra data.

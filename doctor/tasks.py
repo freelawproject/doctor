@@ -242,7 +242,7 @@ def extract_from_pdf(
                     extra={
                         "file_name": original_filename,
                     },
-                    exc_info=True
+                    exc_info=True,
                 )
 
     return content, err, returncode, extracted_by_ocr
@@ -403,7 +403,7 @@ def get_clean_body_content(content: str, original_filename: str) -> str:
                 "exception_type": type(e).__name__,
                 "exception_message": str(e),
             },
-            exc_info=True
+            exc_info=True,
         )
 
         return (

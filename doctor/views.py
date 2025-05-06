@@ -56,6 +56,7 @@ from doctor.tasks import (
 
 logger = logging.getLogger(__name__)
 
+
 def heartbeat(request) -> HttpResponse:
     """Heartbeat endpoint
 
@@ -150,7 +151,7 @@ def extract_doc_content(request) -> Union[JsonResponse, HttpResponse]:
             extra={
                 "file_name": original_filename,
             },
-            exc_info=True
+            exc_info=True,
         )
 
     # Get page count if you can
