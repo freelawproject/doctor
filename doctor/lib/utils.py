@@ -8,13 +8,11 @@ import warnings
 from collections import namedtuple
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import six
 from PyPDF2 import PdfMerger
 from reportlab.pdfgen import canvas
-
-import sentry_sdk
-from typing import Literal, Any, Optional, Dict
 
 
 class DoctorUnicodeDecodeError(UnicodeDecodeError):
@@ -362,7 +360,7 @@ def log_sentry_event(
     logger: logging.Logger,
     level: int,
     message: str,
-    extra: Optional[Dict[str, Any]] = None,
+    extra: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> None:
     """

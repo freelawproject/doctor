@@ -1,11 +1,11 @@
 import asyncio
 import base64
 import io
+import logging
 import os
 import re
 import subprocess
 from collections.abc import ByteString
-import logging
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr
 
@@ -15,7 +15,7 @@ import pdfplumber
 import requests
 import xray
 from eyed3 import id3
-from lxml.etree import XMLSyntaxError, ParserError
+from lxml.etree import ParserError, XMLSyntaxError
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfMerger, PdfReader
@@ -33,9 +33,9 @@ from doctor.lib.utils import (
     DoctorUnicodeDecodeError,
     force_bytes,
     force_text,
+    log_sentry_event,
     ocr_needed,
     smart_text,
-    log_sentry_event,
 )
 
 logger = logging.getLogger(__name__)
