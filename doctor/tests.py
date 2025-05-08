@@ -1,24 +1,24 @@
+import glob
 import json
 import os
 import re
-import glob
 import unittest
-from unittest.mock import patch
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from unittest.mock import patch
 from zipfile import ZipFile
 
 import eyed3
 import requests
 
 from doctor.lib.text_extraction import (
-    insert_whitespace,
-    get_word,
-    remove_excess_whitespace,
-    cleanup_content,
     adjust_caption_lines,
+    cleanup_content,
+    get_word,
+    insert_whitespace,
+    remove_excess_whitespace,
 )
-from doctor.lib.utils import make_file, make_buffer
+from doctor.lib.utils import make_buffer, make_file
 
 asset_path = f"{Path.cwd()}/doctor/test_assets"
 
@@ -387,7 +387,7 @@ class MetadataTests(unittest.TestCase):
         )
         self.assertEqual(
             "",
-            image_response.json()["content"].strip("\x0c\x0c"),
+            image_response.json()["content"].strip("\x0c"),
             msg="PDF should have no text",
         )
 
@@ -728,7 +728,6 @@ class TestOCRConfidenceTests(unittest.TestCase):
 
 
 class TestWhiteSpaceRemoval(unittest.TestCase):
-
     def test_left_shift(self):
         """Can we properly shift our text left?"""
         document = """
@@ -759,7 +758,6 @@ bar"""
 
 
 class TestCleanupContent(unittest.TestCase):
-
     def setUp(self):
         # Patch the functions before each test method
         patcher1 = patch(

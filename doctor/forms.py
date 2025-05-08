@@ -31,12 +31,12 @@ class BaseFileForm(forms.Form):
         return file
 
     def prep_file(self):
-        fp = tempfile.NamedTemporaryFile(
-            delete=False, suffix=f'.{self.cleaned_data["extension"]}'
-        )
-        self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
-        self.cleaned_data["fp"] = fp.name
-        self.temp_save_file(fp.name)
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=f".{self.cleaned_data['extension']}"
+        ) as fp:
+            self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
+            self.cleaned_data["fp"] = fp.name
+            self.temp_save_file(fp.name)
 
 
 class AudioForm(BaseAudioFile):

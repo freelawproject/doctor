@@ -1,11 +1,11 @@
 import re
 
-import pdfplumber
-from pdfplumber.ctm import CTM
-import pytesseract
-from pytesseract import Output
 import pandas as pd
+import pdfplumber
+import pytesseract
+from pdfplumber.ctm import CTM
 from PIL import Image
+from pytesseract import Output
 
 
 def is_skewed(obj: dict) -> bool:
@@ -26,9 +26,7 @@ def is_skewed(obj: dict) -> bool:
 
     # Remove Skew
     my_char_ctm = CTM(*matrix)
-    if my_char_ctm.skew_x != 0:
-        return False
-    return True
+    return my_char_ctm.skew_x == 0
 
 
 def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
@@ -78,11 +76,9 @@ def has_images(page: pdfplumber.pdf.Page) -> bool:
     :return: True if page contains images of a certain size
     """
     return any(
-        [
-            image
-            for image in page.images
-            if image["width"] > 10 and image["height"] > 10
-        ]
+        image
+        for image in page.images
+        if image["width"] > 10 and image["height"] > 10
     )
 
 
@@ -140,15 +136,13 @@ def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
     :param page_text: context extracted from page
     :return: does page need OCR
     """
-    if (
+    return (
         page_text.strip() == ""
         or "(cid:" in page_text
         or has_text_annotations(page)
         or has_images(page)
         or len(page.curves) > 10
-    ):
-        return True
-    return False
+    )
 
 
 def convert_pdf_page_to_image(
@@ -164,7 +158,7 @@ def convert_pdf_page_to_image(
     _, _, w, h = page.bbox
     width = w * img.scale
 
-    if strip_margin == True:
+    if strip_margin:
         pixels_per_inch = width / 8.5
         bbox = (
             pixels_per_inch * 0.5,  # .5"  from left edge
@@ -232,7 +226,7 @@ def extract_with_ocr(page: pdfplumber.pdf.Page, strip_margin: bool) -> str:
     content = ""
     prev = {}
     for words in data:
-        for index, word in words.iterrows():
+        for _, word in words.iterrows():
             content = insert_whitespace(content, word, prev)
             content += get_word(word, image.size[0], strip_margin)
             prev = word
@@ -261,7 +255,7 @@ def insert_whitespace(content: str, word: dict, prev: dict) -> str:
         prev_end = 0
 
     # add horizontal whitespace
-    content += " " * int(((word["left"] - prev_end) / 25))
+    content += " " * int((word["left"] - prev_end) / 25)
     return content
 
 
