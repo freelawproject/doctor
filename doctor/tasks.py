@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import logging
 import os
 import re
 import subprocess
@@ -14,7 +15,7 @@ import pdfplumber
 import requests
 import xray
 from eyed3 import id3
-from lxml.etree import XMLSyntaxError
+from lxml.etree import ParserError, XMLSyntaxError
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfMerger, PdfReader
@@ -32,9 +33,12 @@ from doctor.lib.utils import (
     DoctorUnicodeDecodeError,
     force_bytes,
     force_text,
+    log_sentry_event,
     ocr_needed,
     smart_text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def strip_metadata_from_bytes(pdf_bytes):
@@ -58,8 +62,7 @@ def pdf_bytes_from_images(image_list: list[Image]):
 
     :param image_list: List of images
     :type image_list: list
-    :return: pdf_data
-    :type pdf_data: PDF as bytes
+    :return: PDF as bytes
     """
     with io.BytesIO() as output:
         image_list[0].save(
@@ -195,6 +198,7 @@ def get_page_count(path, extension):
 
 def extract_from_pdf(
     path: str,
+    original_filename: str,
     ocr_available: bool = False,
 ) -> Any:
     """Extract text from pdfs.
@@ -207,6 +211,7 @@ def extract_from_pdf(
     If a text-based PDF we fix corrupt PDFs from ca9.
 
     :param path: The path to the PDF
+    :param original_filename: The original file name of the PDF file.
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """
@@ -230,6 +235,15 @@ def extract_from_pdf(
                     extracted_by_ocr = True
             elif content == "" or not success:
                 content = "Unable to extract document content."
+                log_sentry_event(
+                    logger=logger,
+                    level=logging.ERROR,
+                    message="Unable to extract PDF document content",
+                    extra={
+                        "file_name": original_filename,
+                    },
+                    exc_info=True,
+                )
 
     return content, err, returncode, extracted_by_ocr
 
@@ -334,16 +348,25 @@ def extract_from_docx(path):
     return content.decode("utf-8"), err, process.returncode
 
 
-def extract_from_html(path):
-    """Extract from html.
+def extract_from_html(
+    path: str, original_filename: str
+) -> tuple[str, str, int]:
+    """Extract from html file by attempting various encodings
 
     A simple wrapper to go get content, and send it along.
+
+    :param path: The file path to the HTML file.
+    :param original_filename: The original file name of the HTML file.
+    :return: A tuple containing:
+             - The extracted and cleaned text content (str), or an empty string on failure.
+             - An error message (str), or an empty string on success.
+             - A return code (int), typically 0 on success, 1 on failure.
     """
     for encoding in ["utf-8", "ISO8859", "cp1252", "latin-1"]:
         try:
             with open(path, encoding=encoding) as f:
                 content = f.read()
-            content = get_clean_body_content(content)
+            content = get_clean_body_content(content, original_filename)
             content = force_text(content, encoding=encoding)
             return content, "", 0
         except (UnicodeDecodeError, DoctorUnicodeDecodeError):
@@ -352,14 +375,37 @@ def extract_from_html(path):
     return "", "Could not encode content properly", 1
 
 
-def get_clean_body_content(content):
-    """Parse out the body from an html string, clean it up, and send it along."""
+def get_clean_body_content(content: str, original_filename: str) -> str:
+    """Parse out the body from an html string, clean it up, and send it along.
+
+    :param content: The HTML content as a string
+    :param original_filename: The original file name of the HTML document, used for logging context
+    :return: The cleaned HTML body content as a string, or a default error string on failure
+    """
     cleaner = Cleaner(
         style=True, remove_tags=["a", "body", "font", "noscript", "img"]
     )
     try:
         return cleaner.clean_html(content)
-    except XMLSyntaxError:
+    except (XMLSyntaxError, ParserError) as e:
+        error_message = (
+            "HTML cleaning failed due to ParserError."  # Default message
+        )
+        if isinstance(e, XMLSyntaxError):
+            error_message = "HTML cleaning failed due to XMLSyntaxError."
+
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message=error_message,
+            extra={
+                "file_name": original_filename,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+            },
+            exc_info=True,
+        )
+
         return (
             "Unable to extract the content from this file. Please try "
             "reading the original."
@@ -403,12 +449,21 @@ def extract_from_txt(filepath):
     return content, err, error_code
 
 
-def extract_from_wpd(path):
+def extract_from_wpd(
+    path: str, original_filename: str
+) -> tuple[str, bytes, int]:
     """Extract text from a Word Perfect file
 
     Yes, courts still use these, so we extract their text using wpd2html. Once
     that's done, we pull out the body of the HTML, and do some minor cleanup
     on it.
+
+    :param path: The file path to the Word Perfect (.wpd) file.
+    :param original_filename: The original file name of the Word Perfect (.wpd) file.
+    :return: A tuple containing:
+             - The extracted and cleaned text content (str)
+             - The standard error output from the wpd2html subprocess (bytes)
+             - The return code of the wpd2html subprocess (int). Returns 1 on Python-level errors
     """
     process = subprocess.Popen(
         ["wpd2html", path],
@@ -416,10 +471,11 @@ def extract_from_wpd(path):
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
-    content, err = process.communicate()
-    content = get_clean_body_content(content)
+    content_bytes, err = process.communicate()
+    content_str = content_bytes.decode("utf-8")
+    content = get_clean_body_content(content_str, original_filename)
 
-    return content.decode("utf-8"), err, process.returncode
+    return content, err, process.returncode
 
 
 def download_images(sorted_urls) -> list:

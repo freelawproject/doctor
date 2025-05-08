@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 import re
 import shutil
@@ -25,6 +26,7 @@ from doctor.forms import (
 )
 from doctor.lib.utils import (
     cleanup_form,
+    log_sentry_event,
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
@@ -50,6 +52,8 @@ from doctor.tasks import (
     set_mp3_meta_data,
     strip_metadata_from_bytes,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def heartbeat(request) -> HttpResponse:
@@ -119,23 +123,35 @@ def extract_doc_content(request) -> JsonResponse | HttpResponse:
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
     extracted_by_ocr = False
+    # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
+    # or filepath_local (AbstractPDF).
+    original_filename = form.cleaned_data["original_filename"]
     if extension == "pdf":
         content, err, returncode, extracted_by_ocr = extract_from_pdf(
-            fp, ocr_available
+            fp, original_filename, ocr_available
         )
     elif extension == "doc":
         content, err, returncode = extract_from_doc(fp)
     elif extension == "docx":
         content, err, returncode = extract_from_docx(fp)
     elif extension == "html":
-        content, err, returncode = extract_from_html(fp)
+        content, err, returncode = extract_from_html(fp, original_filename)
     elif extension == "txt":
         content, err, returncode = extract_from_txt(fp)
     elif extension == "wpd":
-        content, err, returncode = extract_from_wpd(fp)
+        content, err, returncode = extract_from_wpd(fp, original_filename)
     else:
         content = ""
         err = "Unable to extract content due to unknown extension"
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message=err,
+            extra={
+                "file_name": original_filename,
+            },
+            exc_info=True,
+        )
 
     # Get page count if you can
     page_count = get_page_count(fp, extension)
