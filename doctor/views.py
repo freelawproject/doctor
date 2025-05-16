@@ -27,11 +27,11 @@ from doctor.forms import (
 )
 from doctor.lib.utils import (
     cleanup_form,
+    log_sentry_event,
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
     strip_metadata_from_path,
-    log_sentry_event,
 )
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
