@@ -15,6 +15,7 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
+from lxml.etree import XMLSyntaxError, ParserError
 
 from doctor.forms import (
     AudioForm,
@@ -123,35 +124,62 @@ def extract_doc_content(request) -> JsonResponse | HttpResponse:
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
     extracted_by_ocr = False
+    err = ""
     # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
     # or filepath_local (AbstractPDF).
     original_filename = form.cleaned_data["original_filename"]
-    if extension == "pdf":
-        content, err, returncode, extracted_by_ocr = extract_from_pdf(
-            fp, original_filename, ocr_available
+    try:
+        if extension == "pdf":
+            content, err, returncode, extracted_by_ocr = extract_from_pdf(
+                fp, original_filename, ocr_available
+            )
+        elif extension == "doc":
+            content, err, returncode = extract_from_doc(fp)
+        elif extension == "docx":
+            content, err, returncode = extract_from_docx(fp)
+        elif extension == "html":
+            content, err, returncode = extract_from_html(fp)
+        elif extension == "txt":
+            content, err, returncode = extract_from_txt(fp)
+        elif extension == "wpd":
+            content, err, returncode = extract_from_wpd(fp)
+        else:
+            returncode = 1
+            err = "Unable to extract content due to unknown extension"
+            content = ""
+
+        if returncode != 0:
+            log_sentry_event(
+                logger=logger,
+                level=logging.ERROR,
+                message="Unable to extract document content",
+                extra={
+                    "file_name": original_filename,
+                    "err": err,
+                },
+                exc_info=True,
+            )
+            pass
+
+    except (XMLSyntaxError, ParserError) as e:
+        error_message = (
+            "HTML cleaning failed due to ParserError."
         )
-    elif extension == "doc":
-        content, err, returncode = extract_from_doc(fp)
-    elif extension == "docx":
-        content, err, returncode = extract_from_docx(fp)
-    elif extension == "html":
-        content, err, returncode = extract_from_html(fp, original_filename)
-    elif extension == "txt":
-        content, err, returncode = extract_from_txt(fp)
-    elif extension == "wpd":
-        content, err, returncode = extract_from_wpd(fp, original_filename)
-    else:
-        content = ""
-        err = "Unable to extract content due to unknown extension"
+        if isinstance(e, XMLSyntaxError):
+            error_message = "HTML cleaning failed due to XMLSyntaxError."
+
         log_sentry_event(
             logger=logger,
             level=logging.ERROR,
-            message=err,
+            message=error_message,
             extra={
                 "file_name": original_filename,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
             },
             exc_info=True,
         )
+        content = "Unable to extract the content from this file. Please try reading the original."
 
     # Get page count if you can
     page_count = get_page_count(fp, extension)
