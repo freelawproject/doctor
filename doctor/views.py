@@ -12,10 +12,10 @@ import pytesseract
 import requests
 from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
+from lxml.etree import ParserError, XMLSyntaxError
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
-from lxml.etree import XMLSyntaxError, ParserError
 
 from doctor.forms import (
     AudioForm,
@@ -162,9 +162,7 @@ def extract_doc_content(request) -> JsonResponse | HttpResponse:
             pass
 
     except (XMLSyntaxError, ParserError) as e:
-        error_message = (
-            "HTML cleaning failed due to ParserError."
-        )
+        error_message = "HTML cleaning failed due to ParserError."
         if isinstance(e, XMLSyntaxError):
             error_message = "HTML cleaning failed due to XMLSyntaxError."
 

@@ -370,7 +370,6 @@ def get_clean_body_content(content: str) -> str:
     return cleaner.clean_html(content)
 
 
-
 def extract_from_txt(filepath):
     """Extract text from plain text files: A fool's errand.
 
