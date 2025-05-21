@@ -26,6 +26,7 @@ class BaseFileForm(forms.Form):
         if not file:
             raise ValidationError("File is missing.")
         self.cleaned_data["extension"] = file.name.split(".")[-1]
+        self.cleaned_data["original_filename"] = file.name
         self.prep_file()
         return file
 
