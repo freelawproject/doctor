@@ -7,13 +7,12 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import eyed3
 import img2pdf
-import magic
-from magika import Magika
 import pytesseract
 import requests
 from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
+from magika import Magika
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
@@ -285,14 +284,14 @@ def page_count(request) -> HttpResponse:
 
 def extract_mime_type(request) -> JsonResponse | HttpResponse:
     """Identify the MIME type of an uploaded document using Magika
-    
+
     :param request: django request containing the file to check
     :return: Mime type as json
     """
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
-    
+
     content = form.cleaned_data["file"].read()
 
     result = magika.identify_bytes(content)
@@ -303,7 +302,7 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
 
 def extract_extension(request) -> HttpResponse:
     """A handful of workarounds for getting extensions we can trust
-    
+
     :param request: django request containing the uploaded file
     :returns: the file extension as plain text
     """
@@ -324,16 +323,16 @@ def extract_extension(request) -> HttpResponse:
         extension = mimetypes.guess_extension(mime)
         # Keep log of failed attempts to infer extension with magika
         log_sentry_event(
-                logger=logger,
-                level=logging.ERROR,
-                message="Magika failed to infer file extension",
-                extra={
-                    "file_name": form.cleaned_data["file"].name,
-                    "file_size": len(content),
-                    "mimetype": mime,
-                },
-                exc_info=True,
-            )
+            logger=logger,
+            level=logging.ERROR,
+            message="Magika failed to infer file extension",
+            extra={
+                "file_name": form.cleaned_data["file"].name,
+                "file_size": len(content),
+                "mimetype": mime,
+            },
+            exc_info=True,
+        )
 
     if mime == "application/CDFV2" or mime.startswith("CDFV2"):
         mime = "application/msword"
@@ -344,12 +343,14 @@ def extract_extension(request) -> HttpResponse:
     elif mime == "text/x-c" or mime == "text/x-csrc":
         mime = "text/plain"
         extension = ".txt"
-    elif mime == "application/vnd.wordperfect" or mime.startswith("application/x-wordperfect"):
+    elif mime == "application/vnd.wordperfect" or mime.startswith(
+        "application/x-wordperfect"
+    ):
         extension = ".wpd"
     else:
         if re.findall(
             r"(Audio file with ID3.*MPEG.*layer III)|(.*Audio Media.*)",
-            str(content[:200])
+            str(content[:200]),
         ):
             mime = "audio/mpeg"
             extension = ".mp3"
