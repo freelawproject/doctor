@@ -1,3 +1,8 @@
+## Coming up
+The following changes are not yet released, but are code complete:
+
+- Replace magic with magika for more reliable file type and mime type detection.
+
 ## Current
 
 **0.3.1 - 2023-01-17**
