@@ -7,12 +7,12 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import eyed3
 import img2pdf
-import magic
 import pytesseract
 import requests
 from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
+from magika import Magika
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from pytesseract import Output
@@ -55,6 +55,8 @@ from doctor.tasks import (
 )
 
 logger = logging.getLogger(__name__)
+
+magika = Magika()
 
 
 def heartbeat(request) -> HttpResponse:
@@ -281,45 +283,78 @@ def page_count(request) -> HttpResponse:
 
 
 def extract_mime_type(request) -> JsonResponse | HttpResponse:
-    """Identify the mime type of a document
+    """Identify the MIME type of an uploaded document using Magika
 
-    :return: Mime type
+    :param request: django request containing the file to check
+    :return: Mime type as json
     """
-    form = DocumentForm(request.GET, request.FILES)
+    form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
-    mime = form.cleaned_data["mime"]
-    mimetype = magic.from_file(form.cleaned_data["fp"], mime=mime)
-    cleanup_form(form)
+
+    content = form.cleaned_data["file"].read()
+
+    result = magika.identify_bytes(content)
+    mimetype = result.output.mime_type
+
     return JsonResponse({"mimetype": mimetype})
 
 
 def extract_extension(request) -> HttpResponse:
-    """A handful of workarounds for getting extensions we can trust."""
+    """A handful of workarounds for getting extensions we can trust
+
+    :param request: django request containing the uploaded file
+    :returns: the file extension as plain text
+    """
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
     content = form.cleaned_data["file"].read()
 
-    file_str = magic.from_buffer(content)
-    if file_str.startswith("Composite Document File V2 Document"):
-        # Workaround for issue with libmagic1==5.09-2 in Ubuntu 12.04. Fixed
-        # in libmagic 5.11-2.
-        mime = "application/msword"
-    elif file_str == "(Corel/WP)":
-        mime = "application/vnd.wordperfect"
-    elif file_str == "C source, ASCII text":
-        mime = "text/plain"
-    elif file_str.startswith("WordPerfect document"):
-        mime = "application/vnd.wordperfect"
-    elif re.findall(
-        r"(Audio file with ID3.*MPEG.*layer III)|(.*Audio Media.*)", file_str
-    ):
-        mime = "audio/mpeg"
+    result = magika.identify_bytes(content)
+    mime = result.output.mime_type
+    exts = result.output.extensions or []
+
+    if exts:
+        # Usually the first one is the best
+        extension = "." + exts[0]
     else:
-        # No workaround necessary
-        mime = magic.from_buffer(content, mime=True)
-    extension = mimetypes.guess_extension(mime)
+        # Fallback to mimetypes lib, probably got an application/octet-stream file
+        extension = mimetypes.guess_extension(mime)
+        # Keep log of failed attempts to infer extension with magika
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Magika failed to infer file extension",
+            extra={
+                "file_name": form.cleaned_data["file"].name,
+                "file_size": len(content),
+                "mimetype": mime,
+            },
+            exc_info=True,
+        )
+
+    if mime == "application/CDFV2" or mime.startswith("CDFV2"):
+        mime = "application/msword"
+        extension = ".doc"
+    elif mime == "application/corel-wp":
+        mime = "application/vnd.wordperfect"
+        extension = ".wpd"
+    elif mime == "text/x-c" or mime == "text/x-csrc":
+        mime = "text/plain"
+        extension = ".txt"
+    elif mime == "application/vnd.wordperfect" or mime.startswith(
+        "application/x-wordperfect"
+    ):
+        extension = ".wpd"
+    else:
+        if re.findall(
+            r"(Audio file with ID3.*MPEG.*layer III)|(.*Audio Media.*)",
+            str(content[:200]),
+        ):
+            mime = "audio/mpeg"
+            extension = ".mp3"
+
     if extension == ".obj":
         # It could be a wpd, if it's not a PDF
         if "PDF" in content[0:40]:
@@ -333,8 +368,7 @@ def extract_extension(request) -> HttpResponse:
     if extension == ".bin":
         # Check if %PDF-X.X is in the first 1024 bytes of content
         pattern = rb"%PDF-[0-9]+(\.[0-9]+)?"
-        matches = re.search(pattern, content[:1024])
-        if matches:
+        if re.search(pattern, content[:1024]):
             # Document contains a pdf version, so the file must be a pdf
             extension = ".pdf"
 
@@ -346,7 +380,10 @@ def extract_extension(request) -> HttpResponse:
         ".asf": ".wma",
         ".dot": ".doc",
     }
-    return HttpResponse(fixes.get(extension, extension).lower())
+
+    final_ext = fixes.get(extension, extension).lower()
+
+    return HttpResponse(final_ext)
 
 
 def pdf_to_text(request) -> JsonResponse | HttpResponse:
