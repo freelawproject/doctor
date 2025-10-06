@@ -302,13 +302,14 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
     header = content[:64]
 
     # WordPerfect: Magika often returns pickle/octet-stream
-    if mime in ("application/x-python-pickle", "application/octet-stream") and (
-        header.startswith(b"\xffWPC") or b"WPC" in header[:8]
-    ):
+    if mime in (
+        "application/x-python-pickle",
+        "application/octet-stream",
+    ) and (header.startswith(b"\xffWPC") or b"WPC" in header[:8]):
         mime = "application/vnd.wordperfect"
 
     # ASF container → WMA/WMV
-    elif header.startswith(b"\x30\x26\xB2\x75\x8E\x66\xCF\x11"):
+    elif header.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
         if b"WMA" in header or b"WM/" in header:
             mime = "audio/x-ms-wma"
         else:
@@ -327,6 +328,7 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
         mime = "audio/ogg"
 
     return JsonResponse({"mimetype": mime})
+
 
 def extract_extension(request) -> HttpResponse:
     """A handful of workarounds for getting extensions we can trust
@@ -389,14 +391,15 @@ def extract_extension(request) -> HttpResponse:
             extension = ".mp3"
 
     # --- WordPerfect misidentified as pickle or generic binary ---
-    if mime in ("application/x-python-pickle", "application/octet-stream") and (
-        content.startswith(b"\xffWPC") or b"WPC" in content[:8]
-    ):
+    if mime in (
+        "application/x-python-pickle",
+        "application/octet-stream",
+    ) and (content.startswith(b"\xffWPC") or b"WPC" in content[:8]):
         mime = "application/vnd.wordperfect"
         extension = ".wpd"
 
     # --- ASF/WMA header detection ---
-    if content.startswith(b"\x30\x26\xB2\x75\x8E\x66\xCF\x11"):
+    if content.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
         mime = "audio/x-ms-wma"
         extension = ".wma"
 
