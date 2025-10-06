@@ -1,16 +1,25 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
-- Replace magic with magika for more reliable file type and mime type detection. #214
-
 ## Current
+
+**0.3.3 - 2025-10-06** #217
+
+Features:
+ - Update extension detection for wpd, and add more tests
+
+## Previous Versions
+
+**0.3.2 - 2025-10-05**
+
+Features:
+ - Replace magic with magika for more reliable file type and mime type detection. #214
 
 **0.3.1 - 2023-01-17**
 
 Features:
  - Adds /convert/pdf/thumbnails/ service that returns a zip file with thumbnails from a PDF document.
 
-## Previous Versions
 
 **0.3.0 - 2022-09-30**
 
