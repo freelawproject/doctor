@@ -1,6 +1,6 @@
 [project]
 name = "doctor"
-version = "1"
+version = "0.3.3"
 description = "CourtListener doctor"
 requires-python = ">=3.10"
 dependencies = [

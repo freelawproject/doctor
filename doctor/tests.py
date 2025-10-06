@@ -359,23 +359,33 @@ class MetadataTests(unittest.TestCase):
         )
 
     def test_get_extension(self):
-        """"""
-        files = make_buffer(filename="image-pdf.pdf")
-        response = requests.post(
-            "http://doctor:5050/utils/file/extension/", files=files
-        )
-        self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
+        """Verify that /utils/file/extension/ correctly infers extensions for common types."""
+        test_files = [
+            ("image-pdf.pdf", ".pdf"),
+            ("broken-mime.pdf", ".pdf"),
+            ("word-docx.docx", ".docx"),
+            ("word-doc.doc", ".doc"),
+            ("word-perfect.wpd", ".wpd"),
+            ("1.wma", ".wma"),
+            ("ander_v._leo.mp3", ".mp3"),
+            ("long-image.tiff", ".tiff"),
+            ("small_txt.txt", ".txt"),
+            ("broken_html.html", ".html"),
+            ("broken_html.txt", ".html"),
+            ("small.xml", ".xml"),
+        ]
 
-        files = make_buffer(filename="word-docx.docx")
-        response = requests.post(
-            "http://doctor:5050/utils/file/extension/", files=files
-        )
-        self.assertEqual(response.text, ".docx", msg="Failed to get mime type")
-        files = make_buffer(filename="word-doc.doc")
-        response = requests.post(
-            "http://doctor:5050/utils/file/extension/", files=files
-        )
-        self.assertEqual(response.text, ".doc", msg="Failed to get mime type")
+        for filename, expected_ext in test_files:
+            with self.subTest(filename=filename):
+                files = make_buffer(filename=filename)
+                response = requests.post(
+                    "http://doctor:5050/utils/file/extension/", files=files
+                )
+                self.assertEqual(
+                    response.text.strip(),
+                    expected_ext,
+                    msg=f"Failed to detect extension for {filename}",
+                )
 
     def test_embedding_text_to_image_pdf(self):
         """Can we embed text into an image PDF?"""

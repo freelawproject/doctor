@@ -283,10 +283,11 @@ def page_count(request) -> HttpResponse:
 
 
 def extract_mime_type(request) -> JsonResponse | HttpResponse:
-    """Identify the MIME type of an uploaded document using Magika
+    """Identify the MIME type of an uploaded document using Magika, with
+    fallbacks for formats Magika fails to recognize.
 
     :param request: django request containing the file to check
-    :return: Mime type as json
+    :return: MIME type as JSON
     """
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
@@ -295,9 +296,38 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
     content = form.cleaned_data["file"].read()
 
     result = magika.identify_bytes(content)
-    mimetype = result.output.mime_type
+    mime = result.output.mime_type
 
-    return JsonResponse({"mimetype": mimetype})
+    # --- Fallbacks and corrections ---
+    header = content[:64]
+
+    # WordPerfect: Magika often returns pickle/octet-stream
+    if mime in (
+        "application/x-python-pickle",
+        "application/octet-stream",
+    ) and (header.startswith(b"\xffWPC") or b"WPC" in header[:8]):
+        mime = "application/vnd.wordperfect"
+
+    # ASF container → WMA/WMV
+    elif header.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
+        if b"WMA" in header or b"WM/" in header:
+            mime = "audio/x-ms-wma"
+        else:
+            mime = "video/x-ms-wmv"
+
+    # PDF (misdetected as .bin)
+    elif re.search(rb"%PDF-[0-9]+(\.[0-9]+)?", content[:1024]):
+        mime = "application/pdf"
+
+    # Audio: quick signature checks for FLAC/AAC/OGG
+    elif header.startswith(b"fLaC"):
+        mime = "audio/flac"
+    elif header[:2] in (b"\xff\xf1", b"\xff\xf9"):
+        mime = "audio/aac"
+    elif header.startswith(b"OggS"):
+        mime = "audio/ogg"
+
+    return JsonResponse({"mimetype": mime})
 
 
 def extract_extension(request) -> HttpResponse:
@@ -309,7 +339,11 @@ def extract_extension(request) -> HttpResponse:
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
+
     content = form.cleaned_data["file"].read()
+    # Normalize to bytes
+    if isinstance(content, str):
+        content = content.encode("utf-8", errors="ignore")
 
     result = magika.identify_bytes(content)
     mime = result.output.mime_type
@@ -319,9 +353,8 @@ def extract_extension(request) -> HttpResponse:
         # Usually the first one is the best
         extension = "." + exts[0]
     else:
-        # Fallback to mimetypes lib, probably got an application/octet-stream file
+        # Fallback to mimetypes lib
         extension = mimetypes.guess_extension(mime)
-        # Keep log of failed attempts to infer extension with magika
         log_sentry_event(
             logger=logger,
             level=logging.ERROR,
@@ -334,13 +367,14 @@ def extract_extension(request) -> HttpResponse:
             exc_info=True,
         )
 
+    # --- Handle common Magika misclassifications ---
     if mime == "application/CDFV2" or mime.startswith("CDFV2"):
         mime = "application/msword"
         extension = ".doc"
     elif mime == "application/corel-wp":
         mime = "application/vnd.wordperfect"
         extension = ".wpd"
-    elif mime == "text/x-c" or mime == "text/x-csrc":
+    elif mime in ("text/x-c", "text/x-csrc"):
         mime = "text/plain"
         extension = ".txt"
     elif mime == "application/vnd.wordperfect" or mime.startswith(
@@ -348,6 +382,7 @@ def extract_extension(request) -> HttpResponse:
     ):
         extension = ".wpd"
     else:
+        # Fallback audio pattern
         if re.findall(
             r"(Audio file with ID3.*MPEG.*layer III)|(.*Audio Media.*)",
             str(content[:200]),
@@ -355,34 +390,43 @@ def extract_extension(request) -> HttpResponse:
             mime = "audio/mpeg"
             extension = ".mp3"
 
+    # --- WordPerfect misidentified as pickle or generic binary ---
+    if mime in (
+        "application/x-python-pickle",
+        "application/octet-stream",
+    ) and (content.startswith(b"\xffWPC") or b"WPC" in content[:8]):
+        mime = "application/vnd.wordperfect"
+        extension = ".wpd"
+
+    # --- ASF/WMA header detection ---
+    if content.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
+        mime = "audio/x-ms-wma"
+        extension = ".wma"
+
+    # --- Misclassified .obj or .bin ---
     if extension == ".obj":
-        # It could be a wpd, if it's not a PDF
-        if "PDF" in content[0:40]:
-            # Does 'PDF' appear in the beginning of the content?
+        if b"PDF" in content[0:40]:
             extension = ".pdf"
         else:
             extension = ".wpd"
-
-    # The extension is .bin, look in the content if we can infer the
-    # content type as pdf. See: https://bugs.astron.com/view.php?id=446
-    if extension == ".bin":
-        # Check if %PDF-X.X is in the first 1024 bytes of content
+    elif extension == ".bin":
         pattern = rb"%PDF-[0-9]+(\.[0-9]+)?"
         if re.search(pattern, content[:1024]):
-            # Document contains a pdf version, so the file must be a pdf
             extension = ".pdf"
 
     fixes = {
         ".htm": ".html",
-        ".xml": ".html",
         ".wsdl": ".html",
         ".ksh": ".txt",
         ".asf": ".wma",
         ".dot": ".doc",
+        ".mpga": ".mp3",
+        ".x-ms-wma": ".wma",
+        ".x-ms-wmv": ".wmv",
+        ".vnd.wordperfect": ".wpd",
     }
 
     final_ext = fixes.get(extension, extension).lower()
-
     return HttpResponse(final_ext)
 
 
