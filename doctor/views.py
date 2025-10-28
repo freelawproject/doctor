@@ -133,7 +133,7 @@ def extract_doc_content(request) -> JsonResponse | HttpResponse:
     try:
         if extension == "pdf":
             content, err, returncode, extracted_by_ocr = extract_from_pdf(
-                fp, original_filename, ocr_available
+                fp, ocr_available
             )
         elif extension == "doc":
             content, err, returncode = extract_from_doc(fp)
