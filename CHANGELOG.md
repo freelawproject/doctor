@@ -1,6 +1,8 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+ - Fix extract_from_pdf function to return correct returncode
+
 ## Current
 
 **0.3.3 - 2025-10-06** #217
