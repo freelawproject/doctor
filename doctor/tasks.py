@@ -86,7 +86,18 @@ def make_pdftotext_process(path):
         stderr=subprocess.DEVNULL,
     )
     content, err = process.communicate()
-    return content.decode(), err, process.returncode
+    text = content.decode()
+
+    #check if text looks like valid readable content
+    nontext_ratio = sum(
+        b < 32 and b not in (9, 10, 13) for b in content) / max(
+        len(content), 1)
+    unreadable = nontext_ratio > 0.3
+
+    if unreadable or not text.strip():
+        return "", b"pdftotext output looks unreadable", 1
+
+    return text, err, process.returncode
 
 
 def rasterize_pdf(path, destination):
@@ -193,7 +204,8 @@ def get_page_count(path, extension):
 
 def extract_from_pdf(
     path: str,
-    ocr_available: bool = False,
+    original_filename: str,
+    ocr_available: bool = True,
 ) -> Any:
     """Extract text from pdfs.
 
@@ -205,6 +217,7 @@ def extract_from_pdf(
     If a text-based PDF we fix corrupt PDFs from ca9.
 
     :param path: The path to the PDF
+    :param original_filename: The original file name of the PDF file.
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """
@@ -224,8 +237,8 @@ def extract_from_pdf(
                 # Check content length and take the longer of the two
                 if len(ocr_content) > len(content):
                     content = ocr_content
+                    # opinion.extracted_by_ocr = True
                     extracted_by_ocr = True
-                    returncode = 0
             elif content == "" or not success:
                 content = "Unable to extract document content."
 

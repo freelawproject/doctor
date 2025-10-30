@@ -1,7 +1,8 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
- - Fix extract_from_pdf function to return correct returncode
+Changes:
+ - check if text from pdf looks like valid readable content #219
 
 ## Current
 
