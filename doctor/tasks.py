@@ -88,7 +88,9 @@ def make_pdftotext_process(path):
     content, err = process.communicate()
     text = content.decode()
 
-    #check if text looks like valid readable content
+    # Calculate fraction of bytes in `content` that are non-text control characters
+    # (ASCII < 32) excluding common whitespace bytes (tab=9, newline=10, carriage return=13).
+    # If more than 30% are non-text, consider the output unreadable.
     nontext_ratio = sum(
         b < 32 and b not in (9, 10, 13) for b in content) / max(
         len(content), 1)
@@ -204,8 +206,7 @@ def get_page_count(path, extension):
 
 def extract_from_pdf(
     path: str,
-    original_filename: str,
-    ocr_available: bool = True,
+    ocr_available: bool = False,
 ) -> Any:
     """Extract text from pdfs.
 
@@ -217,7 +218,6 @@ def extract_from_pdf(
     If a text-based PDF we fix corrupt PDFs from ca9.
 
     :param path: The path to the PDF
-    :param original_filename: The original file name of the PDF file.
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """
@@ -237,7 +237,6 @@ def extract_from_pdf(
                 # Check content length and take the longer of the two
                 if len(ocr_content) > len(content):
                     content = ocr_content
-                    # opinion.extracted_by_ocr = True
                     extracted_by_ocr = True
             elif content == "" or not success:
                 content = "Unable to extract document content."
