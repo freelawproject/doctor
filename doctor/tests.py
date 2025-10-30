@@ -196,7 +196,11 @@ class ExtractionTests(unittest.TestCase):
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         text = response.json()["content"]
-        self.assertEqual("pdftotext output looks unreadable", response.json()["err"], msg="Wrong error message")
+        self.assertEqual(
+            "pdftotext output looks unreadable",
+            response.json()["err"],
+            msg="Wrong error message",
+        )
         self.assertEqual(
             text,
             "",
