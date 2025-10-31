@@ -189,6 +189,24 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract by OCR",
         )
 
+    def test_unreadable_pdf_extraction(self):
+        files = make_file(filename="unreadable-pdf.pdf")
+        data = {}
+        response = requests.post(
+            "http://doctor:5050/extract/doc/text/", files=files, data=data
+        )
+        text = response.json()["content"]
+        self.assertEqual(
+            "pdftotext output looks unreadable",
+            response.json()["err"],
+            msg="Wrong error message",
+        )
+        self.assertEqual(
+            text,
+            "",
+            msg=text,
+        )
+
     def test_docx_format(self):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}

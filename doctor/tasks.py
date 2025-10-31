@@ -86,7 +86,20 @@ def make_pdftotext_process(path):
         stderr=subprocess.DEVNULL,
     )
     content, err = process.communicate()
-    return content.decode(), err, process.returncode
+    text = content.decode()
+
+    # Calculate fraction of bytes in `content` that are non-text control characters
+    # (ASCII < 32) excluding common whitespace bytes (tab=9, newline=10, carriage return=13).
+    # If more than 30% are non-text, consider the output unreadable.
+    nontext_ratio = sum(
+        b < 32 and b not in (9, 10, 13) for b in content
+    ) / max(len(content), 1)
+    unreadable = nontext_ratio > 0.3
+
+    if unreadable or not text.strip():
+        return "", b"pdftotext output looks unreadable", 1
+
+    return text, err, process.returncode
 
 
 def rasterize_pdf(path, destination):
@@ -225,7 +238,6 @@ def extract_from_pdf(
                 if len(ocr_content) > len(content):
                     content = ocr_content
                     extracted_by_ocr = True
-                    returncode = 0
             elif content == "" or not success:
                 content = "Unable to extract document content."
 
