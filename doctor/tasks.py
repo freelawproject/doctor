@@ -92,8 +92,8 @@ def make_pdftotext_process(path):
     # (ASCII < 32) excluding common whitespace bytes (tab=9, newline=10, carriage return=13).
     # If more than 30% are non-text, consider the output unreadable.
     nontext_ratio = sum(
-        b < 32 and b not in (9, 10, 13) for b in content) / max(
-        len(content), 1)
+        b < 32 and b not in (9, 10, 13) for b in content
+    ) / max(len(content), 1)
     unreadable = nontext_ratio > 0.3
 
     if unreadable or not text.strip():
