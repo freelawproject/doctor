@@ -21,6 +21,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         poppler-utils \
         qpdf \
         tesseract-ocr \
+        exiftool \
         && \
     apt-get install \
         --no-install-recommends \

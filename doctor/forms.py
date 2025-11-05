@@ -66,12 +66,30 @@ class MimeForm(forms.Form):
     file = forms.FileField(label="document", required=False)
     mime = forms.BooleanField(label="mime", required=False)
 
-    def clean(self):
-        file = self.cleaned_data.get("file", False)
+    def temp_save_file(self, fp):
+        with open(fp, "wb") as f:
+            for chunk in self.cleaned_data["file"].chunks():
+                f.write(chunk)
+
+    def clean_file(self):
+        file = self.cleaned_data.get("file")
         if not file:
             raise ValidationError("File is missing.")
 
-        self.cleaned_data["filename"] = "unknown"
+        self.cleaned_data["original_filename"] = file.name
+        self.cleaned_data.setdefault("filename", "unknown")
+
+        # Create a tempfile without extension so exiftool/magika detection isn't biased by extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix="") as fp:
+            self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
+            self.cleaned_data["fp"] = fp.name
+            self.temp_save_file(fp.name)
+
+        return file
+
+    def clean(self):
+        self.clean_file()
+        return self.cleaned_data
 
 
 class ThumbnailForm(forms.Form):

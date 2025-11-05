@@ -7,6 +7,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import eyed3
 import img2pdf
+import magic
 import pytesseract
 import requests
 from django.core.exceptions import BadRequest
@@ -31,6 +32,7 @@ from doctor.lib.utils import (
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
+    strip_metadata,
     strip_metadata_from_path,
 )
 from doctor.tasks import (
@@ -293,7 +295,11 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
 
-    content = form.cleaned_data["file"].read()
+    fp = form.cleaned_data["fp"]
+    strip_metadata(fp)
+
+    with open(fp, "rb") as f:
+        content = f.read()
 
     result = magika.identify_bytes(content)
     mime = result.output.mime_type
@@ -314,18 +320,18 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
             mime = "audio/x-ms-wma"
         else:
             mime = "video/x-ms-wmv"
-
     # PDF (misdetected as .bin)
     elif re.search(rb"%PDF-[0-9]+(\.[0-9]+)?", content[:1024]):
         mime = "application/pdf"
-
-    # Audio: quick signature checks for FLAC/AAC/OGG
+    # Audio: quick signature checks for FLAC/AAC/OGG/RM
     elif header.startswith(b"fLaC"):
         mime = "audio/flac"
     elif header[:2] in (b"\xff\xf1", b"\xff\xf9"):
         mime = "audio/aac"
     elif header.startswith(b"OggS"):
         mime = "audio/ogg"
+    elif header.startswith(b"\x2e\x52\x4d\x46"):
+        mime = "application/vnd.rn-realmedia"
 
     return JsonResponse({"mimetype": mime})
 
@@ -340,7 +346,16 @@ def extract_extension(request) -> HttpResponse:
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
 
-    content = form.cleaned_data["file"].read()
+    fp = form.cleaned_data["fp"]
+
+    # avoid "referenced before assignment" warnings from analyzer
+    content = b""
+
+    strip_metadata(fp)
+
+    with open(fp, "rb") as f:
+        content = f.read()
+
     # Normalize to bytes
     if isinstance(content, str):
         content = content.encode("utf-8", errors="ignore")
@@ -353,21 +368,37 @@ def extract_extension(request) -> HttpResponse:
         # Usually the first one is the best
         extension = "." + exts[0]
     else:
-        # Fallback to mimetypes lib
+        # Get default extension using magika mime, it could be ".bin"
         extension = mimetypes.guess_extension(mime)
-        log_sentry_event(
-            logger=logger,
-            level=logging.ERROR,
-            message="Magika failed to infer file extension",
-            extra={
-                "file_name": form.cleaned_data["file"].name,
-                "file_size": len(content),
-                "mimetype": mime,
-            },
-            exc_info=True,
-        )
+        # If Magika produced octet-stream, try libmagic
+        if mime == "application/octet-stream":
+            mime_magic = magic.from_buffer(content, mime=True)
+
+            # If libmagic provided a better mime, use it
+            if mime_magic and mime_magic != "application/octet-stream":
+                mime = mime_magic
+                extension = mimetypes.guess_extension(mime)
+
+        if not extension:
+            # Fallback to mimetypes lib using magika mime
+            log_sentry_event(
+                logger=logger,
+                level=logging.ERROR,
+                message="Magika failed to infer file extension, libmagic failed too.",
+                extra={
+                    "file_name": form.cleaned_data["file"].name,
+                    "file_size": len(content),
+                    "mimetype": mime,
+                },
+                exc_info=True,
+            )
+
+            # Default unknown extension, do not blank it
+            extension = mimetypes.guess_extension(mime) or ".bin"
 
     # --- Handle common Magika misclassifications ---
+    if mime == "application/vnd.rn-realmedia":
+        extension = ".rm"
     if mime == "application/CDFV2" or mime.startswith("CDFV2"):
         mime = "application/msword"
         extension = ".doc"

@@ -374,3 +374,19 @@ def log_sentry_event(
     :return: None
     """
     logger.log(level, message, extra=extra, **kwargs)
+
+
+def strip_metadata(path: str) -> bool:
+    """Strip metadata from a file in place using exiftool
+
+    :param path: Temporary file path
+    :return: True if exiftool succeeded or False if exiftool failed
+    """
+    result = subprocess.run(
+        ["exiftool", "-all=", "-overwrite_original", path],
+        capture_output=True,
+        text=True,
+    )
+
+    # exiftool returns 0 = success
+    return result.returncode == 0
