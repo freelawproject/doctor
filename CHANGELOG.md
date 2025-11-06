@@ -1,16 +1,23 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
- - Fix extract_from_pdf function to return correct returncode
-
 ## Current
+
+**0.3.4 - 2025-11-05** #226
+
+Features:
+ - Fix extract_from_pdf function to return correct returncode
+ - Improve extension and MIME extraction when Magika fails on certain files
+ - Add magic and other fallbacks to handle tricky formats
+ - Update Dockerfile to add exiftool
+
+## Previous Versions
 
 **0.3.3 - 2025-10-06** #217
 
 Features:
  - Update extension detection for wpd, and add more tests
 
-## Previous Versions
 
 **0.3.2 - 2025-10-05**
 
