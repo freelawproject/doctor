@@ -373,6 +373,7 @@ class MetadataTests(unittest.TestCase):
             ("broken_html.html", ".html"),
             ("broken_html.txt", ".html"),
             ("small.xml", ".xml"),
+            ("1.rm", ".rm"),
         ]
 
         for filename, expected_ext in test_files:

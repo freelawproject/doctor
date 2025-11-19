@@ -32,8 +32,9 @@ from doctor.lib.utils import (
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
-    strip_metadata,
+    strip_metadata_from_bytes,
     strip_metadata_from_path,
+    strip_metadata_with_exiftool,
 )
 from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
@@ -53,7 +54,6 @@ from doctor.tasks import (
     make_pdftotext_process,
     rasterize_pdf,
     set_mp3_meta_data,
-    strip_metadata_from_bytes,
 )
 
 logger = logging.getLogger(__name__)
@@ -296,7 +296,7 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
         return HttpResponse("Failed validation", status=BAD_REQUEST)
 
     fp = form.cleaned_data["fp"]
-    strip_metadata(fp)
+    strip_metadata_with_exiftool(fp)
 
     with open(fp, "rb") as f:
         content = f.read()
@@ -351,7 +351,7 @@ def extract_extension(request) -> HttpResponse:
     # avoid "referenced before assignment" warnings from analyzer
     content = b""
 
-    strip_metadata(fp)
+    strip_metadata_with_exiftool(fp)
 
     with open(fp, "rb") as f:
         content = f.read()
@@ -386,7 +386,7 @@ def extract_extension(request) -> HttpResponse:
                 level=logging.ERROR,
                 message="Magika failed to infer file extension, libmagic failed too.",
                 extra={
-                    "file_name": form.cleaned_data["file"].name,
+                    "file_name": form.cleaned_data["original_filename"],
                     "file_size": len(content),
                     "mimetype": mime,
                 },

@@ -16,7 +16,7 @@ import xray
 from eyed3 import id3
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
-from PyPDF2 import PdfMerger, PdfReader
+from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
 from seal_rookery.search import ImageSizes, seal
 
@@ -29,27 +29,10 @@ from doctor.lib.text_extraction import (
 )
 from doctor.lib.utils import (
     DoctorUnicodeDecodeError,
-    force_bytes,
     force_text,
     ocr_needed,
     smart_text,
 )
-
-
-def strip_metadata_from_bytes(pdf_bytes):
-    """Convert PDF bytes into PDF and remove metadata from it
-
-    Stripping the metadata allows us to hash the PDFs
-
-    :param pdf_bytes: PDF as binary content
-    :return: PDF bytes with metadata removed.
-    """
-    pdf_merger = PdfMerger()
-    pdf_merger.append(io.BytesIO(pdf_bytes))
-    pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
-    byte_writer = io.BytesIO()
-    pdf_merger.write(byte_writer)
-    return force_bytes(byte_writer.getvalue())
 
 
 def pdf_bytes_from_images(image_list: list[Image]):

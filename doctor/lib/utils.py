@@ -376,7 +376,7 @@ def log_sentry_event(
     logger.log(level, message, extra=extra, **kwargs)
 
 
-def strip_metadata(path: str) -> bool:
+def strip_metadata_with_exiftool(path: str) -> bool:
     """Strip metadata from a file in place using exiftool
 
     :param path: Temporary file path
