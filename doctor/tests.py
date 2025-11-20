@@ -374,6 +374,7 @@ class MetadataTests(unittest.TestCase):
             ("broken_html.txt", ".html"),
             ("small.xml", ".xml"),
             ("1.rm", ".rm"),
+            ("adobe-metadata.pdf", ".pdf"),  # PDF with Adobe XMP metadata (issue #223)
         ]
 
         for filename, expected_ext in test_files:
