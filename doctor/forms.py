@@ -34,7 +34,6 @@ class BaseFileForm(forms.Form):
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=f".{self.cleaned_data['extension']}"
         ) as fp:
-            self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
             self.cleaned_data["fp"] = fp.name
             self.temp_save_file(fp.name)
 
@@ -81,14 +80,12 @@ class MimeForm(forms.Form):
 
         # Create a tempfile without extension so exiftool/magika detection isn't biased by extension
         with tempfile.NamedTemporaryFile(delete=False, suffix="") as fp:
-            self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
             self.cleaned_data["fp"] = fp.name
             self.temp_save_file(fp.name)
 
         return file
 
     def clean(self):
-        self.clean_file()
         return self.cleaned_data
 
 
@@ -117,5 +114,4 @@ class DocumentForm(BaseFileForm):
     strip_margin = forms.BooleanField(label="strip-margin", required=False)
 
     def clean(self):
-        self.clean_file()
         return self.cleaned_data

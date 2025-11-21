@@ -14,6 +14,8 @@ import six
 from PyPDF2 import PdfMerger
 from reportlab.pdfgen import canvas
 
+logger = logging.getLogger(__name__)
+
 
 class DoctorUnicodeDecodeError(UnicodeDecodeError):
     def __init__(self, obj, *args):
@@ -278,6 +280,8 @@ def cleanup_form(form):
             os.remove(fp)
         except FileNotFoundError:
             pass
+        except OSError:
+            logger.error(f"Failed to delete temp file: {fp}", exc_info=True)
 
 
 def make_file(filename, dir=None):
