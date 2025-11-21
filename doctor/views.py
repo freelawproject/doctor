@@ -269,8 +269,8 @@ def xray(request) -> JsonResponse:
     :param request: django request containing the uploaded file
     :return: json with bounding boxes and text
     """
+    form = DocumentForm(request.POST, request.FILES)
     try:
-        form = DocumentForm(request.POST, request.FILES)
         if not form.is_valid():
             return JsonResponse(
                 {"error": True, "msg": "Failed validation"}, status=BAD_REQUEST
@@ -283,8 +283,8 @@ def xray(request) -> JsonResponse:
         results = get_xray(form.cleaned_data["fp"])
         if results.get("error", False):
             return JsonResponse(results, status=BAD_REQUEST)
-    except Exception:
-        pass
+    except Exception as e:
+        raise e
     finally:
         cleanup_form(form)
     return JsonResponse({"error": False, "results": results})

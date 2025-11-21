@@ -118,7 +118,6 @@ def get_xray(path):
     """Get bad redactions
 
     :param path: A path to the file
-
     :return: dictionary of bounding boxes.
     """
     try:
@@ -216,7 +215,11 @@ def extract_from_pdf(
 
 
 def extract_by_ocr(path: str) -> (bool, str):
-    """Extract the contents of a PDF using OCR."""
+    """Extract the contents of a PDF using OCR.
+
+    :param path: The path to the file
+    :return Tuple with success or fail boolean and text
+    """
     fail_msg = (
         "Unable to extract the content from this file. Please try "
         "reading the original."
@@ -250,6 +253,11 @@ def cleanup_ocr_text(txt: str) -> str:
 
 
 def convert_file_to_txt(path: str) -> str:
+    """Converts a file to plain text
+
+    :param path: The path to the file
+    :return The extracted text content from the file
+    """
     tesseract_command = [
         "tesseract",
         path,
@@ -285,10 +293,12 @@ def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
     return pdf_bytes
 
 
-def extract_from_doc(path):
+def extract_from_doc(path) -> tuple[str, bytes, int]:
     """Extract text from docs.
-
     We use antiword to pull the text out of MS Doc files.
+
+    :param path: The path to the file
+    :return: A tuple containing the extracted text, any error output, and the subprocess return code
     """
     process = subprocess.Popen(
         ["antiword", path, "-i", "1"],
@@ -300,10 +310,12 @@ def extract_from_doc(path):
     return content.decode("utf-8"), err, process.returncode
 
 
-def extract_from_docx(path):
+def extract_from_docx(path) -> tuple[str, bytes, int]:
     """Extract text from docx files
-
     We use docx2txt to pull out the text. Pretty simple.
+
+    :param path: The path to the .docx file
+    :return: A tuple containing the extracted text, any error output (empty bytes), and the subprocess return code
     """
     process = subprocess.Popen(
         ["docx2txt", path, "-"],
@@ -351,7 +363,7 @@ def get_clean_body_content(content: str) -> str:
     return cleaner.clean_html(content)
 
 
-def extract_from_txt(filepath):
+def extract_from_txt(filepath: str):
     """Extract text from plain text files: A fool's errand.
 
     Unfortunately, plain text files lack encoding information, so we have to
@@ -361,6 +373,9 @@ def extract_from_txt(filepath):
     Microsoft box, so assuming cp1252 as our first guess makes sense.
 
     May we hope for a better world.
+
+    :param filepath: The path to the file
+    :return: A tuple containing the extracted text, any error output, and the error code
     """
     err = None
     error_code = 0
