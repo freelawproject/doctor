@@ -272,7 +272,12 @@ def strip_metadata_from_bytes(pdf_bytes):
 
 def cleanup_form(form):
     """Clean up a form object"""
-    os.remove(form.cleaned_data["fp"])
+    fp = form.cleaned_data.get("fp")
+    if fp:
+        try:
+            os.remove(fp)
+        except FileNotFoundError:
+            pass
 
 
 def make_file(filename, dir=None):

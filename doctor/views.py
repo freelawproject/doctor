@@ -333,6 +333,7 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
     elif header.startswith(b"\x2e\x52\x4d\x46"):
         mime = "application/vnd.rn-realmedia"
 
+    cleanup_form(form)
     return JsonResponse({"mimetype": mime})
 
 
@@ -458,6 +459,7 @@ def extract_extension(request) -> HttpResponse:
     }
 
     final_ext = fixes.get(extension, extension).lower()
+    cleanup_form(form)
     return HttpResponse(final_ext)
 
 
