@@ -85,9 +85,6 @@ class MimeForm(forms.Form):
 
         return file
 
-    def clean(self):
-        return self.cleaned_data
-
 
 class ThumbnailForm(forms.Form):
     file = forms.FileField(
@@ -112,6 +109,3 @@ class DocumentForm(BaseFileForm):
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
     mime = forms.BooleanField(label="mime", required=False)
     strip_margin = forms.BooleanField(label="strip-margin", required=False)
-
-    def clean(self):
-        return self.cleaned_data

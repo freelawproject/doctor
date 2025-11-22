@@ -91,8 +91,6 @@ def image_to_pdf(request) -> HttpResponse:
             with open(output.name, "wb") as f:
                 f.write(cleaned_pdf_bytes)
             return HttpResponse(cleaned_pdf_bytes)
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -125,8 +123,6 @@ def extract_recap_document(request) -> JsonResponse:
                 "extracted_by_ocr": extracted_by_ocr,
             }
         )
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -283,8 +279,6 @@ def xray(request) -> JsonResponse:
         results = get_xray(form.cleaned_data["fp"])
         if results.get("error", False):
             return JsonResponse(results, status=BAD_REQUEST)
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
     return JsonResponse({"error": False, "results": results})
@@ -306,8 +300,6 @@ def page_count(request) -> HttpResponse:
         extension = form.cleaned_data["extension"]
         pg_count = get_page_count(fp, extension)
         return HttpResponse(pg_count)
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -366,8 +358,6 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
             mime = "application/vnd.rn-realmedia"
 
         return JsonResponse({"mimetype": mime})
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -496,8 +486,6 @@ def extract_extension(request) -> HttpResponse:
 
         final_ext = fixes.get(extension, extension).lower()
         return HttpResponse(final_ext)
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -522,8 +510,6 @@ def pdf_to_text(request) -> JsonResponse | HttpResponse:
             "err",
             err,
         )
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -602,8 +588,6 @@ def convert_audio(request, output_format: str) -> FileResponse | HttpResponse:
             open(filepath, "rb")  # noqa: SIM115 FileResponse closes the file
         )
         return response
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -646,8 +630,6 @@ def embed_text(request) -> FileResponse | HttpResponse:
                     )
                 )
                 return response
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
 
@@ -670,7 +652,5 @@ def get_document_number(request) -> HttpResponse:
     try:
         document_number = get_document_number_from_pdf(fp)
         return HttpResponse(document_number)
-    except Exception as e:
-        raise e
     finally:
         cleanup_form(form)
