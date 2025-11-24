@@ -273,7 +273,14 @@ def strip_metadata_from_bytes(pdf_bytes):
 
 
 def cleanup_form(form):
-    """Clean up a form object"""
+    """Clean up a form object
+
+    When this function is called with a DocumentForm or a form that inherits from BaseFileForm, it only needs to be
+    called at the end of the view, since the file field is required, if the validation fails, the file is not created.
+
+    It is necessary to call the function when using MimeForm because when form validation fails because the field is
+    not required, and the temporary file may have been created despite the failure.
+    """
     fp = form.cleaned_data.get("fp")
     if fp:
         try:

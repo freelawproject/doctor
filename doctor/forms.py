@@ -71,6 +71,19 @@ class MimeForm(forms.Form):
                 f.write(chunk)
 
     def clean_file(self):
+        """
+        Performs field-level cleaning and validation for the 'file' field
+
+        NOTE ON VALIDATION ORDER:
+        Django's internal form validation process automatically calls methods
+        named `clean_<fieldname>()` (like this one) first. If successful, the
+        cleaned value is added to the shared storage, `self.cleaned_data`.
+
+        Django then calls the general `clean()` method last, which relies on
+        `self.cleaned_data` being fully populated. This means `clean_file()`
+        must NOT be called manually from within `clean()`, as it will execute
+        twice and overwrite or lose data (causing side effects).
+        """
         file = self.cleaned_data.get("file")
         if not file:
             raise ValidationError("File is missing.")
