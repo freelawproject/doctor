@@ -2,14 +2,19 @@ import glob
 import json
 import os
 import re
+import tempfile
 import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch
 from zipfile import ZipFile
 
+import django
 import eyed3
 import requests
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client
+from django.urls import reverse
 
 from doctor.lib.text_extraction import (
     adjust_caption_lines,
@@ -19,6 +24,9 @@ from doctor.lib.text_extraction import (
     remove_excess_whitespace,
 )
 from doctor.lib.utils import make_buffer, make_file
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "doctor.settings")
+django.setup()
 
 asset_path = f"{Path.cwd()}/doctor/test_assets"
 
@@ -392,41 +400,91 @@ class MetadataTests(unittest.TestCase):
                     msg=f"Failed to detect extension for {filename}",
                 )
 
-    def test_embedding_text_to_image_pdf(self):
-        """Can we embed text into an image PDF?"""
-        data = {"ocr_available": False}
+    def test_temp_file_cleanup(self):
+        """Verify that uploading a file creates a temp file that is cleaned up"""
+        client = Client()
 
-        files = make_file(filename="image-pdf.pdf")
-        image_response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
+        created_temp_files = []
+
+        # Wrapper around real NamedTemporaryFile to capture the filename
+        real_named_temporary_file = tempfile.NamedTemporaryFile
+
+        def capture_temp_file_creation(*args, **kwargs):
+            fp = real_named_temporary_file(*args, **kwargs)
+            created_temp_files.append(fp.name)
+            return fp
+
+        filename, expected_ext = ("image-pdf.pdf", ".pdf")
+        files = make_buffer(filename=filename)
+        file_bytes = files["file"][1]
+
+        django_file = SimpleUploadedFile(
+            name=filename,
+            content=file_bytes,
+            content_type="application/pdf",
         )
+
+        with patch(
+            "tempfile.NamedTemporaryFile",
+            side_effect=capture_temp_file_creation,
+        ):
+            response = client.post(
+                reverse("file-extension"),
+                data={"file": django_file},
+            )
+
+        # Validate extension result to be sure that it is working
         self.assertEqual(
-            "",
-            image_response.json()["content"].strip("\x0c"),
-            msg="PDF should have no text",
+            response.content.decode().strip(),
+            expected_ext,
         )
 
-        # Embed text into the image pdf and check that we get some text
-        new_pdf = requests.post(
-            "http://doctor:5050/utils/add/text/pdf/", files=files
-        )
-        with NamedTemporaryFile(suffix=".pdf") as tmp:
-            with open(tmp.name, "wb") as f:
-                f.write(new_pdf.content)
-            with open(tmp.name, "rb") as f:
-                files = {"file": (tmp.name, f.read())}
+        # Validate file creation count
+        self.assertEqual(len(created_temp_files), 1)
 
-            # Confirm that text is now embedded in the PDF
-            response = requests.post(
-                "http://doctor:5050/extract/doc/text/",
-                files=files,
-                data=data,
-            )
-            self.assertIn(
-                "(SlipOpinion)             OCTOBER TERM, 2012",
-                response.json()["content"],
-                msg=f"Got {response.json()}",
-            )
+        # Validate main cleanup logic
+        fp = created_temp_files[0]
+        self.assertFalse(
+            os.path.exists(fp),
+            msg=f"Temporary file was NOT deleted: {fp}",
+        )
+
+
+def test_embedding_text_to_image_pdf(self):
+    """Can we embed text into an image PDF?"""
+    data = {"ocr_available": False}
+
+    files = make_file(filename="image-pdf.pdf")
+    image_response = requests.post(
+        "http://doctor:5050/extract/doc/text/", files=files, data=data
+    )
+    self.assertEqual(
+        "",
+        image_response.json()["content"].strip("\x0c"),
+        msg="PDF should have no text",
+    )
+
+    # Embed text into the image pdf and check that we get some text
+    new_pdf = requests.post(
+        "http://doctor:5050/utils/add/text/pdf/", files=files
+    )
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
+        with open(tmp.name, "wb") as f:
+            f.write(new_pdf.content)
+        with open(tmp.name, "rb") as f:
+            files = {"file": (tmp.name, f.read())}
+
+        # Confirm that text is now embedded in the PDF
+        response = requests.post(
+            "http://doctor:5050/extract/doc/text/",
+            files=files,
+            data=data,
+        )
+        self.assertIn(
+            "(SlipOpinion)             OCTOBER TERM, 2012",
+            response.json()["content"],
+            msg=f"Got {response.json()}",
+        )
 
     def test_get_document_number(self):
         """Check if the PACER document number is correctly extracted from

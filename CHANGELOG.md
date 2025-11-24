@@ -3,6 +3,15 @@ The following changes are not yet released, but are code complete:
 
 ## Current
 
+**0.3.5 - 2025-11-21** #228
+
+Features:
+ - Implemented the try...except..finally pattern across all document processing views to remove temporary files
+ - Resolved a resource leak in MimeForm and DocumentForm validation logic by removing the redundant manual call to self.clean_file() inside the form's clean()
+ - Update docstrings
+
+## Previous Versions
+
 **0.3.4 - 2025-11-05** #226
 
 Features:
@@ -10,8 +19,6 @@ Features:
  - Improve extension and MIME extraction when Magika fails on certain files
  - Add magic and other fallbacks to handle tricky formats
  - Update Dockerfile to add exiftool
-
-## Previous Versions
 
 **0.3.3 - 2025-10-06** #217
 

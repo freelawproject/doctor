@@ -34,7 +34,6 @@ class BaseFileForm(forms.Form):
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=f".{self.cleaned_data['extension']}"
         ) as fp:
-            self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
             self.cleaned_data["fp"] = fp.name
             self.temp_save_file(fp.name)
 
@@ -72,6 +71,19 @@ class MimeForm(forms.Form):
                 f.write(chunk)
 
     def clean_file(self):
+        """
+        Performs field-level cleaning and validation for the 'file' field
+
+        NOTE ON VALIDATION ORDER:
+        Django's internal form validation process automatically calls methods
+        named `clean_<fieldname>()` (like this one) first. If successful, the
+        cleaned value is added to the shared storage, `self.cleaned_data`.
+
+        Django then calls the general `clean()` method last, which relies on
+        `self.cleaned_data` being fully populated. This means `clean_file()`
+        must NOT be called manually from within `clean()`, as it will execute
+        twice and overwrite or lose data (causing side effects).
+        """
         file = self.cleaned_data.get("file")
         if not file:
             raise ValidationError("File is missing.")
@@ -81,15 +93,10 @@ class MimeForm(forms.Form):
 
         # Create a tempfile without extension so exiftool/magika detection isn't biased by extension
         with tempfile.NamedTemporaryFile(delete=False, suffix="") as fp:
-            self.cleaned_data["tmp_dir"] = tempfile.TemporaryDirectory()
             self.cleaned_data["fp"] = fp.name
             self.temp_save_file(fp.name)
 
         return file
-
-    def clean(self):
-        self.clean_file()
-        return self.cleaned_data
 
 
 class ThumbnailForm(forms.Form):
@@ -115,7 +122,3 @@ class DocumentForm(BaseFileForm):
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
     mime = forms.BooleanField(label="mime", required=False)
     strip_margin = forms.BooleanField(label="strip-margin", required=False)
-
-    def clean(self):
-        self.clean_file()
-        return self.cleaned_data
