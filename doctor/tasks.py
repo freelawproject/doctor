@@ -3,7 +3,6 @@ import base64
 import io
 import os
 import re
-import subprocess
 from collections.abc import ByteString
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr
@@ -14,6 +13,7 @@ import pdfplumber
 import requests
 import xray
 from eyed3 import id3
+from httpx import AsyncClient
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from PyPDF2 import PdfReader
@@ -55,24 +55,29 @@ def pdf_bytes_from_images(image_list: list[Image]):
     return pdf_data
 
 
-def make_pdftotext_process(path):
+async def make_pdftotext_process(path):
     """Make a subprocess to hand to higher-level code.
 
     :param path: File location
     :return: Subprocess results
     """
 
-    process = subprocess.Popen(
-        ["pdftotext", "-layout", "-enc", "UTF-8", path, "-"],
+    process = await asyncio.create_subprocess_exec(
+        "pdftotext",
+        "-layout",
+        "-enc",
+        "UTF-8",
+        path,
+        "-",
         shell=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    content, err = process.communicate()
+    content, err = await process.communicate()
     return content.decode(), err, process.returncode
 
 
-def rasterize_pdf(path, destination):
+async def rasterize_pdf(path, destination):
     """Convert the PDF into a multipage Tiff file.
 
     This function uses ghostscript for processing and borrows heavily from:
@@ -103,14 +108,13 @@ def rasterize_pdf(path, destination):
         path,
     ]
 
-    p = subprocess.Popen(
-        gs,
+    p = await asyncio.create_subprocess_exec(
+        *gs,
         close_fds=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = p.communicate()
+    stdout, stderr = await p.communicate()
     return stdout, stderr, p.returncode
 
 
@@ -173,7 +177,7 @@ def get_page_count(path, extension):
     return None
 
 
-def extract_from_pdf(
+async def extract_from_pdf(
     path: str,
     ocr_available: bool = False,
 ) -> Any:
@@ -190,7 +194,7 @@ def extract_from_pdf(
     :param ocr_available: Whether we should do OCR stuff
     :return Tuple of the content itself and any errors we received
     """
-    content, err, returncode = make_pdftotext_process(path)
+    content, err, returncode = await make_pdftotext_process(path)
     extracted_by_ocr = False
     if err is not None:
         err = err.decode()
@@ -201,7 +205,7 @@ def extract_from_pdf(
             content = fix_mojibake(content)
     else:
         if ocr_needed(path, content):
-            success, ocr_content = extract_by_ocr(path)
+            success, ocr_content = await extract_by_ocr(path)
             if success:
                 # Check content length and take the longer of the two
                 if len(ocr_content) > len(content):
@@ -214,7 +218,7 @@ def extract_from_pdf(
     return content, err, returncode, extracted_by_ocr
 
 
-def extract_by_ocr(path: str) -> (bool, str):
+async def extract_by_ocr(path: str) -> (bool, str):
     """Extract the contents of a PDF using OCR.
 
     :param path: The path to the file
@@ -225,11 +229,11 @@ def extract_by_ocr(path: str) -> (bool, str):
         "reading the original."
     )
     with NamedTemporaryFile(prefix="ocr_", suffix=".tiff", buffering=0) as tmp:
-        out, err, returncode = rasterize_pdf(path, tmp.name)
+        out, err, returncode = await rasterize_pdf(path, tmp.name)
         if returncode != 0:
             return False, fail_msg
 
-        txt = convert_file_to_txt(tmp.name)
+        txt = await convert_file_to_txt(tmp.name)
         txt = cleanup_ocr_text(txt)
 
     return True, txt
@@ -252,7 +256,7 @@ def cleanup_ocr_text(txt: str) -> str:
     return txt
 
 
-def convert_file_to_txt(path: str) -> str:
+async def convert_file_to_txt(path: str) -> str:
     """Converts a file to plain text
 
     :param path: The path to the file
@@ -267,10 +271,13 @@ def convert_file_to_txt(path: str) -> str:
         "-c",
         "tessedit_do_invert=0",  # Assume a white background for speed
     ]
-    p = subprocess.Popen(
-        tesseract_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    p = await asyncio.create_subprocess_exec(
+        *tesseract_command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    return p.communicate()[0].decode()
+    out = await p.communicate()
+    return out[0].decode()
 
 
 def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
@@ -293,37 +300,42 @@ def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
     return pdf_bytes
 
 
-def extract_from_doc(path) -> tuple[str, bytes, int]:
+async def extract_from_doc(path) -> tuple[str, bytes, int]:
     """Extract text from docs.
     We use antiword to pull the text out of MS Doc files.
 
     :param path: The path to the file
     :return: A tuple containing the extracted text, any error output, and the subprocess return code
     """
-    process = subprocess.Popen(
-        ["antiword", path, "-i", "1"],
+    process = await asyncio.create_subprocess_exec(
+        "antiword",
+        path,
+        "-i",
+        "1",
         shell=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    content, err = process.communicate()
+    content, err = await process.communicate()
     return content.decode("utf-8"), err, process.returncode
 
 
-def extract_from_docx(path) -> tuple[str, bytes, int]:
+async def extract_from_docx(path) -> tuple[str, bytes, int]:
     """Extract text from docx files
     We use docx2txt to pull out the text. Pretty simple.
 
     :param path: The path to the .docx file
     :return: A tuple containing the extracted text, any error output (empty bytes), and the subprocess return code
     """
-    process = subprocess.Popen(
-        ["docx2txt", path, "-"],
+    process = await asyncio.create_subprocess_exec(
+        "docx2txt",
+        path,
+        "-",
         shell=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    content, err = process.communicate()
+    content, err = await process.communicate()
     return content.decode("utf-8"), err, process.returncode
 
 
@@ -403,7 +415,7 @@ def extract_from_txt(filepath: str):
     return content, err, error_code
 
 
-def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
+async def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
     """Extract text from a Word Perfect file
 
     Yes, courts still use these, so we extract their text using wpd2html. Once
@@ -416,20 +428,21 @@ def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
              - The standard error output from the wpd2html subprocess (bytes)
              - The return code of the wpd2html subprocess (int). Returns 1 on Python-level errors
     """
-    process = subprocess.Popen(
-        ["wpd2html", path],
+    process = await asyncio.create_subprocess_exec(
+        "wpd2html",
+        path,
         shell=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    content_bytes, err = process.communicate()
+    content_bytes, err = await process.communicate()
     content_str = content_bytes.decode("utf-8")
     content = get_clean_body_content(content_str)
 
     return content, err, process.returncode
 
 
-def download_images(sorted_urls) -> list:
+async def download_images(sorted_urls) -> list:
     """Download images and convert to list of PIL images
 
     Once in an array of PIL.images we can easily convert this to a PDF.
@@ -438,19 +451,11 @@ def download_images(sorted_urls) -> list:
     :return: image_list
     """
 
-    async def main(urls):
-        image_list = []
-        loop = asyncio.get_event_loop()
-        futures = [
-            loop.run_in_executor(None, requests.get, url) for url in urls
-        ]
+    image_list = []
+    async with AsyncClient(http2=True, follow_redirects=True) as client:
+        futures = [client.get(url) for url in sorted_urls]
         for response in await asyncio.gather(*futures):
             image_list.append(response.content)
-        return image_list
-
-    loop = asyncio.get_event_loop()
-    image_list = loop.run_until_complete(main(sorted_urls))
-
     return image_list
 
 
@@ -460,7 +465,9 @@ root = os.path.dirname(os.path.realpath(__file__))
 assets_dir = os.path.join(root, "assets")
 
 
-def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
+async def convert_to_mp3[AnyStr: (bytes, str)](
+    output_path: AnyStr, media: Any
+) -> None:
     """Convert audio bytes to mp3 at temporary path
 
     :param output_path: Audio file bytes sent to Doctor
@@ -480,14 +487,19 @@ def convert_to_mp3(output_path: AnyStr, media: Any) -> None:
         output_path,
     ]
 
-    ffmpeg_cmd = subprocess.Popen(
-        av_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False
+    ffmpeg_cmd = await asyncio.create_subprocess_exec(
+        *av_command,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        shell=False,
     )
-    ffmpeg_cmd.communicate(media.read())
+    await ffmpeg_cmd.communicate(media.read())
     return output_path
 
 
-def convert_to_ogg(output_path: AnyStr, media: Any) -> None:
+async def convert_to_ogg[AnyStr: (bytes, str)](
+    output_path: AnyStr, media: Any
+) -> None:
     """Converts audio data to the ogg format (.ogg)
 
     This function uses ffmpeg to convert the audio data provided in `media` to
@@ -521,14 +533,17 @@ def convert_to_ogg(output_path: AnyStr, media: Any) -> None:
         output_path,
     ]
 
-    ffmpeg_cmd = subprocess.Popen(
-        av_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False
+    ffmpeg_cmd = await asyncio.create_subprocess_exec(
+        *av_command,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        shell=False,
     )
-    ffmpeg_cmd.communicate(media.read())
+    await ffmpeg_cmd.communicate(media.read())
     return output_path
 
 
-def set_mp3_meta_data(
+def set_mp3_meta_data[AnyStr: (bytes, str)](
     audio_data: dict, mp3_path: AnyStr
 ) -> eyed3.core.AudioFile:
     """Set the metadata in audio_data to an mp3 at path.
@@ -599,7 +614,7 @@ def set_mp3_meta_data(
     return audio_file
 
 
-def convert_to_base64(tmp_path: AnyStr) -> AnyStr:
+def convert_to_base64[AnyStr: (bytes, str)](tmp_path: AnyStr) -> AnyStr:
     """Convert file base64 and decode it.
 
     This allows us to safely return the file in json to CL.

@@ -3,6 +3,8 @@ The following changes are not yet released, but are code complete:
 
 ## Current
 
+ - Migrated to async Django 6.0.1
+
 **0.3.5 - 2025-11-21** #228
 
 Features:

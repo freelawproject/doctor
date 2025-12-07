@@ -1,9 +1,9 @@
 # Note: Force M1 to emulate amd64
-FROM --platform=linux/amd64 python:3.10
+FROM --platform=linux/amd64 python:3.13
 
 # Install uv
 # https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
-COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /uvx /bin/
 
 # Install apt dependencies
 # caching: https://docs.docker.com/build/cache/optimize/#use-cache-mounts
@@ -68,8 +68,9 @@ EXPOSE 5050
 ARG options
 ENV OPTIONS $options
 
-CMD gunicorn $OPTIONS doctor.wsgi:application \
+CMD gunicorn $OPTIONS doctor.asgi:application \
       --workers ${DOCTOR_WORKERS:-1} \
+      --worker-class uvicorn.workers.UvicornWorker \
       --max-requests 1000 \
       --max-requests-jitter 100 \
       --timeout 5400 \
