@@ -2,15 +2,16 @@
 name = "doctor"
 version = "0.3.5"
 description = "CourtListener doctor"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
   "certifi",
   "chardet>=3.0.4",
-  "django>=3.2,<4",
+  "django>=6.0,<7",
   "django-environ>=0.8.1",
   "eyed3",
-  "gunicorn==20.1",
-  "idna==2.10",
+  "gunicorn>=20.1",
+  "httpx[http2]>=0.28.1",
+  "idna>=2.10",
   "img2pdf",
   "lxml>=4.5.2",
   "lxml-html-clean",
@@ -21,17 +22,17 @@ dependencies = [
   "pdf2image>=1.7.1",
   "pdfplumber",
   "pillow>=8.0.1",
-  "pkginfo==1.5.0.1",
+  "pkginfo>=1.5.0.1",
   "pypdf2[crypto]",
   "pytesseract>=0.3.5",
   "python-magic",
   "reportlab",
-  "requests>=2.25",
   "seal-rookery>=2.2.1",
   "sentry-sdk",
   "six>=1.15",
   "urllib3>=1.25.10",
-  "x-ray==0.3.3",
+  "uvicorn",
+  "x-ray==0.3.5",
 ]
 
 [dependency-groups]

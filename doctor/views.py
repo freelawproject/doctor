@@ -127,7 +127,7 @@ def extract_recap_document(request) -> JsonResponse:
         cleanup_form(form)
 
 
-def extract_doc_content(request) -> JsonResponse | HttpResponse:
+async def extract_doc_content(request) -> JsonResponse | HttpResponse:
     """Extract txt from different document types.
 
     :param request: django request containing the uploaded file
@@ -147,19 +147,22 @@ def extract_doc_content(request) -> JsonResponse | HttpResponse:
     original_filename = form.cleaned_data["original_filename"]
     try:
         if extension == "pdf":
-            content, err, returncode, extracted_by_ocr = extract_from_pdf(
-                fp, ocr_available
-            )
+            (
+                content,
+                err,
+                returncode,
+                extracted_by_ocr,
+            ) = await extract_from_pdf(fp, ocr_available)
         elif extension == "doc":
-            content, err, returncode = extract_from_doc(fp)
+            content, err, returncode = await extract_from_doc(fp)
         elif extension == "docx":
-            content, err, returncode = extract_from_docx(fp)
+            content, err, returncode = await extract_from_docx(fp)
         elif extension == "html":
             content, err, returncode = extract_from_html(fp)
         elif extension == "txt":
             content, err, returncode = extract_from_txt(fp)
         elif extension == "wpd":
-            content, err, returncode = extract_from_wpd(fp)
+            content, err, returncode = await extract_from_wpd(fp)
         else:
             returncode = 1
             err = "Unable to extract content due to unknown extension"
@@ -210,7 +213,7 @@ def extract_doc_content(request) -> JsonResponse | HttpResponse:
     )
 
 
-def make_png_thumbnail(request) -> HttpResponse:
+async def make_png_thumbnail(request) -> HttpResponse:
     """Make a thumbnail of the first page of a PDF and return it.
 
     :param request: django request containing the uploaded file
@@ -224,13 +227,13 @@ def make_png_thumbnail(request) -> HttpResponse:
     with NamedTemporaryFile(suffix=".pdf") as tmp:
         with open(tmp.name, "wb") as f:
             f.write(document.read())
-        thumbnail, _, _ = make_png_thumbnail_for_instance(
+        thumbnail, _, _ = await make_png_thumbnail_for_instance(
             tmp.name, form.cleaned_data["max_dimension"]
         )
         return HttpResponse(thumbnail)
 
 
-def make_png_thumbnails_from_range(request) -> HttpResponse:
+async def make_png_thumbnails_from_range(request) -> HttpResponse:
     """Make a zip file that contains a thumbnail for each page requested.
 
     :param request: django request containing the uploaded file
@@ -245,7 +248,7 @@ def make_png_thumbnails_from_range(request) -> HttpResponse:
     with NamedTemporaryFile(suffix=".pdf", mode="r+b") as temp_pdf:
         temp_pdf.write(form.cleaned_data["file"].read())
 
-        make_png_thumbnails(
+        await make_png_thumbnails(
             temp_pdf.name,
             form.cleaned_data["max_dimension"],
             form.cleaned_data["pages"],
@@ -304,7 +307,7 @@ def page_count(request) -> HttpResponse:
         cleanup_form(form)
 
 
-def extract_mime_type(request) -> JsonResponse | HttpResponse:
+async def extract_mime_type(request) -> JsonResponse | HttpResponse:
     """Identify the MIME type of an uploaded document using Magika, with
     fallbacks for formats Magika fails to recognize.
 
@@ -320,7 +323,7 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
     fp = form.cleaned_data["fp"]
 
     try:
-        strip_metadata_with_exiftool(fp)
+        await strip_metadata_with_exiftool(fp)
 
         with open(fp, "rb") as f:
             content = f.read()
@@ -362,7 +365,7 @@ def extract_mime_type(request) -> JsonResponse | HttpResponse:
         cleanup_form(form)
 
 
-def extract_extension(request) -> HttpResponse:
+async def extract_extension(request) -> HttpResponse:
     """A handful of workarounds for getting extensions we can trust
 
     :param request: django request containing the uploaded file
@@ -378,7 +381,7 @@ def extract_extension(request) -> HttpResponse:
         # avoid "referenced before assignment" warnings from analyzer
         content = b""
 
-        strip_metadata_with_exiftool(fp)
+        await strip_metadata_with_exiftool(fp)
 
         with open(fp, "rb") as f:
             content = f.read()
@@ -490,7 +493,7 @@ def extract_extension(request) -> HttpResponse:
         cleanup_form(form)
 
 
-def pdf_to_text(request) -> JsonResponse | HttpResponse:
+async def pdf_to_text(request) -> JsonResponse | HttpResponse:
     """Extract text from text based PDFs immediately.
 
     :param request: The request object
@@ -503,7 +506,7 @@ def pdf_to_text(request) -> JsonResponse | HttpResponse:
     filepath = form.cleaned_data["fp"]
 
     try:
-        content, err, _ = make_pdftotext_process(filepath)
+        content, err, _ = await make_pdftotext_process(filepath)
         return JsonResponse(
             "content",
             content,
@@ -514,7 +517,7 @@ def pdf_to_text(request) -> JsonResponse | HttpResponse:
         cleanup_form(form)
 
 
-def images_to_pdf(request) -> HttpResponse:
+async def images_to_pdf(request) -> HttpResponse:
     """Converts a list of images from urls into a single pdf file
 
     :param request: The request object
@@ -526,7 +529,7 @@ def images_to_pdf(request) -> HttpResponse:
     sorted_urls = form.cleaned_data["sorted_urls"]
 
     if len(sorted_urls) > 1:
-        image_list = download_images(sorted_urls)
+        image_list = await download_images(sorted_urls)
         with NamedTemporaryFile(suffix=".pdf") as tmp:
             with open(tmp.name, "wb") as f:
                 f.write(img2pdf.convert(image_list))
@@ -560,7 +563,9 @@ def fetch_audio_duration(request) -> HttpResponse:
         return HttpResponse(str(e))
 
 
-def convert_audio(request, output_format: str) -> FileResponse | HttpResponse:
+async def convert_audio(
+    request, output_format: str
+) -> FileResponse | HttpResponse:
     """Converts an uploaded audio file to the specified output format and
     updates its metadata.
 
@@ -578,10 +583,10 @@ def convert_audio(request, output_format: str) -> FileResponse | HttpResponse:
         audio_data = {k: v[0] for k, v in dict(request.GET).items()}
         match output_format:
             case "mp3":
-                convert_to_mp3(filepath, media_file)
+                await convert_to_mp3(filepath, media_file)
                 set_mp3_meta_data(audio_data, filepath)
             case "ogg":
-                convert_to_ogg(filepath, media_file)
+                await convert_to_ogg(filepath, media_file)
             case _:
                 raise NotImplementedError
         response = FileResponse(
@@ -592,7 +597,7 @@ def convert_audio(request, output_format: str) -> FileResponse | HttpResponse:
         cleanup_form(form)
 
 
-def embed_text(request) -> FileResponse | HttpResponse:
+async def embed_text(request) -> FileResponse | HttpResponse:
     """Embed text onto an image PDF.
 
     :param request: django request containing the uploaded file
@@ -605,7 +610,7 @@ def embed_text(request) -> FileResponse | HttpResponse:
 
     try:
         with NamedTemporaryFile(suffix=".tiff") as destination:
-            rasterize_pdf(fp, destination.name)
+            await rasterize_pdf(fp, destination.name)
             data = pytesseract.image_to_data(
                 destination.name, output_type=Output.DICT
             )

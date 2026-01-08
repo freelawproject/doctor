@@ -1,9 +1,9 @@
+import asyncio
 import datetime
 import io
 import logging
 import os
 import re
-import subprocess
 import warnings
 from collections import namedtuple
 from decimal import Decimal
@@ -165,7 +165,7 @@ def ignore_warnings(test_func):
     return do_test
 
 
-def make_png_thumbnail_for_instance(filepath, max_dimension):
+async def make_png_thumbnail_for_instance(filepath, max_dimension):
     """Abstract function for making a thumbnail for a PDF
 
     See helper functions below for how to use this in a simple way.
@@ -184,14 +184,17 @@ def make_png_thumbnail_for_instance(filepath, max_dimension):
         filepath,
         "-png",
     ]
-    p = subprocess.Popen(
-        command, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    p = await asyncio.create_subprocess_exec(
+        *command,
+        close_fds=True,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = p.communicate()
+    stdout, stderr = await p.communicate()
     return stdout, stderr.decode("utf-8"), str(p.returncode)
 
 
-def make_png_thumbnails(filepath, max_dimension, pages, directory):
+async def make_png_thumbnails(filepath, max_dimension, pages, directory):
     """Abstract function for making a thumbnail for a PDF
 
     See helper functions below for how to use this in a simple way.
@@ -212,13 +215,13 @@ def make_png_thumbnails(filepath, max_dimension, pages, directory):
             "-png",
             f"{directory.name}/thumb-{page}",
         ]
-        p = subprocess.Popen(
-            command,
+        p = await asyncio.create_subprocess_exec(
+            *command,
             close_fds=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
         )
-        p.communicate()
+        await p.wait()
 
 
 def pdf_bytes_from_image_array(image_list, output_path) -> None:
@@ -392,17 +395,22 @@ def log_sentry_event(
     logger.log(level, message, extra=extra, **kwargs)
 
 
-def strip_metadata_with_exiftool(path: str) -> bool:
+async def strip_metadata_with_exiftool(path: str) -> bool:
     """Strip metadata from a file in place using exiftool
 
     :param path: Temporary file path
     :return: True if exiftool succeeded or False if exiftool failed
     """
-    result = subprocess.run(
-        ["exiftool", "-all=", "-overwrite_original", path],
-        capture_output=True,
-        text=True,
+    process = await asyncio.create_subprocess_exec(
+        "exiftool",
+        "-all=",
+        "-overwrite_original",
+        path,
+        close_fds=True,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
     )
+    result = await process.wait()
 
     # exiftool returns 0 = success
-    return result.returncode == 0
+    return result == 0

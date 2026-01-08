@@ -24,7 +24,7 @@ SECRET_KEY = "this-is-a-not-so-secret-key"
 ALLOWED_HOSTS = ["doctor", "0.0.0.0", "localhost"]
 INSTALLED_APPS = []
 ROOT_URLCONF = "doctor.urls"
-WSGI_APPLICATION = "doctor.wsgi.application"
+ASGI_APPLICATION = "doctor.asgi.application"
 
 
 SENTRY_DSN = env("SENTRY_DSN", default="")
