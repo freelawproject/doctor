@@ -1,7 +1,7 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
-Features:                                                                                                                                                             
+Features:  
  - Enhanced OCR detection in PDFs by checking for curves that may indicate image-based content
 
 ## Current

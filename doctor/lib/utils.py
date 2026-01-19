@@ -10,9 +10,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pdfplumber
 import six
 from PyPDF2 import PdfMerger
-import pdfplumber
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
