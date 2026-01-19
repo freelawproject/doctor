@@ -1,6 +1,9 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Features:                                                                                                                                                             
+ - Enhanced OCR detection in PDFs by checking for curves that may indicate image-based content
+
 ## Current
 
  - Migrated to async Django 6.0.1

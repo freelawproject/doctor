@@ -12,6 +12,7 @@ from typing import Any
 
 import six
 from PyPDF2 import PdfMerger
+import pdfplumber
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
@@ -324,13 +325,24 @@ def pdf_has_images(path: str) -> bool:
 def ocr_needed(path: str, content: str) -> bool:
     """Check if OCR is needed on a PDF
 
-    Check if images are in PDF or content is empty.
+    Check if images are in PDF, content is empty or
+    has curves that might indicate image-based content.
 
     :param path: The path to the PDF
     :param content: The content extracted from the PDF.
     :return: Whether OCR should be run on the document.
     """
-    return content.strip() == "" or pdf_has_images(path)
+
+    # Check basic conditions first
+    if content.strip() == "" or pdf_has_images(path):
+        return True
+
+    # Check for curves which can indicate image-based content
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            if len(page.curves) > 10:
+                return True
+    return False
 
 
 def make_page_with_text(page, data, h, w):
