@@ -69,7 +69,7 @@ Features:
 **0.2.15 - 2022-07-27**
 
 Fixes:
- - Adds PyCryptodome in order to handle encrypted PDFs ([144](https://github.com/freelawproject/doctor/issues/144))
+ - Adds PyCryptodome in order to handle encrypted PDFs ([144](https://github.com/freelawproject/owner/issues/144))
 
 **0.2.14 - 2022-07-26**
 
@@ -81,7 +81,7 @@ Features:
 
 This release is focused on performance improvements and easier scaling. It:
 
- - Disables multi-threaded tesseract code. This makes it easier to scale doctor in a k8s environment due to at most one CPU being used per conversion.
+ - Disables multi-threaded tesseract code. This makes it easier to scale owner in a k8s environment due to at most one CPU being used per conversion.
  - Sets the number of gunicorn workers to 1 by default. This makes it so that scaling is can be moved to k8s instead of gunicorn.
  - Tells tesseract not to look for white text on black backgrounds. This is just a simple performance tweak.
  - Upgrades to PyPDF2 version 2.0.0.
@@ -129,7 +129,7 @@ Features:
 Fixes:
  - Add additional workers and worker resets to the gunicorn configuration. The
    default is now four workers, and additional ones can be created with the
-   DOCTOR_WORKERS env.
+   owner_WORKERS env.
 
 **0.2.5 - 2022-03-24**
 

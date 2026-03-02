@@ -321,7 +321,7 @@ wheels = [
 ]
 
 [[package]]
-name = "doctor"
+name = "owner"
 version = "0.3.5"
 source = { virtual = "." }
 dependencies = [

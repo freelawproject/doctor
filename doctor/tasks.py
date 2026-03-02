@@ -20,15 +20,15 @@ from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
 from seal_rookery.search import ImageSizes, seal
 
-from doctor.lib.mojibake import fix_mojibake
-from doctor.lib.text_extraction import (
+from owner.lib.mojibake import fix_mojibake
+from owner.lib.text_extraction import (
     extract_with_ocr,
     get_page_text,
     page_needs_ocr,
     remove_excess_whitespace,
 )
-from doctor.lib.utils import (
-    DoctorUnicodeDecodeError,
+from owner.lib.utils import (
+    ownerUnicodeDecodeError,
     force_text,
     ocr_needed,
     smart_text,
@@ -357,7 +357,7 @@ def extract_from_html(path: str) -> tuple[str, str, int]:
             content = get_clean_body_content(content)
             content = force_text(content, encoding=encoding)
             return content, "", 0
-        except (UnicodeDecodeError, DoctorUnicodeDecodeError):
+        except (UnicodeDecodeError, ownerUnicodeDecodeError):
             pass
     # Fell through, therefore unable to decode the string.
     return "", "Could not encode content properly", 1
@@ -397,7 +397,7 @@ def extract_from_txt(filepath: str):
         try:
             # Alas, cp1252 is probably still more popular than utf-8.
             content = smart_text(data, encoding="cp1252")
-        except DoctorUnicodeDecodeError:
+        except ownerUnicodeDecodeError:
             content = smart_text(data, encoding="utf-8", errors="ignore")
     except Exception:
         try:
@@ -470,7 +470,7 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
 ) -> None:
     """Convert audio bytes to mp3 at temporary path
 
-    :param output_path: Audio file bytes sent to Doctor
+    :param output_path: Audio file bytes sent to owner
     :param media: Temporary filepath for output of audioprocess
     :return:
     """
@@ -509,7 +509,7 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     * 8 kHz sampling rate (`-b:a 8k`)
     * Optimized for voice over IP applications (`-application voip`)
 
-    :param output_path: Audio file bytes sent to Doctor
+    :param output_path: Audio file bytes sent to owner
     :param media: Temporary filepath for output of audioprocess
     :return:
     """

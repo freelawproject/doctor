@@ -17,9 +17,9 @@ If you want to see debug logs, set `DEBUG` to `True` in `settings.py`.
 ## Testing
 
 Once the above compose file is running, you can use the `mock_web_app`
-container to run the tests against the `doctor` container:
+container to run the tests against the `owner` container:
 
-    docker exec -it mock_web_app python3 -m unittest doctor.tests
+    docker exec -it mock_web_app python3 -m unittest owner.tests
 
 
 ## Building Images

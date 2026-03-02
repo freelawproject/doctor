@@ -6,7 +6,7 @@ ifndef VERSION
 $(error VERSION variable is not set. Use -e VERSION=XYZ to proceed.)
 endif
 
-DOCKER_REPOSITORY ?= freelawproject/doctor
+DOCKER_REPOSITORY ?= freelawproject/owner
 
 DOCKER ?= docker
 export DOCKER
