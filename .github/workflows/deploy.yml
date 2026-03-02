@@ -7,8 +7,8 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  EKS_CLUSTER_NAME: courtlistener
-  EKS_NAMESPACE: court-listener
+  EKS_CLUSTER_NAME: legal-luminary
+  EKS_NAMESPACE: sweeden-ttu
 
 jobs:
   build:

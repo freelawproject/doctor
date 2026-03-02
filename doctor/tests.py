@@ -541,7 +541,7 @@ class RedactionTest(unittest.TestCase):
 class ImageDisclosuresTest(unittest.TestCase):
     def test_images_to_pdf(self):
         """Do we create a PDF from several tiffs successfully?"""
-        base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
+        base = "https://com-legal-luminary-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
         sorted_urls = [
             f"{base}_1.tiff",
             f"{base}_2.tiff",
