@@ -7,8 +7,8 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  EKS_CLUSTER_NAME: courtlistener
-  EKS_NAMESPACE: court-listener
+  EKS_CLUSTER_NAME: legal-luminary
+  EKS_NAMESPACE: sweeden-ttu
 
 jobs:
   build:
@@ -42,7 +42,7 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
     - name: Create Kubeconfig with AWS CLI
       run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
-    - name: Rollout cl-doctor
-      run: kubectl set image -n ${{ env.EKS_NAMESPACE }} deployment/cl-doctor doctor=freelawproject/doctor:${{ steps.vars.outputs.sha_short }}
-    - name: Watch cl-doctor rollout status
-      run: kubectl rollout status -n ${{ env.EKS_NAMESPACE }} deployment/cl-doctor
+    - name: Rollout cl-owner
+      run: kubectl set image -n ${{ env.EKS_NAMESPACE }} deployment/cl-owner owner=freelawproject/owner:${{ steps.vars.outputs.sha_short }}
+    - name: Watch cl-owner rollout status
+      run: kubectl rollout status -n ${{ env.EKS_NAMESPACE }} deployment/cl-owner

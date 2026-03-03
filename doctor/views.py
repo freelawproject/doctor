@@ -14,11 +14,7 @@ from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
 from magika import Magika
-from PIL import Image
-from PyPDF2 import PdfReader, PdfWriter
-from pytesseract import Output
-
-from doctor.forms import (
+from owner.forms import (
     AudioForm,
     BaseFileForm,
     DocumentForm,
@@ -26,7 +22,7 @@ from doctor.forms import (
     MimeForm,
     ThumbnailForm,
 )
-from doctor.lib.utils import (
+from owner.lib.utils import (
     cleanup_form,
     log_sentry_event,
     make_page_with_text,
@@ -36,7 +32,7 @@ from doctor.lib.utils import (
     strip_metadata_from_path,
     strip_metadata_with_exiftool,
 )
-from doctor.tasks import (
+from owner.tasks import (
     convert_tiff_to_pdf_bytes,
     convert_to_mp3,
     convert_to_ogg,
@@ -55,6 +51,9 @@ from doctor.tasks import (
     rasterize_pdf,
     set_mp3_meta_data,
 )
+from PIL import Image
+from PyPDF2 import PdfReader, PdfWriter
+from pytesseract import Output
 
 logger = logging.getLogger(__name__)
 

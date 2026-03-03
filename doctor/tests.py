@@ -15,26 +15,25 @@ import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
-
-from doctor.lib.text_extraction import (
+from owner.lib.text_extraction import (
     adjust_caption_lines,
     cleanup_content,
     get_word,
     insert_whitespace,
     remove_excess_whitespace,
 )
-from doctor.lib.utils import make_buffer, make_file
+from owner.lib.utils import make_buffer, make_file
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "doctor.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "owner.settings")
 django.setup()
 
-asset_path = f"{Path.cwd()}/doctor/test_assets"
+asset_path = f"{Path.cwd()}/owner/test_assets"
 
 
 class HeartbeatTests(unittest.TestCase):
     def test_heartbeat(self):
         """Can we curl the heartbeat endpoint?"""
-        response = requests.get("http://doctor:5050/")
+        response = requests.get("http://owner:5050/")
         self.assertEqual(
             response.text, "Heartbeat detected.", msg="Heartbeat failed"
         )
@@ -48,7 +47,7 @@ class RECAPExtractionTests(unittest.TestCase):
         )
         params = {"strip_margin": False}
         response = requests.post(
-            "http://doctor:5050/extract/recap/text/",
+            "http://owner:5050/extract/recap/text/",
             files=files,
             params=params,
         )
@@ -70,7 +69,7 @@ class RECAPExtractionTests(unittest.TestCase):
         )
         params = {"strip_margin": True}
         response = requests.post(
-            "http://doctor:5050/extract/recap/text/",
+            "http://owner:5050/extract/recap/text/",
             files=files,
             params=params,
         )
@@ -90,7 +89,7 @@ class RECAPExtractionTests(unittest.TestCase):
         )
         params = {"strip_margin": True}
         response = requests.post(
-            "http://doctor:5050/extract/recap/text/",
+            "http://owner:5050/extract/recap/text/",
             files=files,
             params=params,
         )
@@ -109,7 +108,7 @@ class RECAPExtractionTests(unittest.TestCase):
         )
         params = {"strip_margin": True}
         response = requests.post(
-            "http://doctor:5050/extract/recap/text/",
+            "http://owner:5050/extract/recap/text/",
             files=files,
             params=params,
         )
@@ -124,7 +123,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": True}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
+            "http://owner:5050/extract/doc/text/", files=files, data=data
         )
         text = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(200, response.status_code, msg="Wrong status code")
@@ -139,7 +138,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
+            "http://owner:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertEqual(
@@ -161,7 +160,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"ocr_available": True}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/",
+            "http://owner:5050/extract/doc/text/",
             files=files,
             params=params,
         )
@@ -181,7 +180,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="ocr_pdf_variation.pdf")
         params = {"ocr_available": True}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/",
+            "http://owner:5050/extract/doc/text/",
             files=files,
             params=params,
         )
@@ -201,7 +200,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/",
+            "http://owner:5050/extract/doc/text/",
             files=files,
             params=params,
         )
@@ -216,7 +215,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-doc.doc")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
+            "http://owner:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
@@ -235,7 +234,7 @@ class ExtractionTests(unittest.TestCase):
         files = make_file(filename="word-perfect.wpd")
         data = {"ocr_available": False}
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/", files=files, data=data
+            "http://owner:5050/extract/doc/text/", files=files, data=data
         )
         self.assertTrue(response.ok, msg="Content extraction failed")
         self.assertIn(
@@ -258,25 +257,25 @@ class ThumbnailTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
         response = requests.post(
-            "http://doctor:5050/convert/pdf/thumbnail/",
+            "http://owner:5050/convert/pdf/thumbnail/",
             files=files,
             data=data,
         )
-        with open("doctor/test_assets/image-pdf-thumbnail.png", "rb") as f:
+        with open("owner/test_assets/image-pdf-thumbnail.png", "rb") as f:
             answer = f.read()
         self.assertEqual(answer, response.content)
 
         files = make_file(filename="image-pdf-2.pdf")
         response = requests.post(
-            "http://doctor:5050/convert/pdf/thumbnail/", files=files
+            "http://owner:5050/convert/pdf/thumbnail/", files=files
         )
-        with open("doctor/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
+        with open("owner/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
             second_answer = f.read()
         self.assertEqual(second_answer, response.content)
 
         files = make_file(filename="empty.pdf")
         response = requests.post(
-            "http://doctor:5050/convert/pdf/thumbnail/", files=files
+            "http://owner:5050/convert/pdf/thumbnail/", files=files
         )
         self.assertEqual(response.status_code, 400, msg="Wrong status code")
 
@@ -290,7 +289,7 @@ class ThumbnailTests(unittest.TestCase):
         }
 
         response = requests.post(
-            "http://doctor:5050/convert/pdf/thumbnails/",
+            "http://owner:5050/convert/pdf/thumbnails/",
             files=files,
             data=data,
         )
@@ -313,7 +312,7 @@ class MetadataTests(unittest.TestCase):
         """"""
         files = make_file(filename="image-pdf.pdf")
         page_count = requests.post(
-            "http://doctor:5050/utils/page-count/pdf/", files=files
+            "http://owner:5050/utils/page-count/pdf/", files=files
         ).text
         self.assertEqual(int(page_count), 2, "Failed to get page count")
 
@@ -322,7 +321,7 @@ class MetadataTests(unittest.TestCase):
         files = make_file(filename="image-pdf.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://doctor:5050/utils/mime-type/",
+            "http://owner:5050/utils/mime-type/",
             files=files,
             params=params,
         ).json()
@@ -337,7 +336,7 @@ class MetadataTests(unittest.TestCase):
         files = make_buffer(filename="broken-mime.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://doctor:5050/utils/file/extension/",
+            "http://owner:5050/utils/file/extension/",
             files=files,
             params=params,
         )
@@ -346,7 +345,7 @@ class MetadataTests(unittest.TestCase):
         files = make_buffer(filename="missouri.pdf")
         params = {"mime": True}
         response = requests.post(
-            "http://doctor:5050/utils/file/extension/",
+            "http://owner:5050/utils/file/extension/",
             files=files,
             params=params,
         )
@@ -356,7 +355,7 @@ class MetadataTests(unittest.TestCase):
         """"""
         files = make_buffer(filename="image-pdf.pdf")
         response = requests.post(
-            "http://doctor:5050/utils/mime-type/",
+            "http://owner:5050/utils/mime-type/",
             files=files,
             params={"mime": True},
         ).json()
@@ -392,7 +391,7 @@ class MetadataTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 files = make_buffer(filename=filename)
                 response = requests.post(
-                    "http://doctor:5050/utils/file/extension/", files=files
+                    "http://owner:5050/utils/file/extension/", files=files
                 )
                 self.assertEqual(
                     response.text.strip(),
@@ -456,7 +455,7 @@ def test_embedding_text_to_image_pdf(self):
 
     files = make_file(filename="image-pdf.pdf")
     image_response = requests.post(
-        "http://doctor:5050/extract/doc/text/", files=files, data=data
+        "http://owner:5050/extract/doc/text/", files=files, data=data
     )
     self.assertEqual(
         "",
@@ -466,7 +465,7 @@ def test_embedding_text_to_image_pdf(self):
 
     # Embed text into the image pdf and check that we get some text
     new_pdf = requests.post(
-        "http://doctor:5050/utils/add/text/pdf/", files=files
+        "http://owner:5050/utils/add/text/pdf/", files=files
     )
     with NamedTemporaryFile(suffix=".pdf") as tmp:
         with open(tmp.name, "wb") as f:
@@ -476,7 +475,7 @@ def test_embedding_text_to_image_pdf(self):
 
         # Confirm that text is now embedded in the PDF
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/",
+            "http://owner:5050/extract/doc/text/",
             files=files,
             data=data,
         )
@@ -491,7 +490,7 @@ def test_embedding_text_to_image_pdf(self):
         documents from multiple jurisdictions.
         """
 
-        filepath = f"{Path.cwd()}/doctor/test_assets/recap_documents/"
+        filepath = f"{Path.cwd()}/owner/test_assets/recap_documents/"
         for file in glob.glob(os.path.join(filepath, "*.pdf")):
             filename = os.path.relpath(file, filepath)
             filename_sans_ext = filename.split(".")[0]
@@ -501,7 +500,7 @@ def test_embedding_text_to_image_pdf(self):
                 files = {"file": (filename, f.read())}
 
                 document_number = requests.post(
-                    "http://doctor:5050/utils/document-number/pdf/",
+                    "http://owner:5050/utils/document-number/pdf/",
                     files=files,
                 ).text
 
@@ -511,7 +510,7 @@ def test_embedding_text_to_image_pdf(self):
 class RedactionTest(unittest.TestCase):
     def test_xray_no_pdf(self):
         """Are we able to discover bad redacts?"""
-        filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
+        filepath = f"{Path.cwd()}/owner/test_assets/x-ray/"
         test_files = (
             "*yes*.pdf",
             "*no*.pdf",
@@ -524,7 +523,7 @@ class RedactionTest(unittest.TestCase):
                 with open(file, "rb") as f:
                     files = {"file": (filename, f.read())}
                     response = requests.post(
-                        "http://doctor:5050/utils/check-redactions/pdf/",
+                        "http://owner:5050/utils/check-redactions/pdf/",
                         files=files,
                     )
                     # Break up the assertion so that testers can see which
@@ -541,14 +540,14 @@ class RedactionTest(unittest.TestCase):
 class ImageDisclosuresTest(unittest.TestCase):
     def test_images_to_pdf(self):
         """Do we create a PDF from several tiffs successfully?"""
-        base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
+        base = "https://com-legal-luminary-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
         sorted_urls = [
             f"{base}_1.tiff",
             f"{base}_2.tiff",
         ]
         params = {"sorted_urls": json.dumps(sorted_urls)}
         response = requests.post(
-            "http://doctor:5050/convert/images/pdf/",
+            "http://owner:5050/convert/images/pdf/",
             params=params,
         )
         self.assertEqual(response.status_code, 200, msg="Failed status code.")
@@ -581,7 +580,7 @@ class AudioConversionTests(unittest.TestCase):
 
         files = make_file(filename="1.wma")
         response = requests.post(
-            "http://doctor:5050/convert/audio/mp3/",
+            "http://owner:5050/convert/audio/mp3/",
             files=files,
             params=audio_details,
         )
@@ -612,7 +611,7 @@ class AudioConversionTests(unittest.TestCase):
     def test_audio_duration(self):
         files = make_file(filename="1.mp3")
         response = requests.post(
-            "http://doctor:5050/utils/audio/duration/",
+            "http://owner:5050/utils/audio/duration/",
             files=files,
         )
         self.assertEqual(51.64, float(response.text), msg="Bad duration")
@@ -622,14 +621,14 @@ class TestFailedValidations(unittest.TestCase):
     def test_for_400s(self):
         """Test validation for missing audio file"""
         response = requests.post(
-            "http://doctor:5050/utils/audio/duration/",
+            "http://owner:5050/utils/audio/duration/",
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
     def test_pdf_400s(self):
         """Test validation for missing PDF file"""
         response = requests.post(
-            "http://doctor:5050/extract/doc/text/",
+            "http://owner:5050/extract/doc/text/",
         )
         self.assertEqual(
             "Failed validation",
@@ -641,7 +640,7 @@ class TestFailedValidations(unittest.TestCase):
     def test_pdf_400_mime(self):
         """Test return 400 on missing file for mime extraction"""
         response = requests.post(
-            "http://doctor:5050/utils/mime-type/",
+            "http://owner:5050/utils/mime-type/",
             params={"mime": True},
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
@@ -834,11 +833,11 @@ class TestCleanupContent(unittest.TestCase):
     def setUp(self):
         # Patch the functions before each test method
         patcher1 = patch(
-            "doctor.lib.text_extraction.adjust_caption_lines",
+            "owner.lib.text_extraction.adjust_caption_lines",
             side_effect=lambda x: x,
         )
         patcher2 = patch(
-            "doctor.lib.text_extraction.remove_excess_whitespace",
+            "owner.lib.text_extraction.remove_excess_whitespace",
             side_effect=lambda x: x,
         )
         self.mock_adjust = patcher1.start()

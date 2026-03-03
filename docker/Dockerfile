@@ -68,8 +68,8 @@ EXPOSE 5050
 ARG options
 ENV OPTIONS $options
 
-CMD gunicorn $OPTIONS doctor.asgi:application \
-      --workers ${DOCTOR_WORKERS:-1} \
+CMD gunicorn $OPTIONS owner.asgi:application \
+      --workers ${owner_WORKERS:-1} \
       --worker-class uvicorn.workers.UvicornWorker \
       --max-requests 1000 \
       --max-requests-jitter 100 \

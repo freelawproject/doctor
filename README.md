@@ -1,8 +1,8 @@
 
-Doctor
+owner
 ------------------------------------
 
-Welcome to Doctor, Free Law Project's microservice for converting, extracting and modifying documents and audio files.
+Welcome to owner, Free Law Project's microservice for converting, extracting and modifying documents and audio files.
 
 At a high level, this service provides you with high-performance HTTP endpoints that can:
 
@@ -11,7 +11,7 @@ At a high level, this service provides you with high-performance HTTP endpoints 
  - Create thumbnails of PDFs
  - Provide metadata about PDFs
 
-Under the hood, Doctor uses gunicorn to connect to a django service. The django service uses
+Under the hood, owner uses gunicorn to connect to a django service. The django service uses
 carefully configured implementations of `ffmpeg`, `pdftotext`, `tesseract`, `ghostscript`, and a
 number of other converters.
 
@@ -21,15 +21,15 @@ Quick Start
 
 Assuming you have docker installed run:
 
-    docker run -d -p 5050:5050 freelawproject/doctor:latest
+    docker run -d -p 5050:5050 freelawproject/owner:latest
 
-This will expose the endpoints on port 5050 with one gunicorn worker. This is usually ideal because it allows you to horizontally scale Doctor using an orchestration system like Kubernetes.
+This will expose the endpoints on port 5050 with one gunicorn worker. This is usually ideal because it allows you to horizontally scale owner using an orchestration system like Kubernetes.
 
-If you are not using a system that supports horizontal scaling, you may wish to have more gunicorn workers so that Doctor can handle more simultaneous tasks. To set that up, simply set the DOCTOR_WORKERS environment variable:
+If you are not using a system that supports horizontal scaling, you may wish to have more gunicorn workers so that owner can handle more simultaneous tasks. To set that up, simply set the owner_WORKERS environment variable:
 
-    docker run -d -p 5050:5050 -e DOCTOR_WORKERS=16 freelawproject/doctor:latest
+    docker run -d -p 5050:5050 -e owner_WORKERS=16 freelawproject/owner:latest
 
-If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving Doctor many workers becomes particularly important. If it does not have a worker available, your call to Doctor will probably time out.
+If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving owner many workers becomes particularly important. If it does not have a worker available, your call to owner will probably time out.
 
 After the image is running, you should be able to test that you have a working environment by running
 
@@ -75,17 +75,17 @@ Given a document, extract out the text and assorted metadata. Supports the follo
 ```bash
 curl 'http://localhost:5050/extract/doc/text/' \
   -X 'POST' \
-  -F "file=@doctor/test_assets/vector-pdf.pdf"
+  -F "file=@owner/test_assets/vector-pdf.pdf"
 ```
 
 Parameters:
 
- - `ocr_available`: Whether doctor should use tesseract to provide OCR services for the document. OCR is always possible in doctor, but sometimes you won't want to use it, since it can be slow. If you want it disabled for this request, omit this optional parameter. To enable it, set ocr_available to `True`:
+ - `ocr_available`: Whether owner should use tesseract to provide OCR services for the document. OCR is always possible in owner, but sometimes you won't want to use it, since it can be slow. If you want it disabled for this request, omit this optional parameter. To enable it, set ocr_available to `True`:
 
 ```bash
 curl 'http://localhost:5050/extract/doc/text/?ocr_available=True' \
   -X 'POST' \
-  -F "file=@doctor/test_assets/image-pdf.pdf"
+  -F "file=@owner/test_assets/image-pdf.pdf"
 ```
 
 Magic:
@@ -106,12 +106,12 @@ Given a RECAP pdf, extract out the text using PDF Plumber, OCR or a combination 
 
 Parameters:
 
- - `strip_margin`: Whether doctor should crop the edges of the recap document during processing. With PDF plumber it will ignore traditional 1 inch margin.  With an OCR it lowers the threshold for hiding OCR gibberish. To enable it, set strip_margin to `True`:
+ - `strip_margin`: Whether owner should crop the edges of the recap document during processing. With PDF plumber it will ignore traditional 1 inch margin.  With an OCR it lowers the threshold for hiding OCR gibberish. To enable it, set strip_margin to `True`:
 
 ```bash
 curl 'http://localhost:5050/extract/recap/text/?strip_margin=True' \
   -X 'POST' \
-  -F "file=@doctor/recap_extract/gov.uscourts.cacd.652774.40.0.pdf"
+  -F "file=@owner/recap_extract/gov.uscourts.cacd.652774.40.0.pdf"
 ```
 
 Valid requests will receive a JSON response with the following keys:
@@ -128,7 +128,7 @@ This method takes a document and returns the page count.
 
     curl 'http://localhost:5050/utils/page-count/pdf/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf"
+     -F "file=@owner/test_assets/image-pdf.pdf"
 
 This will return an HTTP response with page count.  In the above example it would return __2__.
 
@@ -139,7 +139,7 @@ redactions as well as any discovered text.
 
     curl 'http://localhost:5050/utils/check-redactions/pdf/' \
 	  -X 'POST' \
-	  -F "file=@doctor/test_assets/x-ray/rectangles_yes.pdf"
+	  -F "file=@owner/test_assets/x-ray/rectangles_yes.pdf"
 
 returns as JSON response with bounding box(es) and text recovered.
 ```
@@ -192,7 +192,7 @@ This method takes a document and returns the mime type.
 
     curl 'http://localhost:5050/utils/mime-type/?mime=False' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf"
+     -F "file=@owner/test_assets/image-pdf.pdf"
 
 returns as JSON response identifying the document type
 
@@ -202,7 +202,7 @@ and
 
     curl 'http://localhost:5050/utils/mime-type/?mime=True' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf"
+     -F "file=@owner/test_assets/image-pdf.pdf"
 
 returns as JSON response identifying the document type
 
@@ -212,7 +212,7 @@ Another example
 
     curl 'http://localhost:5050/utils/mime-type/?mime=True' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/word-doc.doc"
+     -F "file=@owner/test_assets/word-doc.doc"
 
 returns
 
@@ -227,7 +227,7 @@ This allows users to copy and paste (more or less) from our OCRd text.
 
     curl 'http://localhost:5050/utils/add/text/pdf/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf" \
+     -F "file=@owner/test_assets/image-pdf.pdf" \
      -o image-pdf-with-embedded-text.pdf
 
 ### Endpoint: /utils/audio/duration/
@@ -236,7 +236,7 @@ This endpoint returns the duration of an MP3 file.
 
     curl 'http://localhost:5050/utils/audio/duration/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/1.mp3"
+     -F "file=@owner/test_assets/1.mp3"
 
 ### Endpoint: /utils/document-number/pdf/
 
@@ -244,7 +244,7 @@ This method takes a document from the federal filing system and returns its docu
 
     curl 'http://localhost:5050/utils/document-number/pdf/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/recap_documents/ca2_1-1.pdf"
+     -F "file=@owner/test_assets/recap_documents/ca2_1-1.pdf"
 
 This will return an HTTP response with the document number.  In the above example it would return __1-1__.
 
@@ -257,7 +257,7 @@ Given an image of indeterminate length, this endpoint will convert it to a pdf w
 
     curl 'http://localhost:5050/convert/image/pdf/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/long-image.tiff" \
+     -F "file=@owner/test_assets/long-image.tiff" \
       --output test-image-to-pdf.pdf
 
 Keep in mind that this curl will write the file to the current directory.
@@ -266,7 +266,7 @@ Keep in mind that this curl will write the file to the current directory.
 
 Given a list of urls for images, this endpoint will convert them to a pdf. This can be used to convert multiple images to a multi-page PDF. We use this to convert financial disclosure images to simple PDFs.
 
-    curl 'http://localhost:5050/convert/images/pdf/?sorted_urls=%5B%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_1.tiff%22%2C+%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_2.tiff%22%5D' \
+    curl 'http://localhost:5050/convert/images/pdf/?sorted_urls=%5B%22https%3A%2F%2Fcom-legal-luminary-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_1.tiff%22%2C+%22https%3A%2F%2Fcom-legal-luminary-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_2.tiff%22%5D' \
         -X POST \
         -o image.pdf
 
@@ -279,7 +279,7 @@ Thumbnail takes a pdf and returns a png thumbnail of the first page.
 
     curl 'http://localhost:5050/convert/pdf/thumbnail/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/image-pdf.pdf" \
+     -F "file=@owner/test_assets/image-pdf.pdf" \
      -o test-thumbnail.png
 
 This returns the binary data of the thumbnail.
@@ -297,7 +297,7 @@ For example if you want thumbnails for the first four pages:
 
     curl 'http://localhost:5050/convert/pdf/thumbnails/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/vector-pdf.pdf" \
+     -F "file=@owner/test_assets/vector-pdf.pdf" \
      -F 'pages="[1,2,3,4]"' \
      -F 'max_dimension=350' \
      -o thumbnails.zip
@@ -313,7 +313,7 @@ This endpoint also adds the SEAL of the court to the MP3 file and updates the me
 
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/1.wma"
+     -F "file=@owner/test_assets/1.wma"
 
 This returns the audio file as a file response.
 
@@ -326,7 +326,7 @@ This endpoint also optimizes the output for voice over IP applications.
 
     curl 'http://localhost:5050/convert/audio/ogg/' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/1.wma"
+     -F "file=@owner/test_assets/1.wma"
 
 This returns the audio file as a file response.
 
@@ -342,4 +342,4 @@ For debugging purposes, it's possible to set your Sentry DSN to send events to S
 By default, no SENTRY_DSN is set and no events will be sent to Sentry.
 To use Sentry set the SENTRY_DSN environment variable to your DSN. Using Docker you can set it with:
 
-    docker run -d -p 5050:5050 -e SENTRY_DSN=<https://yout-sentry-dsn> freelawproject/doctor:latest
+    docker run -d -p 5050:5050 -e SENTRY_DSN=<https://yout-sentry-dsn> freelawproject/owner:latest
