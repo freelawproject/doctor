@@ -15,7 +15,6 @@ import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
-
 from owner.lib.text_extraction import (
     adjust_caption_lines,
     cleanup_content,

@@ -15,11 +15,6 @@ import xray
 from eyed3 import id3
 from httpx import AsyncClient
 from lxml.html.clean import Cleaner
-from PIL.Image import Image
-from PyPDF2 import PdfReader
-from PyPDF2.errors import PdfReadError
-from seal_rookery.search import ImageSizes, seal
-
 from owner.lib.mojibake import fix_mojibake
 from owner.lib.text_extraction import (
     extract_with_ocr,
@@ -28,11 +23,15 @@ from owner.lib.text_extraction import (
     remove_excess_whitespace,
 )
 from owner.lib.utils import (
-    ownerUnicodeDecodeError,
     force_text,
     ocr_needed,
+    ownerUnicodeDecodeError,
     smart_text,
 )
+from PIL.Image import Image
+from PyPDF2 import PdfReader
+from PyPDF2.errors import PdfReadError
+from seal_rookery.search import ImageSizes, seal
 
 
 def pdf_bytes_from_images(image_list: list[Image]):

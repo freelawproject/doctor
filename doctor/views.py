@@ -14,10 +14,6 @@ from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
 from magika import Magika
-from PIL import Image
-from PyPDF2 import PdfReader, PdfWriter
-from pytesseract import Output
-
 from owner.forms import (
     AudioForm,
     BaseFileForm,
@@ -55,6 +51,9 @@ from owner.tasks import (
     rasterize_pdf,
     set_mp3_meta_data,
 )
+from PIL import Image
+from PyPDF2 import PdfReader, PdfWriter
+from pytesseract import Output
 
 logger = logging.getLogger(__name__)
 
