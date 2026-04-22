@@ -535,9 +535,7 @@ async def images_to_pdf(request) -> HttpResponse:
                 f.write(img2pdf.convert(image_list))
             cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
     else:
-        with requests.get(
-            sorted_urls[0], stream=True, timeout=60 * 5
-        ) as r:
+        with requests.get(sorted_urls[0], stream=True, timeout=60 * 5) as r:
             tiff_image = Image.open(r.raw)
             # Force PIL to read all pixel data before the HTTP connection
             # closes. Without this, later crop() calls would try to pull
