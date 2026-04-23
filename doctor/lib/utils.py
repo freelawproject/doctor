@@ -445,9 +445,7 @@ def log_upload_lifecycle(view):
         return request_id
 
     def _log_end(request_id: str) -> None:
-        view_logger.info(
-            "Request end view=%s id=%s", view_name, request_id
-        )
+        view_logger.info("Request end view=%s id=%s", view_name, request_id)
 
     if inspect.iscoroutinefunction(view):
 
