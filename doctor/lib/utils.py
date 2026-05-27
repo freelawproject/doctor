@@ -1,9 +1,13 @@
 import asyncio
 import datetime
+import functools
+import inspect
 import io
 import logging
 import os
 import re
+import time
+import uuid
 import warnings
 from collections import namedtuple
 from decimal import Decimal
@@ -393,6 +397,77 @@ def log_sentry_event(
     :return: None
     """
     logger.log(level, message, extra=extra, **kwargs)
+
+
+class UTCFormatter(logging.Formatter):
+    """Formatter that renders %(asctime)s in UTC so a trailing Z is accurate."""
+
+    converter = time.gmtime
+
+
+def _logfmt_quote(value) -> str:
+    """Return a double-quoted, logfmt-safe rendering of a value.
+
+    Logfmt breaks on unquoted spaces and `=`, so filenames and content-types
+    (which can contain either) have to be quoted at emit time.
+    """
+    s = "" if value is None else str(value)
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def log_upload_lifecycle(view):
+    """Decorator: emit "start" and "end" log lines around a view.
+
+    Attaches request_id for very simple tracing to find requests
+    that do not complete. Includes file sizes to track OOM causes.
+    """
+    view_logger = logging.getLogger(view.__module__)
+    view_name = view.__name__
+
+    def _log_start(request) -> str:
+        request_id = uuid.uuid4().hex[:8]
+        upload = request.FILES.get("file")
+        if upload is not None:
+            view_logger.info(
+                "Request start view=%s id=%s filename=%s content_type=%s size_bytes=%d",
+                view_name,
+                request_id,
+                _logfmt_quote(upload.name),
+                _logfmt_quote(upload.content_type),
+                upload.size or 0,
+            )
+        else:
+            view_logger.info(
+                "Request start view=%s id=%s (no file)",
+                view_name,
+                request_id,
+            )
+        return request_id
+
+    def _log_end(request_id: str) -> None:
+        view_logger.info("Request end view=%s id=%s", view_name, request_id)
+
+    if inspect.iscoroutinefunction(view):
+
+        @functools.wraps(view)
+        async def async_wrapper(request, *args, **kwargs):
+            request_id = _log_start(request)
+            try:
+                return await view(request, *args, **kwargs)
+            finally:
+                _log_end(request_id)
+
+        return async_wrapper
+
+    @functools.wraps(view)
+    def sync_wrapper(request, *args, **kwargs):
+        request_id = _log_start(request)
+        try:
+            return view(request, *args, **kwargs)
+        finally:
+            _log_end(request_id)
+
+    return sync_wrapper
 
 
 async def strip_metadata_with_exiftool(path: str) -> bool:

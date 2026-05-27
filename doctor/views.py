@@ -29,6 +29,7 @@ from doctor.forms import (
 from doctor.lib.utils import (
     cleanup_form,
     log_sentry_event,
+    log_upload_lifecycle,
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
@@ -70,6 +71,7 @@ def heartbeat(request) -> HttpResponse:
     return HttpResponse("Heartbeat detected.")
 
 
+@log_upload_lifecycle
 def image_to_pdf(request) -> HttpResponse:
     """Converts an uploaded image to a pdf and returns the bytes
 
@@ -95,6 +97,7 @@ def image_to_pdf(request) -> HttpResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 def extract_recap_document(request) -> JsonResponse:
     """Extract Recap Documents
 
@@ -127,6 +130,7 @@ def extract_recap_document(request) -> JsonResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 async def extract_doc_content(request) -> JsonResponse | HttpResponse:
     """Extract txt from different document types.
 
@@ -213,6 +217,7 @@ async def extract_doc_content(request) -> JsonResponse | HttpResponse:
     )
 
 
+@log_upload_lifecycle
 async def make_png_thumbnail(request) -> HttpResponse:
     """Make a thumbnail of the first page of a PDF and return it.
 
@@ -233,6 +238,7 @@ async def make_png_thumbnail(request) -> HttpResponse:
         return HttpResponse(thumbnail)
 
 
+@log_upload_lifecycle
 async def make_png_thumbnails_from_range(request) -> HttpResponse:
     """Make a zip file that contains a thumbnail for each page requested.
 
@@ -262,6 +268,7 @@ async def make_png_thumbnails_from_range(request) -> HttpResponse:
         return FileResponse(open(filename, "rb"))
 
 
+@log_upload_lifecycle
 def xray(request) -> JsonResponse:
     """Check PDF for bad redactions
 
@@ -287,6 +294,7 @@ def xray(request) -> JsonResponse:
     return JsonResponse({"error": False, "results": results})
 
 
+@log_upload_lifecycle
 def page_count(request) -> HttpResponse:
     """Get page count from PDF
 
@@ -307,6 +315,7 @@ def page_count(request) -> HttpResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 async def extract_mime_type(request) -> JsonResponse | HttpResponse:
     """Identify the MIME type of an uploaded document using Magika, with
     fallbacks for formats Magika fails to recognize.
@@ -365,6 +374,7 @@ async def extract_mime_type(request) -> JsonResponse | HttpResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 async def extract_extension(request) -> HttpResponse:
     """A handful of workarounds for getting extensions we can trust
 
@@ -493,6 +503,7 @@ async def extract_extension(request) -> HttpResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 async def pdf_to_text(request) -> JsonResponse | HttpResponse:
     """Extract text from text based PDFs immediately.
 
@@ -543,6 +554,7 @@ async def images_to_pdf(request) -> HttpResponse:
     return HttpResponse(cleaned_pdf_bytes, content_type="application/pdf")
 
 
+@log_upload_lifecycle
 def fetch_audio_duration(request) -> HttpResponse:
     """Fetch audio duration from file.
 
@@ -563,6 +575,7 @@ def fetch_audio_duration(request) -> HttpResponse:
         return HttpResponse(str(e))
 
 
+@log_upload_lifecycle
 async def convert_audio(
     request, output_format: str
 ) -> FileResponse | HttpResponse:
@@ -597,6 +610,7 @@ async def convert_audio(
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 async def embed_text(request) -> FileResponse | HttpResponse:
     """Embed text onto an image PDF.
 
@@ -639,6 +653,7 @@ async def embed_text(request) -> FileResponse | HttpResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 def get_document_number(request) -> HttpResponse:
     """Get PACER document number from PDF
 
