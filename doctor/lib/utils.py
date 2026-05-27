@@ -434,7 +434,7 @@ def log_upload_lifecycle(view):
                 request_id,
                 _logfmt_quote(upload.name),
                 _logfmt_quote(upload.content_type),
-                upload.size,
+                upload.size or 0,
             )
         else:
             view_logger.info(
