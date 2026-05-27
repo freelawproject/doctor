@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import six
-from PyPDF2 import PdfMerger
+from pypdf import PdfWriter
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
@@ -254,8 +254,7 @@ def strip_metadata_from_path(file_path):
     :param pdf_bytes: PDF as binary content
     :return: PDF bytes with metadata removed.
     """
-    with open(file_path, "rb") as f:
-        pdf_merger = PdfMerger()
+    with open(file_path, "rb") as f, PdfWriter() as pdf_merger:
         pdf_merger.append(io.BytesIO(f.read()))
         pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
         byte_writer = io.BytesIO()
@@ -271,12 +270,12 @@ def strip_metadata_from_bytes(pdf_bytes):
     :param pdf_bytes: PDF as binary content
     :return: PDF bytes with metadata removed.
     """
-    pdf_merger = PdfMerger()
-    pdf_merger.append(io.BytesIO(pdf_bytes))
-    pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
-    byte_writer = io.BytesIO()
-    pdf_merger.write(byte_writer)
-    return force_bytes(byte_writer.getvalue())
+    with PdfWriter() as pdf_merger:
+        pdf_merger.append(io.BytesIO(pdf_bytes))
+        pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
+        byte_writer = io.BytesIO()
+        pdf_merger.write(byte_writer)
+        return force_bytes(byte_writer.getvalue())
 
 
 def cleanup_form(form):

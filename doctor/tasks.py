@@ -16,8 +16,8 @@ from eyed3 import id3
 from httpx import AsyncClient
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
-from PyPDF2 import PdfReader
-from PyPDF2.errors import PdfReadError
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from seal_rookery.search import ImageSizes, seal
 
 from doctor.lib.mojibake import fix_mojibake
