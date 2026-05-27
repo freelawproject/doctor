@@ -15,7 +15,7 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
 from magika import Magika
 from PIL import Image
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pytesseract import Output
 
 from doctor.forms import (

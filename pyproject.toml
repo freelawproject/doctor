@@ -23,7 +23,7 @@ dependencies = [
   "pdfplumber",
   "pillow>=8.0.1",
   "pkginfo>=1.5.0.1",
-  "pypdf2[crypto]",
+  "pypdf>=5",
   "pytesseract>=0.3.5",
   "python-magic",
   "reportlab",
