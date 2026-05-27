@@ -3,7 +3,16 @@ The following changes are not yet released, but are code complete:
 
 ## Current
 
+ - 
+
+**0.3.6 - 2026-05-27** #237
+
+Features:
  - Migrated to async Django 6.0.1
+
+Fixes:
+ - Update pypdf2 -> pypdf 5+ (6.12)
+ - Address small potential memory leak
 
 **0.3.5 - 2025-11-21** #228
 
