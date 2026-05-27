@@ -3,7 +3,7 @@ The following changes are not yet released, but are code complete:
 
 ## Current
 
- - 
+ -
 
 **0.3.6 - 2026-05-27** #237
 
