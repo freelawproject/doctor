@@ -36,3 +36,27 @@ if SENTRY_DSN:
         ],
         ignore_errors=[KeyboardInterrupt],
     )
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "()": "doctor.lib.utils.UTCFormatter",
+            "format": "%(asctime)s.%(msecs)03dZ %(levelname)s %(name)s: %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "doctor": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+    },
+}
