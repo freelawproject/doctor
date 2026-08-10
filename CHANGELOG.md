@@ -1,6 +1,12 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Fixes:
+ - Delegate file identification to Magika's `identify_path`
+ 
+Changes:
+ - Bump `magika` to 1.0.3.
+
 ## Current
 
  -

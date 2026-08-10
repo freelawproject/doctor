@@ -71,6 +71,36 @@ magika = Magika()
 HEADER_BYTES = 4096
 
 
+def identify_with_magika(
+    fp: str, original_filename: str
+) -> tuple[str, list[str]]:
+    """Identify a file with Magika, degrading gracefully when it fails.
+
+    Magika only populates a prediction when ``result.ok`` is true, so a failed
+    scan (missing file, permission error) has to be handled before touching
+    ``result.output``. Callers all have header-based fallbacks, so report the
+    failure and hand back a generic mime type rather than raising.
+
+    :param fp: path of the file to identify
+    :param original_filename: the uploaded filename, used for logging only
+    :return: a two-tuple of the mime type and the candidate extensions
+    """
+    result = magika.identify_path(Path(fp))
+    if not result.ok:
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Magika failed to identify file.",
+            extra={
+                "file_name": original_filename,
+                "magika_status": str(result.status),
+            },
+        )
+        return "application/octet-stream", []
+
+    return result.output.mime_type, result.output.extensions or []
+
+
 def heartbeat(request) -> HttpResponse:
     """Heartbeat endpoint
 
@@ -345,8 +375,9 @@ async def extract_mime_type(request) -> JsonResponse | HttpResponse:
 
         # Magika reads only what it needs from disk; we read a small
         # header separately for the fallback signature checks below.
-        result = magika.identify_path(Path(fp))
-        mime = result.output.mime_type
+        mime, _ = identify_with_magika(
+            fp, form.cleaned_data["original_filename"]
+        )
 
         with open(fp, "rb") as f:
             header = f.read(HEADER_BYTES)
@@ -405,12 +436,13 @@ async def extract_extension(request) -> HttpResponse:
 
         # Magika reads only what it needs from disk; we read a small
         # header separately for the fallback signature checks below.
-        result = magika.identify_path(Path(fp))
-        mime = result.output.mime_type
-        exts = result.output.extensions or []
+        mime, exts = identify_with_magika(
+            fp, form.cleaned_data["original_filename"]
+        )
 
         with open(fp, "rb") as f:
             header = f.read(HEADER_BYTES)
+            file_size = os.fstat(f.fileno()).st_size
 
         if exts:
             # Usually the first one is the best
@@ -435,7 +467,7 @@ async def extract_extension(request) -> HttpResponse:
                     message="Magika failed to infer file extension, libmagic failed too.",
                     extra={
                         "file_name": form.cleaned_data["original_filename"],
-                        "file_size": os.path.getsize(fp),
+                        "file_size": file_size,
                         "mimetype": mime,
                     },
                     exc_info=True,
