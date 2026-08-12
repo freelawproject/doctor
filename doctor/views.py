@@ -540,11 +540,12 @@ async def images_to_pdf(request) -> HttpResponse:
     sorted_urls = form.cleaned_data["sorted_urls"]
 
     if len(sorted_urls) > 1:
-        image_list = await download_images(sorted_urls)
-        with NamedTemporaryFile(suffix=".pdf") as tmp:
-            with open(tmp.name, "wb") as f:
-                f.write(img2pdf.convert(image_list))
-            cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
+        with TemporaryDirectory() as image_dir:
+            image_paths = await download_images(sorted_urls, image_dir)
+            with NamedTemporaryFile(suffix=".pdf") as tmp:
+                with open(tmp.name, "wb") as f:
+                    img2pdf.convert(image_paths, outputstream=f)
+                cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
     else:
         tiff_image = Image.open(
             requests.get(sorted_urls[0], stream=True, timeout=60 * 5).raw
