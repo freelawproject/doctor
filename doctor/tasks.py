@@ -483,6 +483,72 @@ def validate_egress_url(url: str) -> None:
         )
 
 
+class _TransientTransferError(Exception):
+    """A transfer failure worth retrying: a network error or a 5xx."""
+
+
+def _classify_status(
+    status: int, expired_code: str, failed_code: str, direction: str
+) -> None:
+    """Raise for any non-2xx response, classified for retry policy.
+
+    2xx passes. 403 means the presigned signature expired: retrying
+    the same URL cannot succeed, so it fails fast with expired_code.
+    5xx is transient and retried. Everything else — including 3xx,
+    which follow_redirects=False hands back as-is and which must
+    never count as a completed transfer — fails fast with
+    failed_code.
+
+    :param status: The HTTP status code of the response.
+    :param expired_code: Error code for an expired signature (403).
+    :param failed_code: Error code for other terminal failures.
+    :param direction: "input" or "output", for the error message.
+    """
+    if 200 <= status < 300:
+        return
+    if status == 403:
+        raise BitonalError(
+            expired_code,
+            f"{direction} URL returned 403; the signature has expired "
+            "and a retry cannot succeed",
+            status=502,
+        )
+    if status >= 500:
+        raise _TransientTransferError(f"HTTP {status}")
+    raise BitonalError(
+        failed_code,
+        f"{direction} URL returned HTTP {status}",
+        status=502,
+    )
+
+
+def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
+    """Run one transfer attempt under the shared retry/backoff policy.
+
+    Retries _TransientTransferError and httpx transport errors with
+    exponential backoff. BitonalError — the fail-fast
+    classifications from _classify_status — propagates immediately.
+
+    :param attempt: Zero-argument callable performing one attempt.
+    :param failed_code: Error code raised when attempts are exhausted.
+    :param failure_prefix: Human prefix for the exhaustion message.
+    :return: Whatever attempt() returns.
+    """
+    last_error = ""
+    for attempt_number in range(EGRESS_MAX_ATTEMPTS):
+        if attempt_number:
+            time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt_number - 1))
+        try:
+            return attempt()
+        except (_TransientTransferError, httpx.HTTPError) as e:
+            last_error = str(e)
+    raise BitonalError(
+        failed_code,
+        f"{failure_prefix} after {EGRESS_MAX_ATTEMPTS} attempts: {last_error}",
+        status=502,
+    )
+
+
 def stream_url_to_file(url: str, output_path: str) -> str:
     """Download a presigned GET URL to a file, streaming.
 
@@ -496,60 +562,46 @@ def stream_url_to_file(url: str, output_path: str) -> str:
         INPUT_DOWNLOAD_FAILED otherwise.
     """
     validate_egress_url(url)
-    last_error = ""
-    for attempt in range(EGRESS_MAX_ATTEMPTS):
-        if attempt:
-            time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt - 1))
-        try:
-            with (
-                httpx.Client(
-                    follow_redirects=False, timeout=EGRESS_TIMEOUT
-                ) as client,
-                client.stream("GET", url) as response,
-            ):
-                if response.status_code == 403:
-                    raise BitonalError(
-                        "INPUT_URL_EXPIRED",
-                        "input URL returned 403; the signature has "
-                        "expired and a retry cannot succeed",
-                        status=502,
-                    )
-                if 400 <= response.status_code < 500:
-                    raise BitonalError(
-                        "INPUT_DOWNLOAD_FAILED",
-                        f"input URL returned HTTP {response.status_code}",
-                        status=502,
-                    )
-                if response.status_code >= 500:
-                    last_error = f"HTTP {response.status_code}"
-                    continue
-                digest = hashlib.sha256()
-                with open(output_path, "wb") as f:
-                    for chunk in response.iter_bytes(1024 * 1024):
-                        f.write(chunk)
-                        digest.update(chunk)
-                return digest.hexdigest()
-        except httpx.HTTPError as e:
-            last_error = str(e)
-    raise BitonalError(
-        "INPUT_DOWNLOAD_FAILED",
-        f"input download failed after {EGRESS_MAX_ATTEMPTS} attempts: "
-        f"{last_error}",
-        status=502,
+
+    def attempt() -> str:
+        with (
+            httpx.Client(
+                follow_redirects=False, timeout=EGRESS_TIMEOUT
+            ) as client,
+            client.stream("GET", url) as response,
+        ):
+            _classify_status(
+                response.status_code,
+                "INPUT_URL_EXPIRED",
+                "INPUT_DOWNLOAD_FAILED",
+                "input",
+            )
+            digest = hashlib.sha256()
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_bytes(1024 * 1024):
+                    f.write(chunk)
+                    digest.update(chunk)
+            return digest.hexdigest()
+
+    return _transfer_with_retries(
+        attempt, "INPUT_DOWNLOAD_FAILED", "input download failed"
     )
 
 
-def put_file_to_url(url: str, input_path: str, content_type: str) -> None:
-    """Upload a file to a presigned PUT URL.
+def put_file_to_url(url: str, input_path: str, content_type: str) -> str:
+    """Upload a file to a presigned PUT URL, streaming.
 
     A single PUT is atomic on S3: a partial upload never becomes a
     gettable object, so the object's existence implies all of its
     bytes are there. Content-Type is sent explicitly because the
-    presigned signature covers it.
+    presigned signature covers it; Content-Length keeps the body
+    unchunked. The digest is computed while streaming, mirroring
+    stream_url_to_file, so the caller never re-reads the file.
 
     :param url: Presigned PUT URL for the result object.
     :param input_path: File to upload.
     :param content_type: Content type the URL was signed with.
+    :return: sha256 hex digest of the uploaded bytes.
     :raises BitonalError: RESULT_URL_EXPIRED on 403,
         RESULT_UPLOAD_FAILED otherwise.
     """
@@ -558,42 +610,34 @@ def put_file_to_url(url: str, input_path: str, content_type: str) -> None:
         "Content-Type": content_type,
         "Content-Length": str(os.path.getsize(input_path)),
     }
-    last_error = ""
-    for attempt in range(EGRESS_MAX_ATTEMPTS):
-        if attempt:
-            time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt - 1))
-        try:
-            with (
-                open(input_path, "rb") as f,
-                httpx.Client(
-                    follow_redirects=False, timeout=EGRESS_TIMEOUT
-                ) as client,
-            ):
-                response = client.put(url, content=f, headers=headers)
-        except httpx.HTTPError as e:
-            last_error = str(e)
-            continue
-        if response.status_code < 400:
-            return
-        if response.status_code == 403:
-            raise BitonalError(
-                "RESULT_URL_EXPIRED",
-                "output URL returned 403; the signature has expired "
-                "and a retry cannot succeed",
-                status=502,
-            )
-        if response.status_code < 500:
-            raise BitonalError(
-                "RESULT_UPLOAD_FAILED",
-                f"output URL returned HTTP {response.status_code}",
-                status=502,
-            )
-        last_error = f"HTTP {response.status_code}"
-    raise BitonalError(
-        "RESULT_UPLOAD_FAILED",
-        f"result upload failed after {EGRESS_MAX_ATTEMPTS} attempts: "
-        f"{last_error}",
-        status=502,
+
+    def attempt() -> str:
+        # A fresh digest per attempt: a retried upload re-reads the
+        # file from the start.
+        digest = hashlib.sha256()
+        with (
+            open(input_path, "rb") as f,
+            httpx.Client(
+                follow_redirects=False, timeout=EGRESS_TIMEOUT
+            ) as client,
+        ):
+
+            def hashing_body():
+                while chunk := f.read(1024 * 1024):
+                    digest.update(chunk)
+                    yield chunk
+
+            response = client.put(url, content=hashing_body(), headers=headers)
+        _classify_status(
+            response.status_code,
+            "RESULT_URL_EXPIRED",
+            "RESULT_UPLOAD_FAILED",
+            "output",
+        )
+        return digest.hexdigest()
+
+    return _transfer_with_retries(
+        attempt, "RESULT_UPLOAD_FAILED", "result upload failed"
     )
 
 

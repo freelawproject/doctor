@@ -63,6 +63,7 @@ from doctor.tasks import (
     rasterize_pdf,
     set_mp3_meta_data,
     stream_url_to_file,
+    validate_egress_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -311,6 +312,12 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
         start = time.monotonic()
         input_url = form.cleaned_data["input_url"]
         output_url = form.cleaned_data["output_url"]
+        # Both URLs are checked before any work: a blocked output_url
+        # must not be discovered only after a long conversion, and a
+        # rejected URL surfaces as EGRESS_BLOCKED via BitonalError.
+        for url in (input_url, output_url):
+            if url:
+                validate_egress_url(url)
         if input_url:
             with NamedTemporaryFile(delete=False, suffix=".pdf") as downloaded:
                 downloaded_fp = downloaded.name
@@ -337,13 +344,15 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
                     open(output.name, "rb"),  # noqa: SIM115 FileResponse closes the file
                     content_type="application/pdf",
                 )
-            put_file_to_url(output_url, output.name, "application/pdf")
+            result_sha256 = put_file_to_url(
+                output_url, output.name, "application/pdf"
+            )
             return JsonResponse(
                 {
                     "success": True,
                     **metadata,
                     "bytes": os.path.getsize(output.name),
-                    "sha256": sha256_file(output.name),
+                    "sha256": result_sha256,
                     "source_sha256": source_sha256,
                     "duration_ms": int((time.monotonic() - start) * 1000),
                 }

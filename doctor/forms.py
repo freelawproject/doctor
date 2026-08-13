@@ -154,11 +154,10 @@ class BitonalPdfForm(forms.Form):
     )
 
     def clean(self):
-        # Imported here to keep module import light; tasks pulls in
-        # the whole extraction stack.
-        from doctor.lib.bitonal import BitonalError
-        from doctor.tasks import validate_egress_url
-
+        # Structural validation only. The egress allowlist check
+        # happens in the view, where a rejected URL can surface as
+        # its documented EGRESS_BLOCKED error code instead of being
+        # flattened into VALIDATION_FAILED.
         file = self.cleaned_data.get("file")
         input_url = self.cleaned_data.get("input_url")
         if file and input_url:
@@ -167,12 +166,6 @@ class BitonalPdfForm(forms.Form):
             )
         if not file and not input_url:
             raise ValidationError("Send one of 'file' or 'input_url'.")
-        for url in (input_url, self.cleaned_data.get("output_url")):
-            if url:
-                try:
-                    validate_egress_url(url)
-                except BitonalError as e:
-                    raise ValidationError(e.message) from e
 
         if not self.cleaned_data.get("dpi"):
             self.cleaned_data["dpi"] = 300

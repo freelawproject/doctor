@@ -17,6 +17,7 @@ from zipfile import ZipFile
 import django
 import eyed3
 import numpy as np
+import pikepdf
 import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
@@ -758,6 +759,38 @@ class BitonalConversionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error_code"], "PAGE_RANGE_INVALID")
 
+    def test_invalid_pdf_error_code(self):
+        """Do garbage bytes map to INVALID_PDF rather than a 500?"""
+        response = requests.post(
+            self.endpoint,
+            files={"file": ("bad.pdf", b"%PDF-1.7 not really a pdf")},
+            data={"dpi": 100},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "INVALID_PDF")
+
+    def test_corrupt_object_stream_error_code(self):
+        """Does a corrupt /ObjStm map to INVALID_PDF rather than a 500?
+
+        pypdf raises a bare AssertionError (not PdfReadError) on a
+        corrupted object-stream type tag, so this pins the widened
+        except tuple in convert_pdf_to_bitonal.
+        """
+        buffer = io.BytesIO()
+        with pikepdf.open(f"{asset_path}/{self.fixture}") as pdf:
+            pdf.save(
+                buffer,
+                object_stream_mode=pikepdf.ObjectStreamMode.generate,
+            )
+        corrupted = buffer.getvalue().replace(b"/ObjStm", b"/XObStm", 1)
+        response = requests.post(
+            self.endpoint,
+            files={"file": ("corrupt.pdf", corrupted)},
+            data={"dpi": 100},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "INVALID_PDF")
+
 
 class StubS3Server(ThreadingHTTPServer):
     """An in-process stand-in for presigned S3 GET/PUT targets.
@@ -912,9 +945,50 @@ class BitonalTransportTests(unittest.TestCase):
         self.assertEqual(response.json()["error_code"], "RESULT_UPLOAD_FAILED")
         self.assertEqual(self.server.put_count, 3)
 
+    def test_input_url_3xx_is_not_success(self):
+        """follow_redirects is off, so a 3xx must be a terminal failure."""
+        self.server.get_statuses = [307]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.json()["error_code"], "INPUT_DOWNLOAD_FAILED"
+        )
+        self.assertEqual(self.server.get_count, 1)
+        self.assertEqual(self.server.put_count, 0)
+
+    def test_result_url_3xx_is_not_success(self):
+        """A redirected PUT stored nothing and must not report success."""
+        self.server.put_statuses = [307]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        payload = response.json()
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "RESULT_UPLOAD_FAILED")
+        self.assertEqual(self.server.put_count, 1)
+
 
 class EgressPolicyTests(unittest.TestCase):
-    """Unit tests for the egress allowlist validator."""
+    """Tests for the egress allowlist."""
+
+    def test_egress_blocked_error_code_over_http(self):
+        """Does a blocked URL surface as EGRESS_BLOCKED, not VALIDATION_FAILED?
+
+        Runs the view in-process with the test client because the
+        containerized service runs with the allowlist disabled.
+        """
+        from django.test import override_settings
+
+        with override_settings(
+            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"input_url": "https://evil.example.com/shard.pdf"},
+            )
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "EGRESS_BLOCKED")
 
     def test_egress_policy(self):
         from django.test import override_settings

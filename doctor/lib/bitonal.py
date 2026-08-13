@@ -228,7 +228,17 @@ def convert_pdf_to_bitonal(
             )
             for page in reader.pages
         ]
-    except (PdfReadError, OSError, ValueError) as e:
+    except (
+        # The same tuple get_page_count uses: pypdf raises TypeError,
+        # KeyError and AssertionError (not just PdfReadError) on
+        # corrupt xref and object-stream structures.
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AssertionError,
+        PdfReadError,
+    ) as e:
         raise BitonalError(
             "INVALID_PDF", f"could not read source PDF: {e}", status=400
         ) from e
