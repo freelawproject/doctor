@@ -217,7 +217,7 @@ async def make_png_thumbnails(filepath, max_dimension, pages, directory):
             str(max_dimension),
             filepath,
             "-png",
-            f"{directory.name}/thumb-{page}",
+            f"{directory}/thumb-{page}",
         ]
         p = await asyncio.create_subprocess_exec(
             *command,
@@ -279,15 +279,19 @@ def strip_metadata_from_bytes(pdf_bytes):
 
 
 def cleanup_form(form):
-    """Clean up a form object
+    """Delete the temp file a form wrote during validation, if any.
 
-    When this function is called with a DocumentForm or a form that inherits from BaseFileForm, it only needs to be
-    called at the end of the view, since the file field is required, if the validation fails, the file is not created.
+    Forms that accept uploads write them to a NamedTemporaryFile(delete=False)
+    during cleaning and store the path in cleaned_data["fp"], so deleting the
+    file is the view's job. Every temp-owning view must call this in a
+    `finally` whose `try` also encloses `form.is_valid()`: the temp file can
+    exist even when validation fails or raises (the path is recorded before
+    the upload is streamed into it), so cleanup must run on every exit path.
 
-    It is necessary to call the function when using MimeForm because when form validation fails because the field is
-    not required, and the temporary file may have been created despite the failure.
+    Safe to call at any point after the form is constructed, including before
+    or partway through validation.
     """
-    fp = form.cleaned_data.get("fp")
+    fp = getattr(form, "cleaned_data", {}).get("fp")
     if fp:
         try:
             os.remove(fp)

@@ -80,12 +80,12 @@ def image_to_pdf(request) -> HttpResponse:
     """
 
     form = DocumentForm(request.POST, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-
-    fp = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+
+        fp = form.cleaned_data["fp"]
+
         image = Image.open(fp)
         pdf_bytes = convert_tiff_to_pdf_bytes(image)
         cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
@@ -105,16 +105,15 @@ def extract_recap_document(request) -> JsonResponse:
     :return: JsonResponse
     """
     form = DocumentForm(request.GET, request.FILES)
-    if not form.is_valid():
-        return JsonResponse(
-            {
-                "err": "Failed validation",
-            },
-            status=BAD_REQUEST,
-        )
-    filepath = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "err": "Failed validation",
+                },
+                status=BAD_REQUEST,
+            )
+        filepath = form.cleaned_data["fp"]
         strip_margin = form.cleaned_data["strip_margin"]
         content, extracted_by_ocr = extract_recap_pdf(
             filepath=filepath,
@@ -139,82 +138,84 @@ async def extract_doc_content(request) -> JsonResponse | HttpResponse:
     :type: json object
     """
     form = DocumentForm(request.GET, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-    ocr_available = form.cleaned_data["ocr_available"]
-    extension = form.cleaned_data["extension"]
-    fp = form.cleaned_data["fp"]
-    extracted_by_ocr = False
-    err = ""
-    # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
-    # or filepath_local (AbstractPDF).
-    original_filename = form.cleaned_data["original_filename"]
     try:
-        if extension == "pdf":
-            (
-                content,
-                err,
-                returncode,
-                extracted_by_ocr,
-            ) = await extract_from_pdf(fp, ocr_available)
-        elif extension == "doc":
-            content, err, returncode = await extract_from_doc(fp)
-        elif extension == "docx":
-            content, err, returncode = await extract_from_docx(fp)
-        elif extension == "html":
-            content, err, returncode = extract_from_html(fp)
-        elif extension == "txt":
-            content, err, returncode = extract_from_txt(fp)
-        elif extension == "wpd":
-            content, err, returncode = await extract_from_wpd(fp)
-        else:
-            returncode = 1
-            err = "Unable to extract content due to unknown extension"
-            content = ""
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+        ocr_available = form.cleaned_data["ocr_available"]
+        extension = form.cleaned_data["extension"]
+        fp = form.cleaned_data["fp"]
+        extracted_by_ocr = False
+        err = ""
+        # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
+        # or filepath_local (AbstractPDF).
+        original_filename = form.cleaned_data["original_filename"]
+        try:
+            if extension == "pdf":
+                (
+                    content,
+                    err,
+                    returncode,
+                    extracted_by_ocr,
+                ) = await extract_from_pdf(fp, ocr_available)
+            elif extension == "doc":
+                content, err, returncode = await extract_from_doc(fp)
+            elif extension == "docx":
+                content, err, returncode = await extract_from_docx(fp)
+            elif extension == "html":
+                content, err, returncode = extract_from_html(fp)
+            elif extension == "txt":
+                content, err, returncode = extract_from_txt(fp)
+            elif extension == "wpd":
+                content, err, returncode = await extract_from_wpd(fp)
+            else:
+                returncode = 1
+                err = "Unable to extract content due to unknown extension"
+                content = ""
 
-        if returncode != 0:
+            if returncode != 0:
+                log_sentry_event(
+                    logger=logger,
+                    level=logging.ERROR,
+                    message="Unable to extract document content",
+                    extra={
+                        "file_name": original_filename,
+                        "err": err,
+                    },
+                    exc_info=True,
+                )
+                pass
+
+        except (XMLSyntaxError, ParserError) as e:
+            error_message = "HTML cleaning failed due to ParserError."
+            if isinstance(e, XMLSyntaxError):
+                error_message = "HTML cleaning failed due to XMLSyntaxError."
+
             log_sentry_event(
                 logger=logger,
                 level=logging.ERROR,
-                message="Unable to extract document content",
+                message=error_message,
                 extra={
                     "file_name": original_filename,
-                    "err": err,
+                    "exception_type": type(e).__name__,
+                    "exception_message": str(e),
                 },
                 exc_info=True,
             )
-            pass
+            content = "Unable to extract the content from this file. Please try reading the original."
 
-    except (XMLSyntaxError, ParserError) as e:
-        error_message = "HTML cleaning failed due to ParserError."
-        if isinstance(e, XMLSyntaxError):
-            error_message = "HTML cleaning failed due to XMLSyntaxError."
-
-        log_sentry_event(
-            logger=logger,
-            level=logging.ERROR,
-            message=error_message,
-            extra={
-                "file_name": original_filename,
-                "exception_type": type(e).__name__,
-                "exception_message": str(e),
-            },
-            exc_info=True,
+        # Get page count if you can
+        page_count = get_page_count(fp, extension)
+        return JsonResponse(
+            {
+                "content": content,
+                "err": err,
+                "extension": extension,
+                "extracted_by_ocr": extracted_by_ocr,
+                "page_count": page_count,
+            }
         )
-        content = "Unable to extract the content from this file. Please try reading the original."
-
-    # Get page count if you can
-    page_count = get_page_count(fp, extension)
-    cleanup_form(form)
-    return JsonResponse(
-        {
-            "content": content,
-            "err": err,
-            "extension": extension,
-            "extracted_by_ocr": extracted_by_ocr,
-            "page_count": page_count,
-        }
-    )
+    finally:
+        cleanup_form(form)
 
 
 @log_upload_lifecycle
@@ -250,22 +251,22 @@ async def make_png_thumbnails_from_range(request) -> HttpResponse:
     if not form.is_valid():
         return HttpResponse("Failed validation", status=BAD_REQUEST)
 
-    directory = TemporaryDirectory()
-    with NamedTemporaryFile(suffix=".pdf", mode="r+b") as temp_pdf:
-        temp_pdf.write(form.cleaned_data["file"].read())
+    with TemporaryDirectory() as directory:
+        with NamedTemporaryFile(suffix=".pdf", mode="r+b") as temp_pdf:
+            temp_pdf.write(form.cleaned_data["file"].read())
 
-        await make_png_thumbnails(
-            temp_pdf.name,
-            form.cleaned_data["max_dimension"],
-            form.cleaned_data["pages"],
-            directory,
-        )
+            await make_png_thumbnails(
+                temp_pdf.name,
+                form.cleaned_data["max_dimension"],
+                form.cleaned_data["pages"],
+                directory,
+            )
 
-    with NamedTemporaryFile(suffix=".zip") as tmp_zip:
-        filename = shutil.make_archive(
-            f"{tmp_zip.name[:-4]}", "zip", directory.name
-        )
-        return FileResponse(open(filename, "rb"))
+        with NamedTemporaryFile(suffix=".zip") as tmp_zip:
+            filename = shutil.make_archive(
+                f"{tmp_zip.name[:-4]}", "zip", directory
+            )
+            return FileResponse(open(filename, "rb"))
 
 
 @log_upload_lifecycle
@@ -302,12 +303,11 @@ def page_count(request) -> HttpResponse:
     :return: Page count
     """
     form = DocumentForm(request.POST, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-
-    fp = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+
+        fp = form.cleaned_data["fp"]
         extension = form.cleaned_data["extension"]
         pg_count = get_page_count(fp, extension)
         return HttpResponse(pg_count)
@@ -324,14 +324,12 @@ async def extract_mime_type(request) -> JsonResponse | HttpResponse:
     :return: MIME type as JSON
     """
     form = MimeForm(request.GET, request.FILES)
-    if not form.is_valid():
-        # Not valid, try to remove file
-        cleanup_form(form)
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-
-    fp = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+
+        fp = form.cleaned_data["fp"]
+
         await strip_metadata_with_exiftool(fp)
 
         with open(fp, "rb") as f:
@@ -382,12 +380,12 @@ async def extract_extension(request) -> HttpResponse:
     :returns: the file extension as plain text
     """
     form = MimeForm(request.GET, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-
-    fp = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+
+        fp = form.cleaned_data["fp"]
+
         # avoid "referenced before assignment" warnings from analyzer
         content = b""
 
@@ -587,10 +585,10 @@ async def convert_audio(
     :return: Converted audio
     """
     form = AudioForm(request.GET, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-
     try:
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+
         filepath = form.cleaned_data["fp"]
         media_file = form.cleaned_data["file"]
         audio_data = {k: v[0] for k, v in dict(request.GET).items()}
@@ -618,11 +616,11 @@ async def embed_text(request) -> FileResponse | HttpResponse:
     :return: Embedded PDF
     """
     form = DocumentForm(request.GET, request.FILES)
-    if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
-    fp = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            return HttpResponse("Failed validation", status=BAD_REQUEST)
+        fp = form.cleaned_data["fp"]
+
         with NamedTemporaryFile(suffix=".tiff") as destination:
             await rasterize_pdf(fp, destination.name)
             data = pytesseract.image_to_data(
@@ -662,14 +660,14 @@ def get_document_number(request) -> HttpResponse:
     """
 
     form = BaseFileForm(request.GET, request.FILES)
-    if not form.is_valid():
-        validation_message = form.errors.get_json_data()["__all__"][0][
-            "message"
-        ]
-        return HttpResponse(validation_message, status=BAD_REQUEST)
-    fp = form.cleaned_data["fp"]
-
     try:
+        if not form.is_valid():
+            validation_message = form.errors.get_json_data()["__all__"][0][
+                "message"
+            ]
+            return HttpResponse(validation_message, status=BAD_REQUEST)
+        fp = form.cleaned_data["fp"]
+
         document_number = get_document_number_from_pdf(fp)
         return HttpResponse(document_number)
     finally:

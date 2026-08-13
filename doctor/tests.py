@@ -449,6 +449,135 @@ class MetadataTests(unittest.TestCase):
             msg=f"Temporary file was NOT deleted: {fp}",
         )
 
+    def _capture_temp_files(self):
+        """Return (patch context manager, list) capturing NamedTemporaryFile paths"""
+        created_temp_files = []
+        real_named_temporary_file = tempfile.NamedTemporaryFile
+
+        def capture_temp_file_creation(*args, **kwargs):
+            fp = real_named_temporary_file(*args, **kwargs)
+            created_temp_files.append(fp.name)
+            return fp
+
+        patcher = patch(
+            "tempfile.NamedTemporaryFile",
+            side_effect=capture_temp_file_creation,
+        )
+        return patcher, created_temp_files
+
+    def test_temp_file_cleanup_on_extraction_error(self):
+        """Is the temp file removed when processing raises mid-request?"""
+        client = Client(raise_request_exception=False)
+
+        files = make_buffer(filename="image-pdf.pdf")
+        django_file = SimpleUploadedFile(
+            name="image-pdf.pdf",
+            content=files["file"][1],
+            content_type="application/pdf",
+        )
+
+        capture_patcher, created_temp_files = self._capture_temp_files()
+        with (
+            capture_patcher,
+            patch(
+                "doctor.views.strip_metadata_with_exiftool",
+                side_effect=Exception("exiftool blew up"),
+            ),
+        ):
+            response = client.post(
+                reverse("file-extension"),
+                data={"file": django_file},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(len(created_temp_files), 1)
+        fp = created_temp_files[0]
+        self.assertFalse(
+            os.path.exists(fp),
+            msg=f"Temporary file was NOT deleted after an error: {fp}",
+        )
+
+    def test_temp_file_cleanup_on_upload_error(self):
+        """Is the temp file removed when the upload stream dies mid-write?
+
+        A non-ValidationError raised while streaming the upload into the
+        temp file (disk full, client disconnect) escapes form.is_valid()
+        itself, after cleaned_data["fp"] was already recorded; the view's
+        finally must still delete the partially written file.
+        """
+
+        def dying_save(self, fp):
+            with open(fp, "wb") as f:
+                f.write(b"%PDF-1.4 first chunk of a scan...")
+            raise OSError(28, "No space left on device")
+
+        client = Client(raise_request_exception=False)
+        django_file = SimpleUploadedFile(
+            name="scan.pdf",
+            content=b"placeholder",
+            content_type="application/pdf",
+        )
+
+        capture_patcher, created_temp_files = self._capture_temp_files()
+        with (
+            capture_patcher,
+            patch("doctor.forms.MimeForm.temp_save_file", dying_save),
+        ):
+            response = client.post(
+                reverse("file-extension"),
+                data={"file": django_file},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(len(created_temp_files), 1)
+        fp = created_temp_files[0]
+        self.assertFalse(
+            os.path.exists(fp),
+            msg=f"Temporary file was NOT deleted after upload died: {fp}",
+        )
+
+    def test_thumbnail_directory_cleanup_on_error(self):
+        """Is the thumbnail TemporaryDirectory removed when thumbnailing fails?"""
+        client = Client(raise_request_exception=False)
+
+        created_temp_dirs = []
+        real_temporary_directory = tempfile.TemporaryDirectory
+
+        def capture_temp_dir_creation(*args, **kwargs):
+            directory = real_temporary_directory(*args, **kwargs)
+            created_temp_dirs.append(directory.name)
+            return directory
+
+        files = make_buffer(filename="image-pdf.pdf")
+        django_file = SimpleUploadedFile(
+            name="image-pdf.pdf",
+            content=files["file"][1],
+            content_type="application/pdf",
+        )
+
+        with (
+            patch(
+                "doctor.views.TemporaryDirectory",
+                side_effect=capture_temp_dir_creation,
+            ),
+            patch(
+                "doctor.views.make_png_thumbnails",
+                side_effect=Exception("pdftoppm blew up"),
+            ),
+        ):
+            response = client.post(
+                reverse("thumbnails"),
+                data={"file": django_file, "pages": json.dumps([1])},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(len(created_temp_dirs), 1)
+        directory = created_temp_dirs[0]
+        self.assertFalse(
+            os.path.exists(directory),
+            msg=f"Temporary directory was NOT deleted after an error: {directory}",
+        )
+
 
 def test_embedding_text_to_image_pdf(self):
     """Can we embed text into an image PDF?"""
