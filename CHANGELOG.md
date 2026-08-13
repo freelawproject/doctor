@@ -3,7 +3,15 @@ The following changes are not yet released, but are code complete:
 
 ## Current
 
- -
+Features:
+ - New `/convert/pdf/bitonal/` endpoint: converts a scanned PDF (or a page
+   range) to a bitonal CCITT G4 PDF, streaming page by page. Input arrives
+   as a multipart upload or a presigned GET URL; the result returns inline
+   or is uploaded to a presigned PUT URL. Adds the
+   `DOCTOR_EGRESS_ALLOWED_HOSTS` setting (default `*.amazonaws.com`) to
+   restrict which hosts caller-supplied URLs may point to.
+ - Added `pikepdf` as an explicit dependency (it was already present
+   transitively via `img2pdf`).
 
 **0.3.6 - 2026-05-27** #237
 

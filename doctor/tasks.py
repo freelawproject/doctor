@@ -1,17 +1,23 @@
 import asyncio
 import base64
+import fnmatch
+import hashlib
 import io
 import os
 import re
+import time
 from collections.abc import ByteString
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr
+from urllib.parse import urlparse
 
 import eyed3
+import httpx
 import magic
 import pdfplumber
 import requests
 import xray
+from django.conf import settings
 from eyed3 import id3
 from httpx import AsyncClient
 from lxml.html.clean import Cleaner
@@ -20,6 +26,7 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from seal_rookery.search import ImageSizes, seal
 
+from doctor.lib.bitonal import BitonalError
 from doctor.lib.mojibake import fix_mojibake
 from doctor.lib.text_extraction import (
     extract_with_ocr,
@@ -440,6 +447,154 @@ async def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
     content = get_clean_body_content(content_str)
 
     return content, err, process.returncode
+
+
+# Presigned URL transport for the bitonal endpoint. Transient
+# failures (network errors, 5xx) are retried with backoff; a 403
+# means the presigned signature expired, so retrying the same URL
+# cannot succeed and the caller must re-presign.
+EGRESS_MAX_ATTEMPTS = 3
+EGRESS_BACKOFF_SECONDS = 1.0
+EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
+def validate_egress_url(url: str) -> None:
+    """Check a caller-supplied URL against the egress policy.
+
+    When DOCTOR_EGRESS_ALLOWED_HOSTS is set, the URL must be https
+    and its host must match one of the configured fnmatch patterns.
+    An empty setting disables the check.
+
+    :param url: The URL doctor was asked to fetch from or upload to.
+    :raises BitonalError: EGRESS_BLOCKED when the URL is not allowed.
+    """
+    allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
+    if not allowed_hosts:
+        return
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if parsed.scheme != "https" or not any(
+        fnmatch.fnmatch(hostname, pattern) for pattern in allowed_hosts
+    ):
+        raise BitonalError(
+            "EGRESS_BLOCKED",
+            f"URL blocked by egress policy: {parsed.scheme}://{hostname}",
+            status=400,
+        )
+
+
+def stream_url_to_file(url: str, output_path: str) -> str:
+    """Download a presigned GET URL to a file, streaming.
+
+    Never buffers the body in memory: shards can reach hundreds of
+    megabytes while the pod's memory allowance is under 500 MiB.
+
+    :param url: Presigned GET URL of the input document.
+    :param output_path: Where to write the body.
+    :return: sha256 hex digest of the downloaded bytes.
+    :raises BitonalError: INPUT_URL_EXPIRED on 403,
+        INPUT_DOWNLOAD_FAILED otherwise.
+    """
+    validate_egress_url(url)
+    last_error = ""
+    for attempt in range(EGRESS_MAX_ATTEMPTS):
+        if attempt:
+            time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt - 1))
+        try:
+            with (
+                httpx.Client(
+                    follow_redirects=False, timeout=EGRESS_TIMEOUT
+                ) as client,
+                client.stream("GET", url) as response,
+            ):
+                if response.status_code == 403:
+                    raise BitonalError(
+                        "INPUT_URL_EXPIRED",
+                        "input URL returned 403; the signature has "
+                        "expired and a retry cannot succeed",
+                        status=502,
+                    )
+                if 400 <= response.status_code < 500:
+                    raise BitonalError(
+                        "INPUT_DOWNLOAD_FAILED",
+                        f"input URL returned HTTP {response.status_code}",
+                        status=502,
+                    )
+                if response.status_code >= 500:
+                    last_error = f"HTTP {response.status_code}"
+                    continue
+                digest = hashlib.sha256()
+                with open(output_path, "wb") as f:
+                    for chunk in response.iter_bytes(1024 * 1024):
+                        f.write(chunk)
+                        digest.update(chunk)
+                return digest.hexdigest()
+        except httpx.HTTPError as e:
+            last_error = str(e)
+    raise BitonalError(
+        "INPUT_DOWNLOAD_FAILED",
+        f"input download failed after {EGRESS_MAX_ATTEMPTS} attempts: "
+        f"{last_error}",
+        status=502,
+    )
+
+
+def put_file_to_url(url: str, input_path: str, content_type: str) -> None:
+    """Upload a file to a presigned PUT URL.
+
+    A single PUT is atomic on S3: a partial upload never becomes a
+    gettable object, so the object's existence implies all of its
+    bytes are there. Content-Type is sent explicitly because the
+    presigned signature covers it.
+
+    :param url: Presigned PUT URL for the result object.
+    :param input_path: File to upload.
+    :param content_type: Content type the URL was signed with.
+    :raises BitonalError: RESULT_URL_EXPIRED on 403,
+        RESULT_UPLOAD_FAILED otherwise.
+    """
+    validate_egress_url(url)
+    headers = {
+        "Content-Type": content_type,
+        "Content-Length": str(os.path.getsize(input_path)),
+    }
+    last_error = ""
+    for attempt in range(EGRESS_MAX_ATTEMPTS):
+        if attempt:
+            time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt - 1))
+        try:
+            with (
+                open(input_path, "rb") as f,
+                httpx.Client(
+                    follow_redirects=False, timeout=EGRESS_TIMEOUT
+                ) as client,
+            ):
+                response = client.put(url, content=f, headers=headers)
+        except httpx.HTTPError as e:
+            last_error = str(e)
+            continue
+        if response.status_code < 400:
+            return
+        if response.status_code == 403:
+            raise BitonalError(
+                "RESULT_URL_EXPIRED",
+                "output URL returned 403; the signature has expired "
+                "and a retry cannot succeed",
+                status=502,
+            )
+        if response.status_code < 500:
+            raise BitonalError(
+                "RESULT_UPLOAD_FAILED",
+                f"output URL returned HTTP {response.status_code}",
+                status=502,
+            )
+        last_error = f"HTTP {response.status_code}"
+    raise BitonalError(
+        "RESULT_UPLOAD_FAILED",
+        f"result upload failed after {EGRESS_MAX_ATTEMPTS} attempts: "
+        f"{last_error}",
+        status=502,
+    )
 
 
 async def download_images(sorted_urls) -> list:

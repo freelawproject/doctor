@@ -321,7 +321,7 @@ wheels = [
 
 [[package]]
 name = "doctor"
-version = "0.3.5"
+version = "0.3.6"
 source = { virtual = "." }
 dependencies = [
     { name = "certifi" },
@@ -341,6 +341,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pdf2image" },
     { name = "pdfplumber" },
+    { name = "pikepdf" },
     { name = "pillow" },
     { name = "pkginfo" },
     { name = "pypdf" },
@@ -379,6 +380,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=1.1.1" },
     { name = "pdf2image", specifier = ">=1.7.1" },
     { name = "pdfplumber" },
+    { name = "pikepdf", specifier = ">=9" },
     { name = "pillow", specifier = ">=8.0.1" },
     { name = "pkginfo", specifier = ">=1.5.0.1" },
     { name = "pypdf", specifier = ">=5" },

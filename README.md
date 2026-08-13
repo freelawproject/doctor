@@ -273,6 +273,71 @@ Given a list of urls for images, this endpoint will convert them to a pdf. This 
 This returns the binary data of the pdf.
 
 
+### Endpoint: /convert/pdf/bitonal/
+
+Converts a scanned PDF (or a page range of it) to a bitonal (1-bit, CCITT
+Group 4) PDF. Pages are rasterized to grayscale one at a time, thresholded,
+and re-embedded as raw G4 streams, so memory use stays flat regardless of
+document size. Each output page keeps the exact MediaBox of its source page,
+so detection boxes expressed relative to the page rect stay valid.
+
+Parameters:
+
+ - `dpi` (default 300, range 72-600): rasterization resolution.
+ - `threshold` (default 128, range 0-255): gray values above it become white.
+ - `first_page` / `last_page` (optional, 1-indexed, inclusive): page range.
+ - `input_url` (instead of a `file` upload): a presigned GET URL to fetch the
+   input from.
+ - `output_url` (optional): a presigned PUT URL. When given, the result is
+   uploaded there (Content-Type `application/pdf` must be part of the
+   signature) and the response is a JSON summary instead of the PDF itself.
+
+With a file upload, the PDF comes back inline:
+
+    curl 'http://localhost:5050/convert/pdf/bitonal/' \
+     -X 'POST' \
+     -F "file=@doctor/test_assets/image-pdf.pdf" \
+     -F 'dpi=300' \
+     -F 'threshold=128' \
+     -o bitonal.pdf
+
+With presigned URLs, doctor never needs storage credentials — it only ever
+sees the URLs:
+
+    curl 'http://localhost:5050/convert/pdf/bitonal/' \
+     -X 'POST' \
+     --data-urlencode "input_url=$PRESIGNED_GET" \
+     --data-urlencode "output_url=$PRESIGNED_PUT"
+
+which returns a summary like:
+
+    {"success": true, "pages": 200, "page_count": 200, "dpi": 300,
+     "threshold": 128, "first_page": 1, "last_page": 200,
+     "bytes": 14680064, "sha256": "...", "source_sha256": "...",
+     "duration_ms": 61200}
+
+Failures return `{"success": false, "error_code": ..., "msg": ...}`. The
+error codes are: `VALIDATION_FAILED`, `INVALID_PDF`, `PAGE_RANGE_INVALID`,
+`CONVERSION_FAILED`, `PAGE_COUNT_MISMATCH`, `EGRESS_BLOCKED`,
+`INPUT_DOWNLOAD_FAILED`, `INPUT_URL_EXPIRED`, `RESULT_UPLOAD_FAILED` and
+`RESULT_URL_EXPIRED`. The `*_EXPIRED` codes mean a presigned signature
+returned HTTP 403, so the caller must re-presign rather than retry the same
+URL. Transient transport failures are retried with backoff before failing.
+
+A single PUT is atomic on S3: the result object existing implies all of its
+bytes are there, so `head_object` on the (caller-chosen) result key is a
+reliable completion probe. Note the upload happens while the request stays
+open; the HTTP response is the status channel.
+
+The `DOCTOR_EGRESS_ALLOWED_HOSTS` environment variable (comma-separated
+fnmatch patterns) restricts which hosts `input_url` and `output_url` may
+point to; allowed URLs must also be https. It defaults to
+`*.amazonaws.com`, which accepts presigned S3 URLs while blocking
+cluster-internal targets. Deployments can tighten it to exact bucket
+hostnames (a pattern without wildcards is an exact match), and setting it
+empty disables the check entirely, which local development and the test
+suite rely on (see `.env.example`).
+
 ### Endpoint: /convert/pdf/thumbnail/
 
 Thumbnail takes a pdf and returns a png thumbnail of the first page.

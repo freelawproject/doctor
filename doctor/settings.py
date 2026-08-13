@@ -27,6 +27,21 @@ ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
 
+# Host allowlist for endpoints that fetch or upload caller-supplied
+# URLs (currently the bitonal endpoint). Comma-separated fnmatch
+# patterns; when set, URLs must be https and match one of them. The
+# default admits any AWS host (presigned S3 URLs) while blocking
+# SSRF at cluster-internal services; deployments can pin it down to
+# exact bucket hostnames. Set it empty to disable the check, which
+# is what local dev and the test suite need (see .env.example).
+DOCTOR_EGRESS_ALLOWED_HOSTS = [
+    host.strip()
+    for host in env(
+        "DOCTOR_EGRESS_ALLOWED_HOSTS", default="*.amazonaws.com"
+    ).split(",")
+    if host.strip()
+]
+
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     sentry_sdk.init(

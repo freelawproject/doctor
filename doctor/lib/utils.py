@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import functools
+import hashlib
 import inspect
 import io
 import logging
@@ -295,6 +296,19 @@ def cleanup_form(form):
             pass
         except OSError:
             logger.error(f"Failed to delete temp file: {fp}", exc_info=True)
+
+
+def sha256_file(path: str) -> str:
+    """Hash a file in chunks so large files never enter memory whole.
+
+    :param path: The file to hash.
+    :return: sha256 hex digest.
+    """
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def make_file(filename, dir=None):

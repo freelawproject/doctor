@@ -21,6 +21,7 @@ dependencies = [
   "pandas>=1.1.1",
   "pdf2image>=1.7.1",
   "pdfplumber",
+  "pikepdf>=9",
   "pillow>=8.0.1",
   "pkginfo>=1.5.0.1",
   "pypdf>=5",

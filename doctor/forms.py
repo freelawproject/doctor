@@ -122,3 +122,69 @@ class DocumentForm(BaseFileForm):
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
     mime = forms.BooleanField(label="mime", required=False)
     strip_margin = forms.BooleanField(label="strip-margin", required=False)
+
+
+class BitonalPdfForm(forms.Form):
+    """Parameters for the bitonal conversion endpoint.
+
+    The input arrives either as a multipart upload (``file``) or as a
+    presigned GET URL (``input_url``) — exactly one of the two. When
+    ``output_url`` is present the result is uploaded there; otherwise
+    it is returned inline in the response.
+    """
+
+    file = forms.FileField(
+        label="document",
+        required=False,
+        validators=[FileExtensionValidator(["pdf"])],
+    )
+    input_url = forms.CharField(label="input-url", required=False)
+    output_url = forms.CharField(label="output-url", required=False)
+    dpi = forms.IntegerField(
+        label="dpi", required=False, min_value=72, max_value=600
+    )
+    threshold = forms.IntegerField(
+        label="threshold", required=False, min_value=0, max_value=255
+    )
+    first_page = forms.IntegerField(
+        label="first-page", required=False, min_value=1
+    )
+    last_page = forms.IntegerField(
+        label="last-page", required=False, min_value=1
+    )
+
+    def clean(self):
+        # Imported here to keep module import light; tasks pulls in
+        # the whole extraction stack.
+        from doctor.lib.bitonal import BitonalError
+        from doctor.tasks import validate_egress_url
+
+        file = self.cleaned_data.get("file")
+        input_url = self.cleaned_data.get("input_url")
+        if file and input_url:
+            raise ValidationError(
+                "Send either 'file' or 'input_url', not both."
+            )
+        if not file and not input_url:
+            raise ValidationError("Send one of 'file' or 'input_url'.")
+        for url in (input_url, self.cleaned_data.get("output_url")):
+            if url:
+                try:
+                    validate_egress_url(url)
+                except BitonalError as e:
+                    raise ValidationError(e.message) from e
+
+        if not self.cleaned_data.get("dpi"):
+            self.cleaned_data["dpi"] = 300
+        if self.cleaned_data.get("threshold") is None:
+            self.cleaned_data["threshold"] = 128
+
+        if file:
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=".pdf"
+            ) as fp:
+                self.cleaned_data["fp"] = fp.name
+                with open(fp.name, "wb") as f:
+                    for chunk in file.chunks():
+                        f.write(chunk)
+        return self.cleaned_data
