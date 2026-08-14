@@ -362,6 +362,26 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
             {"success": False, "error_code": e.error_code, "msg": e.message},
             status=e.status,
         )
+    except Exception as e:
+        # The daemon reads error_code, so even unexpected failures
+        # must return the documented JSON shape, not an HTML 500.
+        # INTERNAL_ERROR (unlike CONVERSION_FAILED) means retryable.
+        # Swallowing the exception also swallows Django's Sentry
+        # report, so log it explicitly.
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Unexpected error during bitonal conversion",
+            extra={
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+            },
+            exc_info=True,
+        )
+        return JsonResponse(
+            {"success": False, "error_code": "INTERNAL_ERROR", "msg": str(e)},
+            status=500,
+        )
     finally:
         cleanup_form(form)
         if downloaded_fp:

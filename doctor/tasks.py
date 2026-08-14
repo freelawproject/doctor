@@ -558,10 +558,16 @@ def stream_url_to_file(url: str, output_path: str) -> str:
     :param url: Presigned GET URL of the input document.
     :param output_path: Where to write the body.
     :return: sha256 hex digest of the downloaded bytes.
-    :raises BitonalError: INPUT_URL_EXPIRED on 403,
+    :raises BitonalError: INPUT_URL_EXPIRED on 403, INPUT_TOO_LARGE
+        when the body exceeds DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES,
         INPUT_DOWNLOAD_FAILED otherwise.
     """
     validate_egress_url(url)
+    # Cap the download: input_url is caller-supplied and an oversized
+    # object would fill the pod's shared disk. Content-Length fails
+    # fast; the streamed count catches missing or lying headers. No
+    # retries — the object will not shrink.
+    max_bytes = settings.DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES
 
     def attempt() -> str:
         with (
@@ -576,9 +582,30 @@ def stream_url_to_file(url: str, output_path: str) -> str:
                 "INPUT_DOWNLOAD_FAILED",
                 "input",
             )
+            content_length = response.headers.get("Content-Length", "")
+            if (
+                max_bytes
+                and content_length.isdigit()
+                and int(content_length) > max_bytes
+            ):
+                raise BitonalError(
+                    "INPUT_TOO_LARGE",
+                    f"input Content-Length {content_length} exceeds "
+                    f"the {max_bytes}-byte limit",
+                    status=400,
+                )
             digest = hashlib.sha256()
+            received = 0
             with open(output_path, "wb") as f:
                 for chunk in response.iter_bytes(1024 * 1024):
+                    received += len(chunk)
+                    if max_bytes and received > max_bytes:
+                        raise BitonalError(
+                            "INPUT_TOO_LARGE",
+                            f"input exceeded the {max_bytes}-byte "
+                            "limit while streaming",
+                            status=400,
+                        )
                     f.write(chunk)
                     digest.update(chunk)
             return digest.hexdigest()

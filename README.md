@@ -318,11 +318,14 @@ which returns a summary like:
 
 Failures return `{"success": false, "error_code": ..., "msg": ...}`. The
 error codes are: `VALIDATION_FAILED`, `INVALID_PDF`, `PAGE_RANGE_INVALID`,
-`CONVERSION_FAILED`, `PAGE_COUNT_MISMATCH`, `EGRESS_BLOCKED`,
-`INPUT_DOWNLOAD_FAILED`, `INPUT_URL_EXPIRED`, `RESULT_UPLOAD_FAILED` and
-`RESULT_URL_EXPIRED`. The `*_EXPIRED` codes mean a presigned signature
+`CONVERSION_FAILED`, `PAGE_COUNT_MISMATCH`, `PAGE_GEOMETRY_MISMATCH`,
+`EGRESS_BLOCKED`, `INPUT_TOO_LARGE`, `INPUT_DOWNLOAD_FAILED`,
+`INPUT_URL_EXPIRED`, `RESULT_UPLOAD_FAILED`, `RESULT_URL_EXPIRED` and
+`INTERNAL_ERROR`. The `*_EXPIRED` codes mean a presigned signature
 returned HTTP 403, so the caller must re-presign rather than retry the same
 URL. Transient transport failures are retried with backoff before failing.
+`INTERNAL_ERROR` means doctor itself failed unexpectedly — unlike
+`CONVERSION_FAILED`, the same request may succeed on retry.
 
 A single PUT is atomic on S3: the result object existing implies all of its
 bytes are there, so `head_object` on the (caller-chosen) result key is a
@@ -337,6 +340,15 @@ cluster-internal targets. Deployments can tighten it to exact bucket
 hostnames (a pattern without wildcards is an exact match), and setting it
 empty disables the check entirely, which local development and the test
 suite rely on (see `.env.example`).
+
+Three more environment variables bound the resources one request can
+consume. `DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS` (default 120) limits a
+single page's `pdftoppm` call; `DOCTOR_BITONAL_TIMEOUT_SECONDS` (default
+1800) is the whole-conversion budget; `DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES`
+(default 1 GiB, 0 disables) caps how large an `input_url` download may be
+(`INPUT_TOO_LARGE`). The defaults carry 30-60x headroom over the designed
+workload (a 200-page shard converts in about a minute), so they only trip
+on stuck or runaway work.
 
 ### Endpoint: /convert/pdf/thumbnail/
 

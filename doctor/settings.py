@@ -42,6 +42,20 @@ DOCTOR_EGRESS_ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+# Bitonal guardrails: per-page pdftoppm timeout, whole-conversion
+# budget, and input_url download cap (0 disables). Defaults carry
+# 30-60x headroom over the designed workload (a 200-page shard at
+# 300 DPI converts in ~1 minute), so they only trip on stuck work.
+DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS", default=120
+)
+DOCTOR_BITONAL_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_BITONAL_TIMEOUT_SECONDS", default=1800
+)
+DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
+    "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
+)
+
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     sentry_sdk.init(

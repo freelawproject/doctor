@@ -807,6 +807,9 @@ class StubS3Server(ThreadingHTTPServer):
         self.get_count = 0
         self.put_count = 0
         self.received_puts: list[dict] = []
+        # When True, GET responses omit Content-Length (HTTP/1.0
+        # close-delimited body), exercising the streamed-size check.
+        self.omit_get_content_length = False
 
 
 class StubS3Handler(BaseHTTPRequestHandler):
@@ -828,7 +831,8 @@ class StubS3Handler(BaseHTTPRequestHandler):
             return
         body = self.server.fixture_bytes
         self.send_response(200)
-        self.send_header("Content-Length", str(len(body)))
+        if not self.server.omit_get_content_length:
+            self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
@@ -1012,6 +1016,138 @@ class EgressPolicyTests(unittest.TestCase):
                 self.assertEqual(ctx.exception.error_code, "EGRESS_BLOCKED")
         with override_settings(DOCTOR_EGRESS_ALLOWED_HOSTS=[]):
             validate_egress_url("http://anything.example.com/key")
+
+
+class BitonalGuardrailTests(unittest.TestCase):
+    """Timeouts, the download cap, and the catch-all error path.
+
+    These run the view in-process with the test client (like
+    EgressPolicyTests) so that settings can be overridden and
+    failures injected per test.
+    """
+
+    fixture = "bitonal_marker_scan.pdf"
+
+    def upload(self):
+        with open(f"{asset_path}/{self.fixture}", "rb") as f:
+            return SimpleUploadedFile(
+                self.fixture, f.read(), "application/pdf"
+            )
+
+    def test_pdftoppm_timeout_error_code(self):
+        """Does a stuck pdftoppm surface as CONVERSION_FAILED?"""
+        from doctor.lib.bitonal import BitonalError, rasterize_page_to_gray
+
+        with (
+            patch(
+                "doctor.lib.bitonal.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["pdftoppm"], 120),
+            ),
+            self.assertRaises(BitonalError) as ctx,
+        ):
+            rasterize_page_to_gray("whatever.pdf", 1, 300)
+        self.assertEqual(ctx.exception.error_code, "CONVERSION_FAILED")
+        self.assertIn("timed out", ctx.exception.message)
+
+    def test_conversion_budget_exhausted(self):
+        """Does an exhausted whole-conversion budget stop the loop?"""
+        from django.test import override_settings
+
+        with override_settings(DOCTOR_BITONAL_TIMEOUT_SECONDS=0):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_FAILED")
+        self.assertIn("budget", payload["msg"])
+
+    def test_unexpected_error_returns_documented_json(self):
+        """Does a non-BitonalError produce the JSON shape, not HTML?"""
+        with patch(
+            "doctor.views.convert_pdf_to_bitonal",
+            side_effect=RuntimeError("pikepdf exploded"),
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "INTERNAL_ERROR")
+
+    def test_geometry_mismatch_error_code(self):
+        """Does a MediaBox drift report PAGE_GEOMETRY_MISMATCH?"""
+        from doctor.lib import bitonal
+        from doctor.lib.bitonal import BitonalError, convert_pdf_to_bitonal
+
+        real_add = bitonal.add_bitonal_page
+
+        def skewed_add(pdf, g4, size, box, rotation):
+            x0, y0, x1, y1 = box
+            real_add(pdf, g4, size, (x0, y0, x1 + 5, y1), rotation)
+
+        with (
+            tempfile.NamedTemporaryFile(suffix=".pdf") as output,
+            patch(
+                "doctor.lib.bitonal.add_bitonal_page", side_effect=skewed_add
+            ),
+            self.assertRaises(BitonalError) as ctx,
+        ):
+            convert_pdf_to_bitonal(
+                f"{asset_path}/{self.fixture}",
+                output.name,
+                dpi=72,
+                threshold=128,
+                first_page=1,
+                last_page=1,
+            )
+        self.assertEqual(ctx.exception.error_code, "PAGE_GEOMETRY_MISMATCH")
+
+    def _download_capped(self, omit_content_length: bool):
+        """Run a presigned-GET conversion against a tiny download cap."""
+        from django.test import override_settings
+
+        with open(f"{asset_path}/{self.fixture}", "rb") as f:
+            server = StubS3Server(f.read())
+        server.omit_get_content_length = omit_content_length
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            with override_settings(
+                DOCTOR_EGRESS_ALLOWED_HOSTS=[],
+                DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES=1000,
+            ):
+                response = Client().post(
+                    reverse("convert-pdf-bitonal"),
+                    data={
+                        "input_url": f"http://127.0.0.1:{port}/in/shard.pdf",
+                        "output_url": f"http://127.0.0.1:{port}/out/shard.pdf",
+                    },
+                )
+            self.assertEqual(response.status_code, 400)
+            payload = json.loads(response.content)
+            self.assertFalse(payload["success"])
+            self.assertEqual(payload["error_code"], "INPUT_TOO_LARGE")
+            self.assertEqual(
+                server.get_count, 1, msg="an oversized input must not retry"
+            )
+            self.assertEqual(server.put_count, 0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_input_too_large_content_length(self):
+        """Is an oversized Content-Length rejected before downloading?"""
+        self._download_capped(omit_content_length=False)
+
+    def test_input_too_large_while_streaming(self):
+        """Is an oversized body without Content-Length still caught?"""
+        self._download_capped(omit_content_length=True)
 
 
 class TestFailedValidations(unittest.TestCase):

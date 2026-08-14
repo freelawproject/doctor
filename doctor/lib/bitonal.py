@@ -20,9 +20,11 @@ relative to the page rect stay valid.
 import io
 import subprocess
 import threading
+import time
 
 import numpy as np
 import pikepdf
+from django.conf import settings
 from PIL import Image, TiffImagePlugin
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -58,7 +60,10 @@ class BitonalError(Exception):
 
 
 def rasterize_page_to_gray(
-    input_path: str, page_number: int, dpi: int
+    input_path: str,
+    page_number: int,
+    dpi: int,
+    timeout: float | None = None,
 ) -> Image.Image:
     """Rasterize a single PDF page to a grayscale PIL image.
 
@@ -68,8 +73,13 @@ def rasterize_page_to_gray(
     :param input_path: Path of the source PDF.
     :param page_number: 1-indexed page number.
     :param dpi: Rasterization resolution.
+    :param timeout: Seconds pdftoppm may take; defaults to the
+        DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS setting. Without it, a
+        malformed page can make poppler spin forever.
     :return: Grayscale (mode "L") image of the page.
     """
+    if timeout is None:
+        timeout = settings.DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS
     command = [
         "pdftoppm",
         "-singlefile",
@@ -80,7 +90,13 @@ def rasterize_page_to_gray(
         str(page_number),
         input_path,
     ]
-    p = subprocess.run(command, capture_output=True)
+    try:
+        p = subprocess.run(command, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise BitonalError(
+            "CONVERSION_FAILED",
+            f"pdftoppm timed out after {timeout:.0f}s on page {page_number}",
+        ) from e
     if p.returncode != 0 or not p.stdout:
         raise BitonalError(
             "CONVERSION_FAILED",
@@ -220,14 +236,17 @@ def convert_pdf_to_bitonal(
     :return: Conversion metadata (page counts and parameters).
     """
     try:
-        reader = PdfReader(input_path)
-        source_pages = [
-            (
-                tuple(float(v) for v in page.mediabox),
-                (page.rotation or 0) % 360,
-            )
-            for page in reader.pages
-        ]
+        # Extract only mediabox/rotation so the handle closes here,
+        # not at GC.
+        with open(input_path, "rb") as f:
+            reader = PdfReader(f)
+            source_pages = [
+                (
+                    tuple(float(v) for v in page.mediabox),
+                    (page.rotation or 0) % 360,
+                )
+                for page in reader.pages
+            ]
     except (
         # The same tuple get_page_count uses: pypdf raises TypeError,
         # KeyError and AssertionError (not just PdfReadError) on
@@ -256,15 +275,30 @@ def convert_pdf_to_bitonal(
             status=400,
         )
 
+    # Without a whole-conversion budget, the per-page timeout still
+    # allows pages x page-timeout worst case.
+    total_timeout = settings.DOCTOR_BITONAL_TIMEOUT_SECONDS
+    page_timeout = settings.DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS
+    deadline = time.monotonic() + total_timeout
+
     pdf = pikepdf.new()
     for number in range(first_page, last_page + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise BitonalError(
+                "CONVERSION_FAILED",
+                f"conversion exceeded the {total_timeout}s budget "
+                f"at page {number}",
+            )
         box, rotation = source_pages[number - 1]
         if rotation not in (0, 90, 180, 270):
             raise BitonalError(
                 "CONVERSION_FAILED",
                 f"page {number} has unsupported rotation {rotation}",
             )
-        gray = rasterize_page_to_gray(input_path, number, dpi)
+        gray = rasterize_page_to_gray(
+            input_path, number, dpi, timeout=min(page_timeout, remaining)
+        )
         g4 = gray_to_g4(gray, threshold)
         add_bitonal_page(pdf, g4, gray.size, box, rotation)
     pdf.save(output_path)
@@ -274,18 +308,21 @@ def convert_pdf_to_bitonal(
     # re-read what was actually written and refuse to ship anything
     # that violates that.
     expected = last_page - first_page + 1
-    result = PdfReader(output_path)
-    if len(result.pages) != expected:
+    with open(output_path, "rb") as f:
+        result = PdfReader(f)
+        written_boxes = [
+            tuple(float(v) for v in page.mediabox) for page in result.pages
+        ]
+    if len(written_boxes) != expected:
         raise BitonalError(
             "PAGE_COUNT_MISMATCH",
-            f"wrote {len(result.pages)} pages, expected {expected}",
+            f"wrote {len(written_boxes)} pages, expected {expected}",
         )
-    for offset, page in enumerate(result.pages):
+    for offset, written_box in enumerate(written_boxes):
         source_box = source_pages[first_page - 1 + offset][0]
-        written_box = tuple(float(v) for v in page.mediabox)
         if any(abs(a - b) > 0.01 for a, b in zip(source_box, written_box)):
             raise BitonalError(
-                "PAGE_COUNT_MISMATCH",
+                "PAGE_GEOMETRY_MISMATCH",
                 f"page {first_page + offset} MediaBox {written_box} "
                 f"does not match source {source_box}",
             )
