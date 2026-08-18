@@ -3,7 +3,21 @@ The following changes are not yet released, but are code complete:
 
 ## Current
 
- -
+Features:
+ - New `/convert/pdf/bitonal/` endpoint: converts a scanned PDF (or a page
+   range) to a bitonal CCITT G4 PDF, streaming page by page. Input arrives
+   as a multipart upload or a presigned GET URL; the result returns inline
+   or is uploaded to a presigned PUT URL. Adds the
+   `DOCTOR_EGRESS_ALLOWED_HOSTS` setting (default `*.amazonaws.com`) to
+   restrict which hosts caller-supplied URLs may point to, plus
+   per-request guardrails: a per-page `pdftoppm` timeout
+   (`DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS`), a whole-conversion budget
+   (`DOCTOR_BITONAL_TIMEOUT_SECONDS`) and a cap on `input_url` download
+   size (`DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES`). Unexpected failures
+   return the documented JSON error shape with code `INTERNAL_ERROR`
+   instead of an HTML 500.
+ - Added `pikepdf` as an explicit dependency (it was already present
+   transitively via `img2pdf`).
 
 **0.3.6 - 2026-05-27** #237
 
