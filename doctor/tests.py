@@ -913,6 +913,32 @@ class BitonalTransportTests(unittest.TestCase):
         self.assertEqual(received["bytes"], payload["bytes"])
         self.assertEqual(received["content_type"], "application/pdf")
 
+    def test_multipart_input_presigned_output(self):
+        """Multipart in, presigned PUT out: is source_sha256 right?
+
+        The digest comes from the form's write-time hashing (the
+        upload is never re-read), so this pins that it still matches
+        the uploaded bytes.
+        """
+        response = requests.post(
+            self.endpoint,
+            files={"file": (self.fixture, self.fixture_bytes)},
+            data={
+                "output_url": self.output_url,
+                "dpi": 100,
+                "threshold": 128,
+            },
+        )
+        self.assertEqual(response.status_code, 200, msg=response.text)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(
+            payload["source_sha256"],
+            hashlib.sha256(self.fixture_bytes).hexdigest(),
+        )
+        self.assertEqual(self.server.get_count, 0)
+        self.assertEqual(len(self.server.received_puts), 1)
+
     def test_input_url_expired(self):
         """A 403 on the input URL must fail fast, without retries."""
         self.server.get_statuses = [403]
@@ -1016,6 +1042,35 @@ class EgressPolicyTests(unittest.TestCase):
                 self.assertEqual(ctx.exception.error_code, "EGRESS_BLOCKED")
         with override_settings(DOCTOR_EGRESS_ALLOWED_HOSTS=[]):
             validate_egress_url("http://anything.example.com/key")
+
+    def test_malformed_url_is_terminal(self):
+        """Does a malformed URL fail as a terminal 4xx, not INTERNAL_ERROR?
+
+        httpx.InvalidURL is not an httpx.HTTPError, and a malformed
+        port passes validate_egress_url (urlparse never parses the
+        port), so without an explicit catch it would escape the
+        retry loop into the retryable INTERNAL_ERROR/500 catch-all
+        even though retrying a broken URL can never succeed.
+        """
+        from django.test import override_settings
+
+        from doctor.lib.bitonal import BitonalError
+        from doctor.tasks import put_file_to_url, stream_url_to_file
+
+        url = "https://bucket.s3.amazonaws.com:notaport/shard.pdf"
+        with (
+            override_settings(DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]),
+            tempfile.NamedTemporaryFile(suffix=".pdf") as scratch,
+        ):
+            with self.assertRaises(BitonalError) as ctx:
+                stream_url_to_file(url, scratch.name)
+            self.assertEqual(ctx.exception.error_code, "INPUT_DOWNLOAD_FAILED")
+            self.assertEqual(ctx.exception.status, 400)
+
+            with self.assertRaises(BitonalError) as ctx:
+                put_file_to_url(url, scratch.name, "application/pdf")
+            self.assertEqual(ctx.exception.error_code, "RESULT_UPLOAD_FAILED")
+            self.assertEqual(ctx.exception.status, 400)
 
 
 class BitonalGuardrailTests(unittest.TestCase):

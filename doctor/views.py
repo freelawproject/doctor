@@ -38,7 +38,6 @@ from doctor.lib.utils import (
     make_page_with_text,
     make_png_thumbnail_for_instance,
     make_png_thumbnails,
-    sha256_file,
     strip_metadata_from_bytes,
     strip_metadata_from_path,
     strip_metadata_with_exiftool,
@@ -325,7 +324,7 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
             input_fp = downloaded_fp
         else:
             input_fp = form.cleaned_data["fp"]
-            source_sha256 = sha256_file(input_fp)
+            source_sha256 = form.cleaned_data["source_sha256"]
 
         with NamedTemporaryFile(suffix=".pdf") as output:
             metadata = convert_pdf_to_bitonal(

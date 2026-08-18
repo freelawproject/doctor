@@ -527,7 +527,9 @@ def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
 
     Retries _TransientTransferError and httpx transport errors with
     exponential backoff. BitonalError — the fail-fast
-    classifications from _classify_status — propagates immediately.
+    classifications from _classify_status — propagates immediately,
+    and a malformed URL (httpx.InvalidURL) fails fast as a terminal
+    4xx with failed_code.
 
     :param attempt: Zero-argument callable performing one attempt.
     :param failed_code: Error code raised when attempts are exhausted.
@@ -540,6 +542,15 @@ def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
             time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt_number - 1))
         try:
             return attempt()
+        except httpx.InvalidURL as e:
+            # Not an httpx.HTTPError: raised when the request is
+            # built, for a malformed port or host that urlparse (and
+            # so validate_egress_url) accepts. A broken URL can never
+            # succeed, so it must neither retry here nor escape to
+            # the retryable INTERNAL_ERROR catch-all.
+            raise BitonalError(
+                failed_code, f"invalid URL: {e}", status=400
+            ) from e
         except (_TransientTransferError, httpx.HTTPError) as e:
             last_error = str(e)
     raise BitonalError(

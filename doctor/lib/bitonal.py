@@ -217,6 +217,32 @@ def add_bitonal_page(
     pdf.pages.append(pikepdf.Page(pdf.make_indirect(page)))
 
 
+def read_page_geometry(
+    path: str,
+) -> list[tuple[tuple[float, float, float, float], int]]:
+    """Read (MediaBox, rotation) for every page of a PDF.
+
+    Extracts only mediabox/rotation so the handle closes here, not
+    at GC. Callers own the exception mapping: the source read parses
+    untrusted caller input and maps failures to INVALID_PDF, while
+    the post-write verification read parses doctor's own output,
+    where a failure is our bug and must not be blamed on the client.
+
+    :param path: Path of the PDF to read.
+    :return: One (MediaBox floats, /Rotate normalized to 0-359)
+        tuple per page.
+    """
+    with open(path, "rb") as f:
+        reader = PdfReader(f)
+        return [
+            (
+                tuple(float(v) for v in page.mediabox),
+                (page.rotation or 0) % 360,
+            )
+            for page in reader.pages
+        ]
+
+
 def convert_pdf_to_bitonal(
     input_path: str,
     output_path: str,
@@ -236,17 +262,7 @@ def convert_pdf_to_bitonal(
     :return: Conversion metadata (page counts and parameters).
     """
     try:
-        # Extract only mediabox/rotation so the handle closes here,
-        # not at GC.
-        with open(input_path, "rb") as f:
-            reader = PdfReader(f)
-            source_pages = [
-                (
-                    tuple(float(v) for v in page.mediabox),
-                    (page.rotation or 0) % 360,
-                )
-                for page in reader.pages
-            ]
+        source_pages = read_page_geometry(input_path)
     except (
         # The same tuple get_page_count uses: pypdf raises TypeError,
         # KeyError and AssertionError (not just PdfReadError) on
@@ -308,11 +324,7 @@ def convert_pdf_to_bitonal(
     # re-read what was actually written and refuse to ship anything
     # that violates that.
     expected = last_page - first_page + 1
-    with open(output_path, "rb") as f:
-        result = PdfReader(f)
-        written_boxes = [
-            tuple(float(v) for v in page.mediabox) for page in result.pages
-        ]
+    written_boxes = [box for box, _ in read_page_geometry(output_path)]
     if len(written_boxes) != expected:
         raise BitonalError(
             "PAGE_COUNT_MISMATCH",

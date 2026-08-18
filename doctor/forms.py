@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import uuid
@@ -173,6 +174,10 @@ class BitonalPdfForm(forms.Form):
             self.cleaned_data["threshold"] = 128
 
         if file:
+            # Hash while writing, like stream_url_to_file and
+            # put_file_to_url do, so the view never re-reads the
+            # upload just to compute source_sha256.
+            digest = hashlib.sha256()
             with tempfile.NamedTemporaryFile(
                 delete=False, suffix=".pdf"
             ) as fp:
@@ -180,4 +185,6 @@ class BitonalPdfForm(forms.Form):
                 with open(fp.name, "wb") as f:
                     for chunk in file.chunks():
                         f.write(chunk)
+                        digest.update(chunk)
+            self.cleaned_data["source_sha256"] = digest.hexdigest()
         return self.cleaned_data

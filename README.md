@@ -323,7 +323,9 @@ error codes are: `VALIDATION_FAILED`, `INVALID_PDF`, `PAGE_RANGE_INVALID`,
 `INPUT_URL_EXPIRED`, `RESULT_UPLOAD_FAILED`, `RESULT_URL_EXPIRED` and
 `INTERNAL_ERROR`. The `*_EXPIRED` codes mean a presigned signature
 returned HTTP 403, so the caller must re-presign rather than retry the same
-URL. Transient transport failures are retried with backoff before failing.
+URL. Transient transport failures are retried with backoff before failing;
+a malformed URL is never retried and fails immediately as
+`INPUT_DOWNLOAD_FAILED` or `RESULT_UPLOAD_FAILED`.
 `INTERNAL_ERROR` means doctor itself failed unexpectedly — unlike
 `CONVERSION_FAILED`, the same request may succeed on retry.
 
