@@ -13,6 +13,8 @@ import img2pdf
 import magic
 import pytesseract
 import requests
+from centralia import CourtNotReleased, UnknownCourt
+from centralia import read as centralia_read
 from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
@@ -28,6 +30,7 @@ from doctor.forms import (
     DocumentForm,
     ImagePdfForm,
     MimeForm,
+    StructuredOpinionForm,
     ThumbnailForm,
 )
 from doctor.lib.bitonal import BitonalError, convert_pdf_to_bitonal
@@ -133,6 +136,88 @@ def extract_recap_document(request) -> JsonResponse:
                 "content": content,
                 "extracted_by_ocr": extracted_by_ocr,
             }
+        )
+    finally:
+        cleanup_form(form)
+
+
+def extract_structured_opinion(request) -> JsonResponse:
+    """Extract a structured opinion from a digital PDF with centralia.
+
+    For text-based court PDFs this replaces pdftotext/OCR: instead of a
+    flat string, centralia returns the case-level criteria, one entry
+    per opinion with its own html and text, and Harvard casebody XML.
+    The payload is passed through as centralia returns it.
+
+    centralia reads only the courts it has been ported to. An id no
+    court declares fails as UNKNOWN_COURT, and a court still being
+    worked on fails as COURT_NOT_RELEASED unless allow_pending is set.
+
+    Deliberately a sync view: extraction is CPU-bound, so it runs on
+    the worker's thread pool instead of blocking the event loop.
+
+    :param request: The request object
+    :return: JsonResponse with centralia's payload, or a JSON error
+        carrying an error_code.
+    """
+    # Accept the court id as form data or query params: CL's
+    # microservice() helper sends some endpoints one way, some the other.
+    form = StructuredOpinionForm(request.POST or request.GET, request.FILES)
+    try:
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "VALIDATION_FAILED",
+                    "msg": form.errors.get_json_data(),
+                },
+                status=BAD_REQUEST,
+            )
+        try:
+            payload = centralia_read(
+                form.cleaned_data["fp"],
+                court_id=form.cleaned_data["court_id"],
+                allow_pending=form.cleaned_data["allow_pending"],
+            )
+        except UnknownCourt as e:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "UNKNOWN_COURT",
+                    "msg": str(e),
+                },
+                status=BAD_REQUEST,
+            )
+        except CourtNotReleased as e:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "COURT_NOT_RELEASED",
+                    "msg": str(e),
+                },
+                status=BAD_REQUEST,
+            )
+        return JsonResponse({"success": True, **payload})
+    except Exception as e:
+        # Swallowing the exception also swallows Django's Sentry
+        # report, so log it explicitly.
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Structured opinion extraction failed",
+            extra={
+                "court_id": form.data.get("court_id"),
+                "err": str(e),
+            },
+            exc_info=True,
+        )
+        return JsonResponse(
+            {
+                "success": False,
+                "error_code": "EXTRACTION_FAILED",
+                "msg": str(e),
+            },
+            status=500,
         )
     finally:
         cleanup_form(form)

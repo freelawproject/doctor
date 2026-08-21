@@ -4,6 +4,16 @@ The following changes are not yet released, but are code complete:
 ## Current
 
 Features:
+ - New `/extract/opinion/structured/` endpoint: given a digital (text-based)
+   court PDF and a `court_id`, returns a structured opinion extracted with
+   [centralia](https://github.com/freelawproject/centralia) — case-level
+   criteria, one entry per writing with its own author/text/footnotes,
+   rendered HTML and Harvard casebody XML. For the courts centralia has
+   readers for this replaces pdftotext/OCR; centralia's payload is passed
+   through unchanged. Unreadable court ids fail as `UNKNOWN_COURT` and
+   courts still being worked on as `COURT_NOT_RELEASED` (override with
+   `allow_pending`) rather than silently reading worse. Adds `centralia`
+   as a dependency.
  - New `/convert/pdf/bitonal/` endpoint: converts a scanned PDF (or a page
    range) to a bitonal CCITT G4 PDF, streaming page by page. Input arrives
    as a multipart upload or a presigned GET URL; the result returns inline

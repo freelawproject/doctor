@@ -125,6 +125,35 @@ class DocumentForm(BaseFileForm):
     strip_margin = forms.BooleanField(label="strip-margin", required=False)
 
 
+class StructuredOpinionForm(forms.Form):
+    """Parameters for the structured opinion extraction endpoint.
+
+    A digital (text-based) court PDF plus the court it came from.
+    centralia reads only the courts it has been ported to, so the
+    court id is required rather than sniffed.
+    """
+
+    file = forms.FileField(
+        label="document",
+        required=True,
+        validators=[FileExtensionValidator(["pdf"])],
+    )
+    court_id = forms.CharField(label="court-id", required=True)
+    allow_pending = forms.BooleanField(label="allow-pending", required=False)
+
+    def clean_file(self):
+        file = self.cleaned_data.get("file")
+        if not file:
+            raise ValidationError("File is missing.")
+        self.cleaned_data["original_filename"] = file.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as fp:
+            self.cleaned_data["fp"] = fp.name
+            with open(fp.name, "wb") as f:
+                for chunk in file.chunks():
+                    f.write(chunk)
+        return file
+
+
 class BitonalPdfForm(forms.Form):
     """Parameters for the bitonal conversion endpoint.
 
