@@ -141,6 +141,7 @@ def extract_recap_document(request) -> JsonResponse:
         cleanup_form(form)
 
 
+@log_upload_lifecycle
 def extract_structured_opinion(request) -> JsonResponse:
     """Extract a structured opinion from a digital PDF with centralia.
 

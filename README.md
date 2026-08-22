@@ -168,7 +168,10 @@ come back `valid` with zero opinions and no text. Callers should fall back to
 Failures return `{"success": false, "error_code": ..., "msg": ...}`. The error
 codes are `VALIDATION_FAILED`, `UNKNOWN_COURT` (no court declares that id),
 `COURT_NOT_RELEASED` (the court is still being worked on; pass `allow_pending`)
-and `EXTRACTION_FAILED`.
+and `EXTRACTION_FAILED`. As with `/convert/pdf/bitonal/`, `msg` is a **string**
+for every code except `VALIDATION_FAILED`, where it is the **object** Django's
+form validation produces (field name to a list of `{message, code}`), so a
+caller reading `msg` should expect either shape.
 
 
 ## Utilities
