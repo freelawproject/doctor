@@ -1496,3 +1496,147 @@ class TestCleanupContent(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StructuredOpinionTests(unittest.TestCase):
+    """Tests for centralia-backed structured opinion extraction.
+
+    Run in-process with the test client so the suite does not depend on
+    the containerized service being up.
+    """
+
+    def _post(self, filename="ca1-opinion.pdf", **extra):
+        with open(f"{asset_path}/{filename}", "rb") as f:
+            data = {
+                "file": SimpleUploadedFile(filename, f.read()),
+                **extra,
+            }
+            return Client().post(
+                reverse("extract-structured-opinion"), data=data
+            )
+
+    def test_structured_extraction(self):
+        """Does a digital ca1 PDF come back as a correctly parsed document?
+
+        The assertions check real extracted content, not just that the
+        keys are present: this is what proves centralia actually read
+        the PDF rather than returning an empty-but-well-shaped payload.
+        """
+        response = self._post(court_id="ca1")
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["status"], "valid")
+        self.assertEqual(payload["court_id"], "ca1")
+
+        # Case-level criteria, read off the cover page.
+        cluster = payload["cluster"]
+        self.assertEqual(
+            cluster["case_name"],
+            "DEMAN KIM v. TODD BLANCHE,* Acting Attorney General",
+        )
+        self.assertEqual(
+            cluster["court"],
+            "United States Court of Appeals For the First Circuit",
+        )
+        self.assertEqual(cluster["docket_number"], "No. 24-2042")
+        self.assertEqual(cluster["date_filed"], "July 30, 2026")
+        self.assertEqual(cluster["date_filed_iso"], "2026-07-30")
+        self.assertEqual(cluster["n_pages"], 12)
+        self.assertEqual(cluster["panel"], ["Aframe", "Lipez", "Dunlap"])
+        self.assertEqual(
+            cluster["parties"],
+            ["DEMAN KIM", "TODD BLANCHE,* Acting Attorney General"],
+        )
+        self.assertEqual(
+            cluster["lower_court"],
+            "PETITION FOR REVIEW OF AN ORDER OF THE BOARD OF "
+            "IMMIGRATION APPEALS",
+        )
+        self.assertTrue(cluster["attorneys"].startswith("Randy Olen"))
+
+        # One entry per writing, each with its own author and body text.
+        self.assertEqual(len(payload["opinions"]), 1)
+        opinion = payload["opinions"][0]
+        self.assertEqual(opinion["order"], 1)
+        self.assertEqual(opinion["type"], "majority")
+        self.assertEqual(opinion["author"], "AFRAME, Circuit Judge.")
+        self.assertEqual(opinion["author_name"], "AFRAME")
+        self.assertEqual(opinion["author_title"], "Circuit Judge")
+        self.assertTrue(
+            opinion["text"].startswith(
+                "Deman Kim petitions from the Board of Immigration Appeals'"
+            ),
+            msg=opinion["text"][:120],
+        )
+        self.assertIn("requiring vacatur under Rule 11.", opinion["text"])
+
+        # Footnotes are labeled and attached to their writing, and their
+        # text is already inside opinion["text"] -- callers do not
+        # stitch it back in.
+        self.assertEqual(
+            [f["label"] for f in opinion["footnotes"]], ["1", "2", "3"]
+        )
+        self.assertTrue(
+            opinion["footnotes"][0]["text"].startswith(
+                '"Sua sponte" typically describes a situation'
+            )
+        )
+        self.assertIn(opinion["footnotes"][0]["text"][:40], opinion["text"])
+
+        # The headmatter carries its own notes, separate from the body's.
+        headnotes = payload["headmatter"]["footnotes"]
+        self.assertEqual([f["label"] for f in headnotes], ["*"])
+        self.assertIn(
+            "automatically substituted for former Attorney General",
+            headnotes[0]["text"],
+        )
+        self.assertEqual(payload["diagnostics"]["footnote_count"], 4)
+
+        # Nothing went unaccounted for: no unplaced content, no warnings.
+        diagnostics = payload["diagnostics"]
+        self.assertEqual(diagnostics["rollout"], "released")
+        self.assertEqual(diagnostics["residual_content"], 0)
+        self.assertEqual(diagnostics["headmatter_untinted"], 0)
+        self.assertEqual(diagnostics["unbylined_opinions"], 0)
+        self.assertEqual(diagnostics["warnings"], [])
+
+        # The renderings CL consumes instead of a flat pdftotext string.
+        self.assertIn(
+            "United States Court of Appeals", payload["headmatter"]["text"]
+        )
+        self.assertIn(
+            "<docketnumber>No. 24-2042</docketnumber>", payload["casebody"]
+        )
+        self.assertIn("<parties>DEMAN KIM</parties>", payload["casebody"])
+        self.assertTrue(payload["html"].startswith("<div class="))
+
+    def test_unknown_court(self):
+        """Does an unregistered court id fail loudly rather than read worse?"""
+        response = self._post(court_id="notacourt")
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "UNKNOWN_COURT")
+
+    def test_court_not_released(self):
+        """Is a held-back court refused unless allow_pending is set?"""
+        response = self._post(court_id="cacd")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            json.loads(response.content)["error_code"], "COURT_NOT_RELEASED"
+        )
+
+        response = self._post(court_id="cacd", allow_pending="true")
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["diagnostics"]["rollout"], "pending")
+
+    def test_court_id_required(self):
+        """Is the court id required rather than sniffed?"""
+        response = self._post()
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "VALIDATION_FAILED")
+        self.assertIn("court_id", payload["msg"])

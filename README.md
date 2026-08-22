@@ -120,6 +120,60 @@ Valid requests will receive a JSON response with the following keys:
  - `extracted_by_ocr`: Whether OCR was needed and used during processing.
 
 
+### Endpoint: /extract/opinion/structured/
+
+Given a **digital** (text-based) court PDF and the court it came from, extract a
+structured opinion with [centralia][centralia]. For the courts centralia has
+been ported to this replaces pdftotext/OCR: instead of one flat string you get
+the case-level criteria, one entry per writing with its own author and text, and
+Harvard casebody XML. The payload is passed through exactly as centralia returns
+it — nothing is composed or re-stitched here.
+
+[centralia]: https://github.com/freelawproject/centralia
+
+Parameters:
+
+ - `court_id` (required): The CourtListener court id, e.g. `ca1`. It is required
+   rather than sniffed, because centralia reads only the courts it has a reader
+   for, and an unregistered id would otherwise silently read worse.
+ - `allow_pending` (optional): Read a court that is still being worked on.
+   Without it, a held-back court is refused; `diagnostics.rollout` reports
+   which you got.
+
+```bash
+curl 'http://localhost:5050/extract/opinion/structured/' \
+  -X 'POST' \
+  -F "file=@doctor/test_assets/ca1-opinion.pdf" \
+  -F 'court_id=ca1'
+```
+
+Valid requests receive a JSON response with `success: true` plus centralia's
+payload. The keys callers use most:
+
+ - `status`: `valid` | `review` | `scanned` | `failed`
+ - `cluster`: the case — case name, citation, docket number, filing dates (both
+   as printed and ISO), panel, parties, disposition, lower court
+ - `opinions`: one entry per writing, each with `type`, `author`, `author_name`,
+   `text`, `html` and `footnotes`. Footnote text is **already inside** the
+   writing's `text`; callers do not append it.
+ - `headmatter` / `endmatter`: the cover and the appearances, as role-bearing
+   rows, each with its own `footnotes`
+ - `html`: the document's text as HTML; `casebody`: Harvard casebody XML
+ - `diagnostics`: page facts, what went unplaced, and `warnings`
+
+Note that `status` alone is not an OCR-fallback signal: an image-based PDF can
+come back `valid` with zero opinions and no text. Callers should fall back to
+`/extract/doc/text/` when the returned text is empty.
+
+Failures return `{"success": false, "error_code": ..., "msg": ...}`. The error
+codes are `VALIDATION_FAILED`, `UNKNOWN_COURT` (no court declares that id),
+`COURT_NOT_RELEASED` (the court is still being worked on; pass `allow_pending`)
+and `EXTRACTION_FAILED`. As with `/convert/pdf/bitonal/`, `msg` is a **string**
+for every code except `VALIDATION_FAILED`, where it is the **object** Django's
+form validation produces (field name to a list of `{message, code}`), so a
+caller reading `msg` should expect either shape.
+
+
 ## Utilities
 
 ### Endpoint: /utils/page-count/pdf/
