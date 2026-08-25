@@ -15,7 +15,17 @@ urlpatterns = [
         views.extract_recap_document,
         name="extract-recap-document",
     ),
+    path(
+        "extract/opinion/structured/",
+        views.extract_structured_opinion,
+        name="extract-structured-opinion",
+    ),
     path("convert/image/pdf/", views.image_to_pdf, name="image-to-pdf"),
+    path(
+        "convert/pdf/bitonal/",
+        views.convert_pdf_bitonal,
+        name="convert-pdf-bitonal",
+    ),
     path("convert/images/pdf/", views.images_to_pdf, name="images-to-pdf"),
     path("convert/pdf/thumbnail/", views.make_png_thumbnail, name="thumbnail"),
     path(

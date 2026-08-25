@@ -27,6 +27,35 @@ ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
 
+# Host allowlist for endpoints that fetch or upload caller-supplied
+# URLs (currently the bitonal endpoint). Comma-separated fnmatch
+# patterns; when set, URLs must be https and match one of them. The
+# default admits any AWS host (presigned S3 URLs) while blocking
+# SSRF at cluster-internal services; deployments can pin it down to
+# exact bucket hostnames. Set it empty to disable the check, which
+# is what local dev and the test suite need (see .env.example).
+DOCTOR_EGRESS_ALLOWED_HOSTS = [
+    host.strip()
+    for host in env(
+        "DOCTOR_EGRESS_ALLOWED_HOSTS", default="*.amazonaws.com"
+    ).split(",")
+    if host.strip()
+]
+
+# Bitonal guardrails: per-page pdftoppm timeout, whole-conversion
+# budget, and input_url download cap (0 disables). Defaults carry
+# 30-60x headroom over the designed workload (a 200-page shard at
+# 300 DPI converts in ~1 minute), so they only trip on stuck work.
+DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS", default=120
+)
+DOCTOR_BITONAL_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_BITONAL_TIMEOUT_SECONDS", default=1800
+)
+DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
+    "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
+)
+
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     sentry_sdk.init(

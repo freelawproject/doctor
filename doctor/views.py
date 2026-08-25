@@ -1,8 +1,10 @@
+import contextlib
 import logging
 import mimetypes
 import os
 import re
 import shutil
+import time
 from http.client import BAD_REQUEST
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -12,6 +14,8 @@ import img2pdf
 import magic
 import pytesseract
 import requests
+from centralia import CourtNotReleased, UnknownCourt
+from centralia import read as centralia_read
 from django.core.exceptions import BadRequest
 from django.http import FileResponse, HttpResponse, JsonResponse
 from lxml.etree import ParserError, XMLSyntaxError
@@ -23,11 +27,14 @@ from pytesseract import Output
 from doctor.forms import (
     AudioForm,
     BaseFileForm,
+    BitonalPdfForm,
     DocumentForm,
     ImagePdfForm,
     MimeForm,
+    StructuredOpinionForm,
     ThumbnailForm,
 )
+from doctor.lib.bitonal import BitonalError, convert_pdf_to_bitonal
 from doctor.lib.utils import (
     cleanup_form,
     log_sentry_event,
@@ -55,8 +62,11 @@ from doctor.tasks import (
     get_page_count,
     get_xray,
     make_pdftotext_process,
+    put_file_to_url,
     rasterize_pdf,
     set_mp3_meta_data,
+    stream_url_to_file,
+    validate_egress_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -164,6 +174,89 @@ def extract_recap_document(request) -> JsonResponse:
                 "content": content,
                 "extracted_by_ocr": extracted_by_ocr,
             }
+        )
+    finally:
+        cleanup_form(form)
+
+
+@log_upload_lifecycle
+def extract_structured_opinion(request) -> JsonResponse:
+    """Extract a structured opinion from a digital PDF with centralia.
+
+    For text-based court PDFs this replaces pdftotext/OCR: instead of a
+    flat string, centralia returns the case-level criteria, one entry
+    per opinion with its own html and text, and Harvard casebody XML.
+    The payload is passed through as centralia returns it.
+
+    centralia reads only the courts it has been ported to. An id no
+    court declares fails as UNKNOWN_COURT, and a court still being
+    worked on fails as COURT_NOT_RELEASED unless allow_pending is set.
+
+    Deliberately a sync view: extraction is CPU-bound, so it runs on
+    the worker's thread pool instead of blocking the event loop.
+
+    :param request: The request object
+    :return: JsonResponse with centralia's payload, or a JSON error
+        carrying an error_code.
+    """
+    # Accept the court id as form data or query params: CL's
+    # microservice() helper sends some endpoints one way, some the other.
+    form = StructuredOpinionForm(request.POST or request.GET, request.FILES)
+    try:
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "VALIDATION_FAILED",
+                    "msg": form.errors.get_json_data(),
+                },
+                status=BAD_REQUEST,
+            )
+        try:
+            payload = centralia_read(
+                form.cleaned_data["fp"],
+                court_id=form.cleaned_data["court_id"],
+                allow_pending=form.cleaned_data["allow_pending"],
+            )
+        except UnknownCourt as e:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "UNKNOWN_COURT",
+                    "msg": str(e),
+                },
+                status=BAD_REQUEST,
+            )
+        except CourtNotReleased as e:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "COURT_NOT_RELEASED",
+                    "msg": str(e),
+                },
+                status=BAD_REQUEST,
+            )
+        return JsonResponse({"success": True, **payload})
+    except Exception as e:
+        # Swallowing the exception also swallows Django's Sentry
+        # report, so log it explicitly.
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Structured opinion extraction failed",
+            extra={
+                "court_id": form.data.get("court_id"),
+                "err": str(e),
+            },
+            exc_info=True,
+        )
+        return JsonResponse(
+            {
+                "success": False,
+                "error_code": "EXTRACTION_FAILED",
+                "msg": str(e),
+            },
+            status=500,
         )
     finally:
         cleanup_form(form)
@@ -305,6 +398,118 @@ async def make_png_thumbnails_from_range(request) -> HttpResponse:
             f"{tmp_zip.name[:-4]}", "zip", directory.name
         )
         return FileResponse(open(filename, "rb"))
+
+
+@log_upload_lifecycle
+def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
+    """Convert a PDF (or a page range of it) to bitonal CCITT G4.
+
+    Input is a multipart upload or a presigned GET URL. With an
+    output_url the result is uploaded there via presigned PUT and a
+    JSON summary is returned; without one the PDF comes back inline.
+
+    Deliberately a sync view: it runs on the worker's thread pool, so
+    a long conversion does not block the event loop and the heartbeat
+    stays responsive for kubernetes probes.
+
+    :param request: The request object
+    :return: JSON summary, inline PDF bytes, or a JSON error carrying
+        an error_code from the documented taxonomy.
+    """
+    form = BitonalPdfForm(request.POST, request.FILES)
+    downloaded_fp = None
+    # is_valid() runs inside the try: the form's clean() writes the
+    # upload to a temp file, and an exception escaping mid-clean (a
+    # failed write, an aborted upload) must still hit cleanup_form.
+    try:
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error_code": "VALIDATION_FAILED",
+                    "msg": form.errors.get_json_data(),
+                },
+                status=BAD_REQUEST,
+            )
+
+        start = time.monotonic()
+        input_url = form.cleaned_data["input_url"]
+        output_url = form.cleaned_data["output_url"]
+        # Both URLs are checked before any work: a blocked output_url
+        # must not be discovered only after a long conversion, and a
+        # rejected URL surfaces as EGRESS_BLOCKED via BitonalError.
+        for url in (input_url, output_url):
+            if url:
+                validate_egress_url(url)
+        if input_url:
+            with NamedTemporaryFile(delete=False, suffix=".pdf") as downloaded:
+                downloaded_fp = downloaded.name
+            source_sha256 = stream_url_to_file(input_url, downloaded_fp)
+            input_fp = downloaded_fp
+        else:
+            input_fp = form.cleaned_data["fp"]
+            source_sha256 = form.cleaned_data["source_sha256"]
+
+        with NamedTemporaryFile(suffix=".pdf") as output:
+            metadata = convert_pdf_to_bitonal(
+                input_fp,
+                output.name,
+                dpi=form.cleaned_data["dpi"],
+                threshold=form.cleaned_data["threshold"],
+                first_page=form.cleaned_data["first_page"],
+                last_page=form.cleaned_data["last_page"],
+            )
+            if not output_url:
+                # Streams from the open fd; the temp file is unlinked
+                # when the with-block exits but the fd stays valid,
+                # the same pattern convert_audio and embed_text use.
+                return FileResponse(
+                    open(output.name, "rb"),  # noqa: SIM115 FileResponse closes the file
+                    content_type="application/pdf",
+                )
+            result_sha256 = put_file_to_url(
+                output_url, output.name, "application/pdf"
+            )
+            return JsonResponse(
+                {
+                    "success": True,
+                    **metadata,
+                    "bytes": os.path.getsize(output.name),
+                    "sha256": result_sha256,
+                    "source_sha256": source_sha256,
+                    "duration_ms": int((time.monotonic() - start) * 1000),
+                }
+            )
+    except BitonalError as e:
+        return JsonResponse(
+            {"success": False, "error_code": e.error_code, "msg": e.message},
+            status=e.status,
+        )
+    except Exception as e:
+        # The daemon reads error_code, so even unexpected failures
+        # must return the documented JSON shape, not an HTML 500.
+        # INTERNAL_ERROR (unlike CONVERSION_FAILED) means retryable.
+        # Swallowing the exception also swallows Django's Sentry
+        # report, so log it explicitly.
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Unexpected error during bitonal conversion",
+            extra={
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+            },
+            exc_info=True,
+        )
+        return JsonResponse(
+            {"success": False, "error_code": "INTERNAL_ERROR", "msg": str(e)},
+            status=500,
+        )
+    finally:
+        cleanup_form(form)
+        if downloaded_fp:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(downloaded_fp)
 
 
 @log_upload_lifecycle

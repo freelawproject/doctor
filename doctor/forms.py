@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import uuid
@@ -122,3 +123,97 @@ class DocumentForm(BaseFileForm):
     ocr_available = forms.BooleanField(label="ocr-available", required=False)
     mime = forms.BooleanField(label="mime", required=False)
     strip_margin = forms.BooleanField(label="strip-margin", required=False)
+
+
+class StructuredOpinionForm(forms.Form):
+    """Parameters for the structured opinion extraction endpoint.
+
+    A digital (text-based) court PDF plus the court it came from.
+    centralia reads only the courts it has been ported to, so the
+    court id is required rather than sniffed.
+    """
+
+    file = forms.FileField(
+        label="document",
+        required=True,
+        validators=[FileExtensionValidator(["pdf"])],
+    )
+    court_id = forms.CharField(label="court-id", required=True)
+    allow_pending = forms.BooleanField(label="allow-pending", required=False)
+
+    def clean_file(self):
+        file = self.cleaned_data.get("file")
+        if not file:
+            raise ValidationError("File is missing.")
+        self.cleaned_data["original_filename"] = file.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as fp:
+            self.cleaned_data["fp"] = fp.name
+            with open(fp.name, "wb") as f:
+                for chunk in file.chunks():
+                    f.write(chunk)
+        return file
+
+
+class BitonalPdfForm(forms.Form):
+    """Parameters for the bitonal conversion endpoint.
+
+    The input arrives either as a multipart upload (``file``) or as a
+    presigned GET URL (``input_url``) — exactly one of the two. When
+    ``output_url`` is present the result is uploaded there; otherwise
+    it is returned inline in the response.
+    """
+
+    file = forms.FileField(
+        label="document",
+        required=False,
+        validators=[FileExtensionValidator(["pdf"])],
+    )
+    input_url = forms.CharField(label="input-url", required=False)
+    output_url = forms.CharField(label="output-url", required=False)
+    dpi = forms.IntegerField(
+        label="dpi", required=False, min_value=72, max_value=600
+    )
+    threshold = forms.IntegerField(
+        label="threshold", required=False, min_value=0, max_value=255
+    )
+    first_page = forms.IntegerField(
+        label="first-page", required=False, min_value=1
+    )
+    last_page = forms.IntegerField(
+        label="last-page", required=False, min_value=1
+    )
+
+    def clean(self):
+        # Structural validation only. The egress allowlist check
+        # happens in the view, where a rejected URL can surface as
+        # its documented EGRESS_BLOCKED error code instead of being
+        # flattened into VALIDATION_FAILED.
+        file = self.cleaned_data.get("file")
+        input_url = self.cleaned_data.get("input_url")
+        if file and input_url:
+            raise ValidationError(
+                "Send either 'file' or 'input_url', not both."
+            )
+        if not file and not input_url:
+            raise ValidationError("Send one of 'file' or 'input_url'.")
+
+        if not self.cleaned_data.get("dpi"):
+            self.cleaned_data["dpi"] = 300
+        if self.cleaned_data.get("threshold") is None:
+            self.cleaned_data["threshold"] = 128
+
+        if file:
+            # Hash while writing, like stream_url_to_file and
+            # put_file_to_url do, so the view never re-reads the
+            # upload just to compute source_sha256.
+            digest = hashlib.sha256()
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=".pdf"
+            ) as fp:
+                self.cleaned_data["fp"] = fp.name
+                with open(fp.name, "wb") as f:
+                    for chunk in file.chunks():
+                        f.write(chunk)
+                        digest.update(chunk)
+            self.cleaned_data["source_sha256"] = digest.hexdigest()
+        return self.cleaned_data

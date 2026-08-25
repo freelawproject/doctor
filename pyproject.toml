@@ -4,6 +4,7 @@ version = "0.3.6"
 description = "CourtListener doctor"
 requires-python = ">=3.12"
 dependencies = [
+  "centralia>=0.0.2",
   "certifi",
   "chardet>=3.0.4",
   "django>=6.0,<7",
@@ -21,6 +22,7 @@ dependencies = [
   "pandas>=1.1.1",
   "pdf2image>=1.7.1",
   "pdfplumber",
+  "pikepdf>=9",
   "pillow>=8.0.1",
   "pkginfo>=1.5.0.1",
   "pypdf>=5",
