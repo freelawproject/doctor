@@ -6,6 +6,7 @@ import re
 import shutil
 import time
 from http.client import BAD_REQUEST
+from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import eyed3
@@ -71,6 +72,43 @@ from doctor.tasks import (
 logger = logging.getLogger(__name__)
 
 magika = Magika()
+
+# The header-based fallback checks in extract_mime_type / extract_extension
+# only ever look at the first ~1 KB of the file, so reading a small header
+# is enough. Keeping this larger than any individual check is cheap and
+# lets Magika's own read (delegated via identify_path) be the only full
+# scan of the file.
+HEADER_BYTES = 4096
+
+
+def identify_with_magika(
+    fp: str, original_filename: str
+) -> tuple[str, list[str]]:
+    """Identify a file with Magika, degrading gracefully when it fails.
+
+    Magika only populates a prediction when ``result.ok`` is true, so a failed
+    scan (missing file, permission error) has to be handled before touching
+    ``result.output``. Callers all have header-based fallbacks, so report the
+    failure and hand back a generic mime type rather than raising.
+
+    :param fp: path of the file to identify
+    :param original_filename: the uploaded filename, used for logging only
+    :return: a two-tuple of the mime type and the candidate extensions
+    """
+    result = magika.identify_path(Path(fp))
+    if not result.ok:
+        log_sentry_event(
+            logger=logger,
+            level=logging.ERROR,
+            message="Magika failed to identify file.",
+            extra={
+                "file_name": original_filename,
+                "magika_status": str(result.status),
+            },
+        )
+        return "application/octet-stream", []
+
+    return result.output.mime_type, result.output.extensions or []
 
 
 def heartbeat(request) -> HttpResponse:
@@ -540,39 +578,44 @@ async def extract_mime_type(request) -> JsonResponse | HttpResponse:
     try:
         await strip_metadata_with_exiftool(fp)
 
-        with open(fp, "rb") as f:
-            content = f.read()
+        # Magika reads only what it needs from disk; we read a small
+        # header separately for the fallback signature checks below.
+        mime, _ = identify_with_magika(
+            fp, form.cleaned_data["original_filename"]
+        )
 
-        result = magika.identify_bytes(content)
-        mime = result.output.mime_type
+        with open(fp, "rb") as f:
+            header = f.read(HEADER_BYTES)
 
         # --- Fallbacks and corrections ---
-        header = content[:64]
+        header_short = header[:64]
 
         # WordPerfect: Magika often returns pickle/octet-stream
         if mime in (
             "application/x-python-pickle",
             "application/octet-stream",
-        ) and (header.startswith(b"\xffWPC") or b"WPC" in header[:8]):
+        ) and (
+            header_short.startswith(b"\xffWPC") or b"WPC" in header_short[:8]
+        ):
             mime = "application/vnd.wordperfect"
 
         # ASF container → WMA/WMV
-        elif header.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
-            if b"WMA" in header or b"WM/" in header:
+        elif header_short.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
+            if b"WMA" in header_short or b"WM/" in header_short:
                 mime = "audio/x-ms-wma"
             else:
                 mime = "video/x-ms-wmv"
         # PDF (misdetected as .bin)
-        elif re.search(rb"%PDF-[0-9]+(\.[0-9]+)?", content[:1024]):
+        elif re.search(rb"%PDF-[0-9]+(\.[0-9]+)?", header[:1024]):
             mime = "application/pdf"
         # Audio: quick signature checks for FLAC/AAC/OGG/RM
-        elif header.startswith(b"fLaC"):
+        elif header_short.startswith(b"fLaC"):
             mime = "audio/flac"
-        elif header[:2] in (b"\xff\xf1", b"\xff\xf9"):
+        elif header_short[:2] in (b"\xff\xf1", b"\xff\xf9"):
             mime = "audio/aac"
-        elif header.startswith(b"OggS"):
+        elif header_short.startswith(b"OggS"):
             mime = "audio/ogg"
-        elif header.startswith(b"\x2e\x52\x4d\x46"):
+        elif header_short.startswith(b"\x2e\x52\x4d\x46"):
             mime = "application/vnd.rn-realmedia"
 
         return JsonResponse({"mimetype": mime})
@@ -594,21 +637,17 @@ async def extract_extension(request) -> HttpResponse:
     fp = form.cleaned_data["fp"]
 
     try:
-        # avoid "referenced before assignment" warnings from analyzer
-        content = b""
-
         await strip_metadata_with_exiftool(fp)
 
+        # Magika reads only what it needs from disk; we read a small
+        # header separately for the fallback signature checks below.
+        mime, exts = identify_with_magika(
+            fp, form.cleaned_data["original_filename"]
+        )
+
         with open(fp, "rb") as f:
-            content = f.read()
-
-        # Normalize to bytes
-        if isinstance(content, str):
-            content = content.encode("utf-8", errors="ignore")
-
-        result = magika.identify_bytes(content)
-        mime = result.output.mime_type
-        exts = result.output.extensions or []
+            header = f.read(HEADER_BYTES)
+            file_size = os.fstat(f.fileno()).st_size
 
         if exts:
             # Usually the first one is the best
@@ -618,7 +657,7 @@ async def extract_extension(request) -> HttpResponse:
             extension = mimetypes.guess_extension(mime)
             # If Magika produced octet-stream, try libmagic
             if mime == "application/octet-stream":
-                mime_magic = magic.from_buffer(content, mime=True)
+                mime_magic = magic.from_file(fp, mime=True)
 
                 # If libmagic provided a better mime, use it
                 if mime_magic and mime_magic != "application/octet-stream":
@@ -633,7 +672,7 @@ async def extract_extension(request) -> HttpResponse:
                     message="Magika failed to infer file extension, libmagic failed too.",
                     extra={
                         "file_name": form.cleaned_data["original_filename"],
-                        "file_size": len(content),
+                        "file_size": file_size,
                         "mimetype": mime,
                     },
                     exc_info=True,
@@ -662,7 +701,7 @@ async def extract_extension(request) -> HttpResponse:
             # Fallback audio pattern
             if re.findall(
                 r"(Audio file with ID3.*MPEG.*layer III)|(.*Audio Media.*)",
-                str(content[:200]),
+                str(header[:200]),
             ):
                 mime = "audio/mpeg"
                 extension = ".mp3"
@@ -671,24 +710,24 @@ async def extract_extension(request) -> HttpResponse:
         if mime in (
             "application/x-python-pickle",
             "application/octet-stream",
-        ) and (content.startswith(b"\xffWPC") or b"WPC" in content[:8]):
+        ) and (header.startswith(b"\xffWPC") or b"WPC" in header[:8]):
             mime = "application/vnd.wordperfect"
             extension = ".wpd"
 
         # --- ASF/WMA header detection ---
-        if content.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
+        if header.startswith(b"\x30\x26\xb2\x75\x8e\x66\xcf\x11"):
             mime = "audio/x-ms-wma"
             extension = ".wma"
 
         # --- Misclassified .obj or .bin ---
         if extension == ".obj":
-            if b"PDF" in content[0:40]:
+            if b"PDF" in header[0:40]:
                 extension = ".pdf"
             else:
                 extension = ".wpd"
         elif extension == ".bin":
             pattern = rb"%PDF-[0-9]+(\.[0-9]+)?"
-            if re.search(pattern, content[:1024]):
+            if re.search(pattern, header[:1024]):
                 extension = ".pdf"
 
         fixes = {
