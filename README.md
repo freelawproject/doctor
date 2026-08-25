@@ -403,7 +403,13 @@ fields, so a caller never has to parse the message text:
     {"success": false, "error_code": "CONVERSION_TIMEOUT",
      "msg": "pdftoppm timed out after 120s on page 7: ...",
      "page_number": 7, "pages_completed": 6, "elapsed_ms": 121004,
-     "pixels": 8216000}
+     "pixels": 8216000, "timeout_limit": "page"}
+
+`CONVERSION_TIMEOUT` adds `timeout_limit`, which says which of the two
+limits ran out: `page` means raising `page_timeout` may help, `total`
+means the whole conversion ran out of budget and the shard is too much
+work for the time given. A page is cut off at whichever limit is nearer,
+so a page can hit `total` well before it has used its `page_timeout`.
 
 A single PUT is atomic on S3: the result object existing implies all of its
 bytes are there, so `head_object` on the (caller-chosen) result key is a

@@ -447,12 +447,14 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
     except BitonalError as e:
         # details carries page_number and friends as their own JSON
         # fields; the caller must never read them out of the message.
+        # It is spread first so the envelope always wins: a detail
+        # named success or msg must not replace the documented shape.
         return JsonResponse(
             {
+                **e.details,
                 "success": False,
                 "error_code": e.error_code,
                 "msg": e.message,
-                **e.details,
             },
             status=e.status,
         )

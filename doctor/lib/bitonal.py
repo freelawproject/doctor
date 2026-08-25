@@ -69,6 +69,16 @@ class BitonalError(Exception):
         super().__init__(f"{error_code}: {message}")
 
 
+def _stderr_text(raw: bytes | None) -> str:
+    """Decode a captured pdftoppm stderr for an error message.
+
+    :param raw: The captured stderr, or None when the process was
+        killed before it wrote anything.
+    :return: At most 500 characters, safe to put in a message.
+    """
+    return (raw or b"").decode(errors="replace")[:500]
+
+
 def rasterize_page_to_gray(
     input_path: str,
     page_number: int,
@@ -108,18 +118,17 @@ def rasterize_page_to_gray(
         # its own code, which the caller may retry. poppler often
         # says something useful before it is killed, so pass the
         # stderr text on, truncated like the failure path below.
-        stderr = (e.stderr or b"").decode(errors="replace")[:500]
+        stderr = _stderr_text(e.stderr)
         raise BitonalError(
             "CONVERSION_TIMEOUT",
             f"pdftoppm timed out after {timeout:.0f}s on page "
             f"{page_number}{f': {stderr}' if stderr else ''}",
-            details={"page_number": page_number},
+            details={"page_number": page_number, "timeout_limit": "page"},
         ) from e
     if p.returncode != 0 or not p.stdout:
         raise BitonalError(
             "CONVERSION_FAILED",
-            f"pdftoppm failed on page {page_number}: "
-            f"{p.stderr.decode(errors='replace')[:500]}",
+            f"pdftoppm failed on page {page_number}: {_stderr_text(p.stderr)}",
             details={"page_number": page_number},
         )
     return Image.open(io.BytesIO(p.stdout)).convert("L")
@@ -372,7 +381,7 @@ def convert_pdf_to_bitonal(
                 "CONVERSION_TIMEOUT",
                 f"conversion exceeded the {total_timeout}s budget "
                 f"at page {number}",
-                details=details,
+                details={**details, "timeout_limit": "total"},
             )
         if rotation not in (0, 90, 180, 270):
             raise BitonalError(
@@ -380,9 +389,12 @@ def convert_pdf_to_bitonal(
                 f"page {number} has unsupported rotation {rotation}",
                 details=details,
             )
+        # What is left of the budget can be less than the page
+        # limit, and then it is the budget that stops the page.
+        page_limit = min(page_timeout, remaining)
         try:
             gray = rasterize_page_to_gray(
-                input_path, number, dpi, timeout=min(page_timeout, remaining)
+                input_path, number, dpi, timeout=page_limit
             )
             g4 = gray_to_g4(gray, threshold)
             add_bitonal_page(pdf, g4, gray.size, box, rotation)
@@ -390,10 +402,25 @@ def convert_pdf_to_bitonal(
             # The helpers know only the page they were handed, so
             # fill in the loop-level fields in one place. elapsed_ms
             # is recomputed here to cover the failed page too.
-            e.details = {
-                **_failure_details(number, pages_completed, start, box, dpi),
-                **e.details,
-            }
+            failure = _failure_details(
+                number, pages_completed, start, box, dpi
+            )
+            if e.error_code == "CONVERSION_TIMEOUT" and page_limit < (
+                page_timeout
+            ):
+                # Report the budget, not the clamped page limit: a
+                # message naming a number the caller never sent
+                # sends them to raise page_timeout, which changes
+                # nothing, and a sub-second clamp even reads as
+                # "timed out after 0s".
+                raise BitonalError(
+                    "CONVERSION_TIMEOUT",
+                    f"conversion exceeded the {total_timeout}s budget at "
+                    f"page {number}, which left the page "
+                    f"{page_limit:.1f}s",
+                    details={**failure, "timeout_limit": "total"},
+                ) from e
+            e.details = {**failure, **e.details}
             raise
     pdf.save(output_path)
 

@@ -231,7 +231,12 @@ class BitonalPdfForm(forms.Form):
                     f"Must be {ceiling} seconds or less.",
                 )
 
-        if file:
+        if file and not self.errors:
+            # Copying and hashing the upload is the expensive part of
+            # validation, so skip it once the request is already
+            # rejected: a 500MB body must not pay for a bad dpi. The
+            # view reads fp and source_sha256 only when the form is
+            # valid, and cleanup_form tolerates a missing fp.
             # Hash while writing, like stream_url_to_file and
             # put_file_to_url do, so the view never re-reads the
             # upload just to compute source_sha256.

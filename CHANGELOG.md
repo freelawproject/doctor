@@ -14,7 +14,9 @@ Features:
    how far `page_timeout` may raise the per-page limit. A failure on a
    page also reports `page_number`, `pages_completed`, `elapsed_ms` and
    `pixels` as their own JSON fields, and a `pdftoppm` timeout now
-   carries poppler's stderr text in the message.
+   carries poppler's stderr text in the message. A timeout also reports
+   `timeout_limit`, saying whether the page limit or the whole-conversion
+   budget ran out, since a page is cut off at whichever is nearer.
 
 ## Current
 
