@@ -49,6 +49,16 @@ DOCTOR_EGRESS_ALLOWED_HOSTS = [
 DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS = env.int(
     "DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS", default=120
 )
+# A request can lower the page timeout, and it can raise the page
+# timeout to this ceiling. A scanned volume with one very slow page
+# needs more than the default, and only the caller knows which volume
+# that is. A larger default would instead hold a worker longer on
+# every stuck page, CourtListener's included. The budget below is its
+# own ceiling: a request can only lower it, because even a 200s page
+# is small against 1800s.
+DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS = env.int(
+    "DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS", default=200
+)
 DOCTOR_BITONAL_TIMEOUT_SECONDS = env.int(
     "DOCTOR_BITONAL_TIMEOUT_SECONDS", default=1800
 )

@@ -420,6 +420,8 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
                 threshold=form.cleaned_data["threshold"],
                 first_page=form.cleaned_data["first_page"],
                 last_page=form.cleaned_data["last_page"],
+                page_timeout=form.cleaned_data["page_timeout"],
+                total_timeout=form.cleaned_data["total_timeout"],
             )
             if not output_url:
                 # Streams from the open fd; the temp file is unlinked
@@ -443,8 +445,15 @@ def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
                 }
             )
     except BitonalError as e:
+        # details carries page_number and friends as their own JSON
+        # fields; the caller must never read them out of the message.
         return JsonResponse(
-            {"success": False, "error_code": e.error_code, "msg": e.message},
+            {
+                "success": False,
+                "error_code": e.error_code,
+                "msg": e.message,
+                **e.details,
+            },
             status=e.status,
         )
     except Exception as e:

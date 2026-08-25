@@ -4,6 +4,7 @@ import tempfile
 import uuid
 
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 
@@ -182,6 +183,14 @@ class BitonalPdfForm(forms.Form):
     last_page = forms.IntegerField(
         label="last-page", required=False, min_value=1
     )
+    # No max_value: a field would bind the ceiling at import time,
+    # so a test could not override the setting. clean() reads it.
+    page_timeout = forms.IntegerField(
+        label="page-timeout", required=False, min_value=1
+    )
+    total_timeout = forms.IntegerField(
+        label="total-timeout", required=False, min_value=1
+    )
 
     def clean(self):
         # Structural validation only. The egress allowlist check
@@ -201,6 +210,26 @@ class BitonalPdfForm(forms.Form):
             self.cleaned_data["dpi"] = 300
         if self.cleaned_data.get("threshold") is None:
             self.cleaned_data["threshold"] = 128
+
+        # The settings are the default and the ceiling both: the
+        # caller tunes a slow volume without a doctor release, and
+        # doctor keeps the outer bound on how long a worker is held.
+        # An over-ceiling value is rejected rather than clamped, so
+        # the caller learns the limit instead of guessing at it.
+        ceilings = (
+            (
+                "page_timeout",
+                settings.DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS,
+            ),
+            ("total_timeout", settings.DOCTOR_BITONAL_TIMEOUT_SECONDS),
+        )
+        for field, ceiling in ceilings:
+            value = self.cleaned_data.get(field)
+            if value is not None and value > ceiling:
+                self.add_error(
+                    field,
+                    f"Must be {ceiling} seconds or less.",
+                )
 
         if file:
             # Hash while writing, like stream_url_to_file and
