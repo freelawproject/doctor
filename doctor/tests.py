@@ -15,6 +15,7 @@ from tempfile import NamedTemporaryFile
 from unittest.mock import patch
 from zipfile import ZipFile
 
+import centralia
 import django
 import eyed3
 import numpy as np
@@ -1777,14 +1778,23 @@ class StructuredOpinionTests(unittest.TestCase):
         self.assertEqual(payload["error_code"], "UNKNOWN_COURT")
 
     def test_court_not_released(self):
-        """Is a held-back court refused unless allow_pending is set?"""
-        response = self._post(court_id="cacd")
+        """Is a held-back court refused unless allow_pending is set?
+
+        The court is read off centralia's HELD_BACK rather than named
+        here: courts graduate to released as centralia is ported, and a
+        hardcoded id silently turns this into a test of the happy path.
+        """
+        if not centralia.HELD_BACK:
+            self.skipTest("centralia is holding no courts back")
+        court_id = sorted(centralia.HELD_BACK)[0]
+
+        response = self._post(court_id=court_id)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
             json.loads(response.content)["error_code"], "COURT_NOT_RELEASED"
         )
 
-        response = self._post(court_id="cacd", allow_pending="true")
+        response = self._post(court_id=court_id, allow_pending="true")
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content)
         self.assertTrue(payload["success"])
