@@ -340,6 +340,10 @@ Parameters:
  - `dpi` (default 300, range 72-600): rasterization resolution.
  - `threshold` (default 128, range 0-255): gray values above it become white.
  - `first_page` / `last_page` (optional, 1-indexed, inclusive): page range.
+ - `page_timeout` (default 120, max 200) / `total_timeout` (default 1800,
+   max 1800): seconds one page, and the whole conversion, may take. Both
+   default to the settings below, which are also their ceilings; above a
+   ceiling is `VALIDATION_FAILED`.
  - `input_url` (instead of a `file` upload): a presigned GET URL to fetch the
    input from.
  - `output_url` (optional): a presigned PUT URL. When given, the result is
@@ -372,16 +376,22 @@ which returns a summary like:
 
 Failures return `{"success": false, "error_code": ..., "msg": ...}`. The
 error codes are: `VALIDATION_FAILED`, `INVALID_PDF`, `PAGE_RANGE_INVALID`,
-`CONVERSION_FAILED`, `PAGE_COUNT_MISMATCH`, `PAGE_GEOMETRY_MISMATCH`,
-`EGRESS_BLOCKED`, `INPUT_TOO_LARGE`, `INPUT_DOWNLOAD_FAILED`,
-`INPUT_URL_EXPIRED`, `RESULT_UPLOAD_FAILED`, `RESULT_URL_EXPIRED` and
-`INTERNAL_ERROR`. The `*_EXPIRED` codes mean a presigned signature
-returned HTTP 403, so the caller must re-presign rather than retry the same
-URL. Transient transport failures are retried with backoff before failing;
-a malformed URL is never retried and fails immediately as
+`CONVERSION_FAILED`, `CONVERSION_TIMEOUT`, `PAGE_COUNT_MISMATCH`,
+`PAGE_GEOMETRY_MISMATCH`, `EGRESS_BLOCKED`, `INPUT_TOO_LARGE`,
+`INPUT_DOWNLOAD_FAILED`, `INPUT_URL_EXPIRED`, `RESULT_UPLOAD_FAILED`,
+`RESULT_URL_EXPIRED` and `INTERNAL_ERROR`. The `*_EXPIRED` codes mean a
+presigned signature returned HTTP 403, so the caller must re-presign rather
+than retry the same URL. Transient transport failures are retried with
+backoff before failing; a malformed URL is never retried and fails as
 `INPUT_DOWNLOAD_FAILED` or `RESULT_UPLOAD_FAILED`.
 `INTERNAL_ERROR` means doctor itself failed unexpectedly — unlike
 `CONVERSION_FAILED`, the same request may succeed on retry.
+`CONVERSION_TIMEOUT` means a page, or the whole conversion, ran out of time;
+like `INTERNAL_ERROR`, and unlike `CONVERSION_FAILED`, it may succeed on
+retry. A failure on a page also reports `page_number`, `pages_completed`,
+`elapsed_ms`, `pixels` (the page at the requested dpi) and, for a timeout,
+`timeout_limit` (`page` or `total`, whichever limit was nearer) as their own
+JSON fields, so no caller has to parse the message text.
 
 A single PUT is atomic on S3: the result object existing implies all of its
 bytes are there, so `head_object` on the (caller-chosen) result key is a
@@ -397,10 +407,12 @@ hostnames (a pattern without wildcards is an exact match), and setting it
 empty disables the check entirely, which local development and the test
 suite rely on (see `.env.example`).
 
-Three more environment variables bound the resources one request can
+Four more environment variables bound the resources one request can
 consume. `DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS` (default 120) limits a
-single page's `pdftoppm` call; `DOCTOR_BITONAL_TIMEOUT_SECONDS` (default
-1800) is the whole-conversion budget; `DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES`
+single page's `pdftoppm` call and `DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS`
+(default 200) caps what `page_timeout` may raise it to;
+`DOCTOR_BITONAL_TIMEOUT_SECONDS` (default 1800) is the whole-conversion
+budget and its own ceiling; `DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES`
 (default 1 GiB, 0 disables) caps how large an `input_url` download may be
 (`INPUT_TOO_LARGE`). The defaults carry 30-60x headroom over the designed
 workload (a 200-page shard converts in about a minute), so they only trip

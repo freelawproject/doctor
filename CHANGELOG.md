@@ -1,6 +1,15 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Features:
+ - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
+   the caller may retry, rather than the permanent `CONVERSION_FAILED`. The
+   request can now send `page_timeout` and `total_timeout`, defaulting to
+   the settings and capped by them; the new
+   `DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS` (default 200) caps the former.
+   A failure on a page reports `page_number`, `pages_completed`,
+   `elapsed_ms`, `pixels` and `timeout_limit` as JSON fields.
+
 Fixes:
  - Delegate file identification to Magika's `identify_path`
 

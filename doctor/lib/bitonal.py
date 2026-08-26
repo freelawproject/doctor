@@ -50,13 +50,33 @@ class BitonalError(Exception):
         bitonal endpoint (e.g. INVALID_PDF, RESULT_URL_EXPIRED).
     :param message: Human-readable detail.
     :param status: HTTP status the view should respond with.
+    :param details: Extra fields for the JSON error body, e.g.
+        page_number. The view merges them into the body so a caller
+        never has to parse the message text to find them.
     """
 
-    def __init__(self, error_code: str, message: str, status: int = 500):
+    def __init__(
+        self,
+        error_code: str,
+        message: str,
+        status: int = 500,
+        details: dict | None = None,
+    ):
         self.error_code = error_code
         self.message = message
         self.status = status
+        self.details = details or {}
         super().__init__(f"{error_code}: {message}")
+
+
+def _stderr_text(raw: bytes | None) -> str:
+    """Decode a captured pdftoppm stderr for an error message.
+
+    :param raw: The captured stderr, or None when the process was
+        killed before it wrote anything.
+    :return: At most 500 characters, safe to put in a message.
+    """
+    return (raw or b"").decode(errors="replace")[:500]
 
 
 def rasterize_page_to_gray(
@@ -93,15 +113,23 @@ def rasterize_page_to_gray(
     try:
         p = subprocess.run(command, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
+        # A timeout is not a verdict on the PDF: the same page can
+        # convert on a node under less load, or with more time. Hence
+        # its own code, which the caller may retry. poppler often
+        # says something useful before it is killed, so pass the
+        # stderr text on, truncated like the failure path below.
+        stderr = _stderr_text(e.stderr)
         raise BitonalError(
-            "CONVERSION_FAILED",
-            f"pdftoppm timed out after {timeout:.0f}s on page {page_number}",
+            "CONVERSION_TIMEOUT",
+            f"pdftoppm timed out after {timeout:.0f}s on page "
+            f"{page_number}{f': {stderr}' if stderr else ''}",
+            details={"page_number": page_number, "timeout_limit": "page"},
         ) from e
     if p.returncode != 0 or not p.stdout:
         raise BitonalError(
             "CONVERSION_FAILED",
-            f"pdftoppm failed on page {page_number}: "
-            f"{p.stderr.decode(errors='replace')[:500]}",
+            f"pdftoppm failed on page {page_number}: {_stderr_text(p.stderr)}",
+            details={"page_number": page_number},
         )
     return Image.open(io.BytesIO(p.stdout)).convert("L")
 
@@ -243,6 +271,39 @@ def read_page_geometry(
         ]
 
 
+def _failure_details(
+    page_number: int,
+    pages_completed: int,
+    start: float,
+    box: tuple[float, float, float, float],
+    dpi: int,
+) -> dict:
+    """Describe where in a conversion a failure happened.
+
+    These fields go in the JSON error body. The shard caller needs
+    the page number to locate the page in the full volume, and a
+    message text is not an interface: changing its wording must not
+    break a client. ``pixels`` answers the question a timeout raises,
+    namely whether the page was merely enormous.
+
+    :param page_number: 1-indexed page the failure happened on.
+    :param pages_completed: Pages converted before this one.
+    :param start: Monotonic time the conversion started.
+    :param box: MediaBox of the page as (x0, y0, x1, y1).
+    :param dpi: Rasterization resolution.
+    :return: The extra fields for the JSON error body.
+    """
+    x0, y0, x1, y1 = box
+    width = round((x1 - x0) / 72 * dpi)
+    height = round((y1 - y0) / 72 * dpi)
+    return {
+        "page_number": page_number,
+        "pages_completed": pages_completed,
+        "elapsed_ms": int((time.monotonic() - start) * 1000),
+        "pixels": width * height,
+    }
+
+
 def convert_pdf_to_bitonal(
     input_path: str,
     output_path: str,
@@ -250,6 +311,8 @@ def convert_pdf_to_bitonal(
     threshold: int,
     first_page: int | None = None,
     last_page: int | None = None,
+    page_timeout: float | None = None,
+    total_timeout: float | None = None,
 ) -> dict:
     """Convert a PDF (or a 1-indexed inclusive page range) to bitonal.
 
@@ -259,6 +322,10 @@ def convert_pdf_to_bitonal(
     :param threshold: 0-255; pixels above it become white.
     :param first_page: First page to convert; defaults to 1.
     :param last_page: Last page to convert; defaults to the last.
+    :param page_timeout: Seconds one page may take; defaults to the
+        DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS setting.
+    :param total_timeout: Seconds the whole conversion may take;
+        defaults to the DOCTOR_BITONAL_TIMEOUT_SECONDS setting.
     :return: Conversion metadata (page counts and parameters).
     """
     try:
@@ -292,31 +359,69 @@ def convert_pdf_to_bitonal(
         )
 
     # Without a whole-conversion budget, the per-page timeout still
-    # allows pages x page-timeout worst case.
-    total_timeout = settings.DOCTOR_BITONAL_TIMEOUT_SECONDS
-    page_timeout = settings.DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS
-    deadline = time.monotonic() + total_timeout
+    # allows pages x page-timeout worst case. The caller may send
+    # both limits: one slow volume then needs a scanning deploy
+    # rather than a doctor release, and the settings stay the
+    # default and the ceiling (see the form).
+    if total_timeout is None:
+        total_timeout = settings.DOCTOR_BITONAL_TIMEOUT_SECONDS
+    if page_timeout is None:
+        page_timeout = settings.DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS
+    start = time.monotonic()
+    deadline = start + total_timeout
 
     pdf = pikepdf.new()
     for number in range(first_page, last_page + 1):
+        box, rotation = source_pages[number - 1]
+        pages_completed = number - first_page
+        details = _failure_details(number, pages_completed, start, box, dpi)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise BitonalError(
-                "CONVERSION_FAILED",
+                "CONVERSION_TIMEOUT",
                 f"conversion exceeded the {total_timeout}s budget "
                 f"at page {number}",
+                details={**details, "timeout_limit": "total"},
             )
-        box, rotation = source_pages[number - 1]
         if rotation not in (0, 90, 180, 270):
             raise BitonalError(
                 "CONVERSION_FAILED",
                 f"page {number} has unsupported rotation {rotation}",
+                details=details,
             )
-        gray = rasterize_page_to_gray(
-            input_path, number, dpi, timeout=min(page_timeout, remaining)
-        )
-        g4 = gray_to_g4(gray, threshold)
-        add_bitonal_page(pdf, g4, gray.size, box, rotation)
+        # What is left of the budget can be less than the page
+        # limit, and then it is the budget that stops the page.
+        page_limit = min(page_timeout, remaining)
+        try:
+            gray = rasterize_page_to_gray(
+                input_path, number, dpi, timeout=page_limit
+            )
+            g4 = gray_to_g4(gray, threshold)
+            add_bitonal_page(pdf, g4, gray.size, box, rotation)
+        except BitonalError as e:
+            # The helpers know only the page they were handed, so
+            # fill in the loop-level fields in one place. elapsed_ms
+            # is recomputed here to cover the failed page too.
+            failure = _failure_details(
+                number, pages_completed, start, box, dpi
+            )
+            if e.error_code == "CONVERSION_TIMEOUT" and page_limit < (
+                page_timeout
+            ):
+                # Report the budget, not the clamped page limit: a
+                # message naming a number the caller never sent
+                # sends them to raise page_timeout, which changes
+                # nothing, and a sub-second clamp even reads as
+                # "timed out after 0s".
+                raise BitonalError(
+                    "CONVERSION_TIMEOUT",
+                    f"conversion exceeded the {total_timeout}s budget at "
+                    f"page {number}, which left the page "
+                    f"{page_limit:.1f}s",
+                    details={**failure, "timeout_limit": "total"},
+                ) from e
+            e.details = {**failure, **e.details}
+            raise
     pdf.save(output_path)
 
     # Bitonal is the one 1:1 page-preserving consumer: the shard merge

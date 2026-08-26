@@ -7,6 +7,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -1090,7 +1091,7 @@ class BitonalGuardrailTests(unittest.TestCase):
             )
 
     def test_pdftoppm_timeout_error_code(self):
-        """Does a stuck pdftoppm surface as CONVERSION_FAILED?"""
+        """Does a stuck pdftoppm surface as CONVERSION_TIMEOUT?"""
         from doctor.lib.bitonal import BitonalError, rasterize_page_to_gray
 
         with (
@@ -1101,8 +1102,162 @@ class BitonalGuardrailTests(unittest.TestCase):
             self.assertRaises(BitonalError) as ctx,
         ):
             rasterize_page_to_gray("whatever.pdf", 1, 300)
-        self.assertEqual(ctx.exception.error_code, "CONVERSION_FAILED")
+        self.assertEqual(ctx.exception.error_code, "CONVERSION_TIMEOUT")
         self.assertIn("timed out", ctx.exception.message)
+
+    def test_pdftoppm_timeout_reports_stderr(self):
+        """Does the timeout carry poppler's stderr and the page?"""
+        from doctor.lib.bitonal import BitonalError, rasterize_page_to_gray
+
+        with (
+            patch(
+                "doctor.lib.bitonal.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(
+                    ["pdftoppm"], 120, stderr=b"Syntax Error: bad page"
+                ),
+            ),
+            self.assertRaises(BitonalError) as ctx,
+        ):
+            rasterize_page_to_gray("whatever.pdf", 3, 300)
+        self.assertIn("Syntax Error: bad page", ctx.exception.message)
+        self.assertEqual(ctx.exception.details["page_number"], 3)
+
+    def test_request_page_timeout_reaches_pdftoppm(self):
+        """Does page_timeout in the request bound the pdftoppm call?"""
+        with patch(
+            "doctor.lib.bitonal.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["pdftoppm"], 45),
+        ) as run:
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72, "page_timeout": 45},
+            )
+        self.assertEqual(run.call_args.kwargs["timeout"], 45)
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertEqual(payload["page_number"], 1)
+        self.assertEqual(payload["pages_completed"], 0)
+        self.assertEqual(payload["timeout_limit"], "page")
+        self.assertIn("elapsed_ms", payload)
+        self.assertGreater(payload["pixels"], 0)
+
+    def test_pdftoppm_failure_stays_permanent(self):
+        """Does a failed pdftoppm keep the permanent error code?
+
+        Only the timeout paths moved to CONVERSION_TIMEOUT. A defect
+        in the PDF must stay CONVERSION_FAILED: the shard daemon
+        retries a timeout, and retrying a corrupt page forever is
+        exactly what the split of the two codes has to prevent.
+        """
+        with patch(
+            "doctor.lib.bitonal.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                ["pdftoppm"], 1, b"", b"Syntax Error: damaged page tree"
+            ),
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_FAILED")
+        self.assertIn("damaged page tree", payload["msg"])
+        self.assertEqual(payload["page_number"], 1)
+        self.assertNotIn("timeout_limit", payload)
+
+    def test_budget_clamp_reports_the_budget(self):
+        """Does the budget, not the clamped page limit, get named?
+
+        The pdftoppm call is bounded by min(page_timeout, remaining).
+        When the budget is the smaller of the two, the failure must
+        name the budget: naming the clamp would send the caller to
+        raise page_timeout, which changes nothing.
+        """
+        with patch(
+            "doctor.lib.bitonal.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["pdftoppm"], 1),
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72, "total_timeout": 1},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertEqual(payload["timeout_limit"], "total")
+        self.assertIn("budget", payload["msg"])
+        self.assertNotIn("timed out after", payload["msg"])
+        self.assertEqual(payload["page_number"], 1)
+
+    def test_request_total_timeout_stops_the_loop(self):
+        """Does total_timeout in the request stop a later page?"""
+
+        def slow_page(input_path, page_number, dpi, timeout=None):
+            time.sleep(1.1)
+            return Image.new("L", (612, 792), 255)
+
+        with patch(
+            "doctor.lib.bitonal.rasterize_page_to_gray",
+            side_effect=slow_page,
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72, "total_timeout": 1},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertIn("budget", payload["msg"])
+        self.assertEqual(payload["page_number"], 2)
+        self.assertEqual(payload["pages_completed"], 1)
+
+    def test_timeout_above_the_ceiling_is_rejected(self):
+        """Is an over-ceiling page_timeout a validation failure?"""
+        from django.test import override_settings
+
+        with override_settings(DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS=200):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={
+                    "file": self.upload(),
+                    "dpi": 72,
+                    "page_timeout": 201,
+                },
+            )
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "VALIDATION_FAILED")
+        self.assertIn("page_timeout", payload["msg"])
+
+    def test_total_timeout_above_the_ceiling_is_rejected(self):
+        """Is an over-ceiling total_timeout a validation failure?"""
+        from django.test import override_settings
+
+        with override_settings(DOCTOR_BITONAL_TIMEOUT_SECONDS=1800):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={
+                    "file": self.upload(),
+                    "dpi": 72,
+                    "total_timeout": 1801,
+                },
+            )
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "VALIDATION_FAILED")
+        self.assertIn("total_timeout", payload["msg"])
+
+    def test_rejected_request_skips_the_upload_hash(self):
+        """Does a rejected request avoid copying the whole upload?"""
+        with patch("doctor.forms.hashlib.sha256") as digest:
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 9999},
+            )
+        self.assertEqual(response.status_code, 400)
+        digest.assert_not_called()
 
     def test_conversion_budget_exhausted(self):
         """Does an exhausted whole-conversion budget stop the loop?"""
@@ -1115,8 +1270,10 @@ class BitonalGuardrailTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.content)
-        self.assertEqual(payload["error_code"], "CONVERSION_FAILED")
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
         self.assertIn("budget", payload["msg"])
+        self.assertEqual(payload["page_number"], 1)
+        self.assertEqual(payload["pages_completed"], 0)
 
     def test_unexpected_error_returns_documented_json(self):
         """Does a non-BitonalError produce the JSON shape, not HTML?"""
