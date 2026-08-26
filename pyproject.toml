@@ -4,7 +4,7 @@ version = "0.3.6"
 description = "CourtListener doctor"
 requires-python = ">=3.12"
 dependencies = [
-  "centralia>=0.0.2",
+  "centralia>=0.0.6",
   "certifi",
   "chardet>=3.0.4",
   "django>=6.0,<7",
