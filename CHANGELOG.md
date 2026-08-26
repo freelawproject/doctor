@@ -18,6 +18,12 @@ Features:
    `timeout_limit`, saying whether the page limit or the whole-conversion
    budget ran out, since a page is cut off at whichever is nearer.
 
+Fixes:
+ - Delegate file identification to Magika's `identify_path`
+
+Changes:
+ - Bump `magika` to 1.0.3.
+
 ## Current
 
 Features:
