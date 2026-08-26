@@ -2,21 +2,13 @@
 The following changes are not yet released, but are code complete:
 
 Features:
- - `/convert/pdf/bitonal/` now reports a timeout as its own error code,
-   `CONVERSION_TIMEOUT`, instead of `CONVERSION_FAILED`. A timeout says
-   nothing about the PDF, so the caller may retry it; `CONVERSION_FAILED`
-   stays permanent. Both the per-page timeout and the whole-conversion
-   budget are now request parameters (`page_timeout`, `total_timeout`),
-   defaulting to the existing settings and capped by them, so a volume
-   with one very slow page can be given more time without holding a
-   worker longer for every other caller. The new
-   `DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS` setting (default 200) is
-   how far `page_timeout` may raise the per-page limit. A failure on a
-   page also reports `page_number`, `pages_completed`, `elapsed_ms` and
-   `pixels` as their own JSON fields, and a `pdftoppm` timeout now
-   carries poppler's stderr text in the message. A timeout also reports
-   `timeout_limit`, saying whether the page limit or the whole-conversion
-   budget ran out, since a page is cut off at whichever is nearer.
+ - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
+   the caller may retry, rather than the permanent `CONVERSION_FAILED`. The
+   request can now send `page_timeout` and `total_timeout`, defaulting to
+   the settings and capped by them; the new
+   `DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS` (default 200) caps the former.
+   A failure on a page reports `page_number`, `pages_completed`,
+   `elapsed_ms`, `pixels` and `timeout_limit` as JSON fields.
 
 Fixes:
  - Delegate file identification to Magika's `identify_path`

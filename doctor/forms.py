@@ -231,23 +231,23 @@ class BitonalPdfForm(forms.Form):
                     f"Must be {ceiling} seconds or less.",
                 )
 
-        if file and not self.errors:
+        if not file or self.errors:
             # Copying and hashing the upload is the expensive part of
-            # validation, so skip it once the request is already
-            # rejected: a 500MB body must not pay for a bad dpi. The
-            # view reads fp and source_sha256 only when the form is
-            # valid, and cleanup_form tolerates a missing fp.
-            # Hash while writing, like stream_url_to_file and
-            # put_file_to_url do, so the view never re-reads the
-            # upload just to compute source_sha256.
-            digest = hashlib.sha256()
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".pdf"
-            ) as fp:
-                self.cleaned_data["fp"] = fp.name
-                with open(fp.name, "wb") as f:
-                    for chunk in file.chunks():
-                        f.write(chunk)
-                        digest.update(chunk)
-            self.cleaned_data["source_sha256"] = digest.hexdigest()
+            # validation, so skip it once the request is rejected: a
+            # 500MB body must not pay for a bad dpi. The view reads fp
+            # and source_sha256 only on a valid form, and cleanup_form
+            # tolerates a missing fp.
+            return self.cleaned_data
+
+        # Hash while writing, like stream_url_to_file and
+        # put_file_to_url do, so the view never re-reads the upload
+        # just to compute source_sha256.
+        digest = hashlib.sha256()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as fp:
+            self.cleaned_data["fp"] = fp.name
+            with open(fp.name, "wb") as f:
+                for chunk in file.chunks():
+                    f.write(chunk)
+                    digest.update(chunk)
+        self.cleaned_data["source_sha256"] = digest.hexdigest()
         return self.cleaned_data
