@@ -66,6 +66,14 @@ DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
     "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
 )
 
+# OCR runs ghostscript and tesseract over this many pages at a time, so a
+# request's peak memory and /tmp usage depend on the slice size rather
+# than on the document's page count. A 300 DPI letter page is ~8 MB of
+# grayscale pixels; the pod limit, the idle worker's footprint and the
+# expected concurrency decide how many of those fit. Documents with no
+# more pages than this take a single pass, exactly as before.
+DOCTOR_OCR_PAGES_PER_SLICE = env.int("DOCTOR_OCR_PAGES_PER_SLICE", default=25)
+
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     sentry_sdk.init(
