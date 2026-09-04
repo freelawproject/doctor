@@ -3,6 +3,7 @@ import base64
 import fnmatch
 import hashlib
 import io
+import logging
 import os
 import re
 import time
@@ -40,6 +41,8 @@ from doctor.lib.utils import (
     ocr_needed,
     smart_text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def pdf_bytes_from_images(image_list: list[Image]):
@@ -84,13 +87,23 @@ async def make_pdftotext_process(path):
     return content.decode(), err, process.returncode
 
 
-async def rasterize_pdf(path, destination):
-    """Convert the PDF into a multipage Tiff file.
+async def rasterize_pdf(
+    path: str,
+    destination: str,
+    first_page: int | None = None,
+    last_page: int | None = None,
+):
+    """Convert the PDF, or a page range of it, into a multipage Tiff file.
 
     This function uses ghostscript for processing and borrows heavily from:
 
         https://github.com/jbarlow83/OCRmyPDF/blob/636d1903b35fed6b07a01af53769fea81f388b82/ocrmypdf/ghostscript.py#L11
 
+    :param path: The PDF to rasterize
+    :param destination: Where to write the TIFF
+    :param first_page: 1-based first page to render; None means page 1
+    :param last_page: 1-based last page to render; None means the last page
+    :return: ghostscript's stdout, stderr and return code
     """
     # gs docs, see: http://ghostscript.com/doc/7.07/Use.htm
     # gs devices, see: http://ghostscript.com/doc/current/Devices.htm
@@ -110,10 +123,12 @@ async def rasterize_pdf(path, destination):
         "-sDEVICE=tiffgray",
         "-sCompression=lzw",
         "-r300x300",  # Set the resolution to 300 DPI.
-        "-o",
-        destination,
-        path,
     ]
+    if first_page is not None:
+        gs.append(f"-dFirstPage={first_page}")
+    if last_page is not None:
+        gs.append(f"-dLastPage={last_page}")
+    gs += ["-o", destination, path]
 
     p = await asyncio.create_subprocess_exec(
         *gs,
@@ -225,20 +240,82 @@ async def extract_from_pdf(
     return content, err, returncode, extracted_by_ocr
 
 
-async def extract_by_ocr(path: str) -> (bool, str):
+OCR_FAIL_MSG = (
+    "Unable to extract the content from this file. Please try "
+    "reading the original."
+)
+
+# Tesseract separates the pages of a multi-page TIFF with a form feed and
+# emits none after the last page, so joining the slices with one gives the
+# same text as a single pass over the whole document.
+OCR_PAGE_SEPARATOR = "\f"
+
+
+async def extract_by_ocr(path: str) -> tuple[bool, str]:
     """Extract the contents of a PDF using OCR.
+
+    The document is rasterized and OCRed in slices of
+    ``settings.DOCTOR_OCR_PAGES_PER_SLICE`` pages, one slice at a time, so
+    ghostscript, tesseract and /tmp each hold at most one slice however
+    long the document is. A document that fits in one slice takes a
+    single pass, as does one whose page count pypdf cannot read.
 
     :param path: The path to the file
     :return Tuple with success or fail boolean and text
     """
-    fail_msg = (
-        "Unable to extract the content from this file. Please try "
-        "reading the original."
-    )
+    pages_per_slice = max(1, settings.DOCTOR_OCR_PAGES_PER_SLICE)
+    page_count = get_page_count(path, "pdf") or 0
+    if page_count <= pages_per_slice:
+        return await _ocr_page_range(path)
+
+    parts: list[str] = []
+    for first in range(1, page_count + 1, pages_per_slice):
+        last = min(first + pages_per_slice - 1, page_count)
+        started = time.monotonic()
+        success, text = await _ocr_page_range(path, first, last)
+        if not success:
+            logger.warning(
+                "OCR failed on pages %d-%d of %d of %s",
+                first,
+                last,
+                page_count,
+                path,
+            )
+            return False, OCR_FAIL_MSG
+        logger.info(
+            "OCRed pages %d-%d of %d of %s in %.1fs, %d chars",
+            first,
+            last,
+            page_count,
+            path,
+            time.monotonic() - started,
+            len(text),
+        )
+        parts.append(text)
+    return True, OCR_PAGE_SEPARATOR.join(parts)
+
+
+async def _ocr_page_range(
+    path: str,
+    first_page: int | None = None,
+    last_page: int | None = None,
+) -> tuple[bool, str]:
+    """Rasterize one page range to a temporary TIFF and OCR it.
+
+    The TIFF is removed when this returns, so only one range's worth of
+    pixels is ever on disk.
+
+    :param path: The path to the PDF
+    :param first_page: 1-based first page, None for the whole document
+    :param last_page: 1-based last page, None for the whole document
+    :return Tuple with success or fail boolean and text
+    """
     with NamedTemporaryFile(prefix="ocr_", suffix=".tiff", buffering=0) as tmp:
-        out, err, returncode = await rasterize_pdf(path, tmp.name)
+        out, err, returncode = await rasterize_pdf(
+            path, tmp.name, first_page, last_page
+        )
         if returncode != 0:
-            return False, fail_msg
+            return False, OCR_FAIL_MSG
 
         txt = await convert_file_to_txt(tmp.name)
         txt = cleanup_ocr_text(txt)

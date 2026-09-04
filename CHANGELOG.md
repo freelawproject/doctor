@@ -9,6 +9,13 @@ Features:
    `DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS` (default 200) caps the former.
    A failure on a page reports `page_number`, `pages_completed`,
    `elapsed_ms`, `pixels` and `timeout_limit` as JSON fields.
+ - OCR (`/extract/doc/text/` with `ocr_available`) rasterizes and OCRs a
+   PDF in slices of `DOCTOR_OCR_PAGES_PER_SLICE` pages (default 25) instead
+   of rendering the whole document to one TIFF, so a request's peak memory
+   and `/tmp` usage depend on the slice size rather than the page count. A
+   914-page scanned record was OOM-killing the 500 MB pod. Documents that
+   fit in one slice take a single pass, and the text is identical either
+   way. Each slice logs its page range, duration and text length at INFO.
 
 Fixes:
  - Delegate file identification to Magika's `identify_path`
