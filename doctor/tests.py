@@ -1624,6 +1624,61 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tesseract.call_count, 1)
         self.assertEqual(self.leftover_tiffs(), before)
 
+    async def test_last_slice_is_open_ended(self):
+        """Is the final slice rendered to the end of the file, not the count?
+
+        pypdf's count only sets the slice boundaries. The last slice gets
+        no last page, so ghostscript renders every page it finds there.
+        """
+        from django.test import override_settings
+
+        from doctor import tasks
+
+        calls = []
+        real_rasterize = tasks.rasterize_pdf
+
+        async def spy(path, destination, first=None, last=None):
+            calls.append((first, last))
+            return await real_rasterize(path, destination, first, last)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.rasterize_pdf", side_effect=spy),
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        self.assertEqual(calls, [(1, 2), (3, 4), (5, None)])
+        self.assertEqual(text.count(tasks.OCR_PAGE_SEPARATOR), 4)
+
+    async def test_page_count_disagreement_loses_no_pages(self):
+        """Does a wrong pypdf page count still OCR every page exactly once?
+
+        A damaged page tree can make pypdf return a count that differs from
+        what ghostscript renders. An undercount must not drop the trailing
+        pages, and an overcount must not append empty slices.
+        """
+        from django.test import override_settings
+
+        from doctor import tasks
+
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
+            success, single = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        for marker in self.markers:
+            self.assertIn(marker, single)
+
+        before = self.leftover_tiffs()
+        for wrong_count in (3, 4, 6, 20):
+            with (
+                self.subTest(pypdf_count=wrong_count),
+                override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+                patch("doctor.tasks.get_page_count", return_value=wrong_count),
+            ):
+                success, sliced = await tasks.extract_by_ocr(self.pdf_path)
+                self.assertTrue(success)
+                self.assertEqual(sliced, single)
+        self.assertEqual(self.leftover_tiffs(), before)
+
 
 class TestOCRConfidenceTests(unittest.TestCase):
     """Test our OCR confidence checking functions."""

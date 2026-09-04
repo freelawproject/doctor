@@ -15,7 +15,10 @@ Features:
    and `/tmp` usage depend on the slice size rather than the page count. A
    914-page scanned record was OOM-killing the 500 MB pod. Documents that
    fit in one slice take a single pass, and the text is identical either
-   way. Each slice logs its page range, duration and text length at INFO.
+   way. pypdf's page count only sets the slice boundaries: the last slice
+   renders through the real end of the file, so a document whose page tree
+   pypdf miscounts still has every page OCRed. Each slice logs its page
+   range, duration and text length at INFO.
 
 Fixes:
  - Delegate file identification to Magika's `identify_path`

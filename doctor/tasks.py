@@ -260,38 +260,60 @@ async def extract_by_ocr(path: str) -> tuple[bool, str]:
     long the document is. A document that fits in one slice takes a
     single pass, as does one whose page count pypdf cannot read.
 
+    The slice boundaries come from pypdf's page count, but the count is
+    not trusted to be the end of the document: the last slice is left
+    open-ended so ghostscript renders every page it finds past the count,
+    and the loop stops early if ghostscript finds no pages in a slice.
+    No page is lost when pypdf and ghostscript disagree on the count.
+
     :param path: The path to the file
     :return Tuple with success or fail boolean and text
     """
     pages_per_slice = max(1, settings.DOCTOR_OCR_PAGES_PER_SLICE)
     page_count = get_page_count(path, "pdf") or 0
     if page_count <= pages_per_slice:
-        return await _ocr_page_range(path)
+        success, text = await _ocr_page_range(path)
+        return success, text or ""
 
     parts: list[str] = []
     for first in range(1, page_count + 1, pages_per_slice):
-        last = min(first + pages_per_slice - 1, page_count)
+        last: int | None = first + pages_per_slice - 1
+        if last >= page_count:
+            # Render through the real end of the file, wherever it is.
+            last = None
+        last_label = last if last is not None else "end"
         started = time.monotonic()
         success, text = await _ocr_page_range(path, first, last)
         if not success:
             logger.warning(
-                "OCR failed on pages %d-%d of %d of %s",
+                "OCR failed on pages %d-%s of %d of %s",
                 first,
-                last,
+                last_label,
                 page_count,
                 path,
             )
             return False, OCR_FAIL_MSG
+        if text is None:
+            logger.warning(
+                "pypdf counted %d pages in %s but ghostscript found none "
+                "from page %d; stopping there",
+                page_count,
+                path,
+                first,
+            )
+            break
         logger.info(
-            "OCRed pages %d-%d of %d of %s in %.1fs, %d chars",
+            "OCRed pages %d-%s of %d of %s in %.1fs, %d chars",
             first,
-            last,
+            last_label,
             page_count,
             path,
             time.monotonic() - started,
             len(text),
         )
         parts.append(text)
+        if last is None:
+            break
     return True, OCR_PAGE_SEPARATOR.join(parts)
 
 
@@ -299,7 +321,7 @@ async def _ocr_page_range(
     path: str,
     first_page: int | None = None,
     last_page: int | None = None,
-) -> tuple[bool, str]:
+) -> tuple[bool, str | None]:
     """Rasterize one page range to a temporary TIFF and OCR it.
 
     The TIFF is removed when this returns, so only one range's worth of
@@ -307,8 +329,11 @@ async def _ocr_page_range(
 
     :param path: The path to the PDF
     :param first_page: 1-based first page, None for the whole document
-    :param last_page: 1-based last page, None for the whole document
-    :return Tuple with success or fail boolean and text
+    :param last_page: 1-based last page, None for the whole document; a
+        last page past the end of the document renders up to the end
+    :return (False, message) if ghostscript failed; (True, None) if the
+        range starts past the end of the document, so ghostscript rendered
+        no pages; otherwise (True, text)
     """
     with NamedTemporaryFile(prefix="ocr_", suffix=".tiff", buffering=0) as tmp:
         out, err, returncode = await rasterize_pdf(
@@ -316,6 +341,10 @@ async def _ocr_page_range(
         )
         if returncode != 0:
             return False, OCR_FAIL_MSG
+        if os.path.getsize(tmp.name) == 0:
+            # ghostscript exits 0 with no output when first_page is past
+            # the last page of the document.
+            return True, None
 
         txt = await convert_file_to_txt(tmp.name)
         txt = cleanup_ocr_text(txt)
