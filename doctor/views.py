@@ -138,10 +138,7 @@ def image_to_pdf(request) -> HttpResponse:
         image = Image.open(fp)
         pdf_bytes = convert_tiff_to_pdf_bytes(image)
         cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
-        with NamedTemporaryFile(suffix=".pdf") as output:
-            with open(output.name, "wb") as f:
-                f.write(cleaned_pdf_bytes)
-            return HttpResponse(cleaned_pdf_bytes)
+        return HttpResponse(cleaned_pdf_bytes)
     finally:
         cleanup_form(form)
 
