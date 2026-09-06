@@ -281,6 +281,9 @@ async def extract_doc_content(request) -> JsonResponse | HttpResponse:
     # We keep the original file name to use it for debugging purposes, you can find it in local_path (Opinion) field
     # or filepath_local (AbstractPDF).
     original_filename = form.cleaned_data["original_filename"]
+    # Get page count if you can. OCR slices the PDF by it and the response
+    # reports it, so read it once.
+    page_count = get_page_count(fp, extension)
     try:
         if extension == "pdf":
             (
@@ -288,7 +291,7 @@ async def extract_doc_content(request) -> JsonResponse | HttpResponse:
                 err,
                 returncode,
                 extracted_by_ocr,
-            ) = await extract_from_pdf(fp, ocr_available)
+            ) = await extract_from_pdf(fp, ocr_available, page_count)
         elif extension == "doc":
             content, err, returncode = await extract_from_doc(fp)
         elif extension == "docx":
@@ -335,8 +338,6 @@ async def extract_doc_content(request) -> JsonResponse | HttpResponse:
         )
         content = "Unable to extract the content from this file. Please try reading the original."
 
-    # Get page count if you can
-    page_count = get_page_count(fp, extension)
     cleanup_form(form)
     return JsonResponse(
         {

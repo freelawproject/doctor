@@ -17,8 +17,11 @@ Features:
    fit in one slice take a single pass, and the text is identical either
    way. pypdf's page count only sets the slice boundaries: the last slice
    renders through the real end of the file, so a document whose page tree
-   pypdf miscounts still has every page OCRed. Each slice logs its page
-   range, duration and text length at INFO.
+   pypdf miscounts still has every page OCRed. A tesseract failure on any
+   slice fails the document, as a ghostscript failure does, rather than
+   leaving a silent gap; before, tesseract's exit code was never checked.
+   The view reads the page count once and shares it with OCR. Each slice
+   logs its page range, duration and text length at INFO.
 
 Fixes:
  - Delegate file identification to Magika's `identify_path`

@@ -22,11 +22,12 @@ import numpy as np
 import pikepdf
 import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfReader
 
+from doctor import tasks
 from doctor.lib.text_extraction import (
     adjust_caption_lines,
     cleanup_content,
@@ -1545,10 +1546,8 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rasterize_page_range(self):
         """Does a page range render exactly those pages, and no range all?"""
-        from doctor.tasks import rasterize_pdf
-
         with NamedTemporaryFile(suffix=".tiff") as tiff:
-            _, stderr, returncode = await rasterize_pdf(
+            _, stderr, returncode = await tasks.rasterize_pdf(
                 self.pdf_path, tiff.name, 2, 4
             )
             self.assertEqual(returncode, 0, msg=stderr)
@@ -1556,7 +1555,7 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(rendered.n_frames, 3)
 
         with NamedTemporaryFile(suffix=".tiff") as tiff:
-            _, stderr, returncode = await rasterize_pdf(
+            _, stderr, returncode = await tasks.rasterize_pdf(
                 self.pdf_path, tiff.name
             )
             self.assertEqual(returncode, 0, msg=stderr)
@@ -1565,25 +1564,21 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_sliced_ocr_matches_single_pass(self):
         """Do three slices produce the same text as one pass?"""
-        from django.test import override_settings
-
-        from doctor.tasks import OCR_PAGE_SEPARATOR, extract_by_ocr
-
         before = self.leftover_tiffs()
         # Five pages in slices of two: 1-2, 3-4, 5.
         with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2):
-            success, sliced = await extract_by_ocr(self.pdf_path)
+            success, sliced = await tasks.extract_by_ocr(self.pdf_path)
         self.assertTrue(success)
         for marker in (self.markers[0], self.markers[2], self.markers[-1]):
             self.assertIn(marker, sliced, msg=sliced)
         self.assertEqual(
-            sliced.count(OCR_PAGE_SEPARATOR),
+            sliced.count(tasks.OCR_PAGE_SEPARATOR),
             len(self.markers) - 1,
             msg="one separator between each pair of pages, none trailing",
         )
 
         with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
-            success, single = await extract_by_ocr(self.pdf_path)
+            success, single = await tasks.extract_by_ocr(self.pdf_path)
         self.assertTrue(success)
         self.assertEqual(sliced, single)
         self.assertEqual(self.leftover_tiffs(), before)
@@ -1595,10 +1590,6 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
         without OCRing the remaining slices, and the failed slice's TIFF
         must not be left behind in the temp dir.
         """
-        from django.test import override_settings
-
-        from doctor import tasks
-
         before = self.leftover_tiffs()
         real_rasterize = tasks.rasterize_pdf
         calls = []
@@ -1624,16 +1615,60 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tesseract.call_count, 1)
         self.assertEqual(self.leftover_tiffs(), before)
 
+    async def test_failed_tesseract_slice_fails_the_document(self):
+        """Does a tesseract crash on one slice fail the whole document?
+
+        A killed tesseract leaves empty stdout and a nonzero exit code.
+        That must not be taken as a slice of blank pages, which would
+        leave a silent gap in the middle of the text.
+        """
+        before = self.leftover_tiffs()
+        real_tesseract = tasks.convert_file_to_txt
+        calls = []
+
+        async def killed_tesseract(path):
+            calls.append(path)
+            if len(calls) == 2:
+                return "", "Killed", -9
+            return await real_tesseract(path)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch(
+                "doctor.tasks.convert_file_to_txt",
+                side_effect=killed_tesseract,
+            ),
+            patch(
+                "doctor.tasks.rasterize_pdf", wraps=tasks.rasterize_pdf
+            ) as ghostscript,
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertFalse(success)
+        self.assertEqual(text, tasks.OCR_FAIL_MSG)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(ghostscript.call_count, 2)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_given_page_count_is_not_recomputed(self):
+        """Does a caller-supplied page count skip the pypdf parse?"""
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.get_page_count") as count,
+        ):
+            success, text = await tasks.extract_by_ocr(
+                self.pdf_path, page_count=len(self.markers)
+            )
+        self.assertTrue(success)
+        count.assert_not_called()
+        for marker in self.markers:
+            self.assertIn(marker, text)
+
     async def test_last_slice_is_open_ended(self):
         """Is the final slice rendered to the end of the file, not the count?
 
         pypdf's count only sets the slice boundaries. The last slice gets
         no last page, so ghostscript renders every page it finds there.
         """
-        from django.test import override_settings
-
-        from doctor import tasks
-
         calls = []
         real_rasterize = tasks.rasterize_pdf
 
@@ -1657,10 +1692,6 @@ class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
         what ghostscript renders. An undercount must not drop the trailing
         pages, and an overcount must not append empty slices.
         """
-        from django.test import override_settings
-
-        from doctor import tasks
-
         with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
             success, single = await tasks.extract_by_ocr(self.pdf_path)
         self.assertTrue(success)
