@@ -12,16 +12,7 @@ Features:
  - OCR (`/extract/doc/text/` with `ocr_available`) rasterizes and OCRs a
    PDF in slices of `DOCTOR_OCR_PAGES_PER_SLICE` pages (default 25) instead
    of rendering the whole document to one TIFF, so a request's peak memory
-   and `/tmp` usage depend on the slice size rather than the page count. A
-   914-page scanned record was OOM-killing the 500 MB pod. Documents that
-   fit in one slice take a single pass, and the text is identical either
-   way. pypdf's page count only sets the slice boundaries: the last slice
-   renders through the real end of the file, so a document whose page tree
-   pypdf miscounts still has every page OCRed. A tesseract failure on any
-   slice fails the document, as a ghostscript failure does, rather than
-   leaving a silent gap; before, tesseract's exit code was never checked.
-   The view reads the page count once and shares it with OCR. Each slice
-   logs its page range, duration and text length at INFO.
+   and `/tmp` usage depend on the slice size rather than the page count.
 
 Fixes:
  - Delegate file identification to Magika's `identify_path`
