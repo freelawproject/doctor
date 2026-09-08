@@ -22,11 +22,12 @@ import numpy as np
 import pikepdf
 import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfReader
 
+from doctor import tasks
 from doctor.lib.text_extraction import (
     adjust_caption_lines,
     cleanup_content,
@@ -1499,6 +1500,215 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
         }
         result = insert_whitespace(content, word, prev)
         self.assertEqual(result, "foo")
+
+
+class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
+    """OCR runs over fixed-size page slices.
+
+    A 900-page scanned record rasterized and OCRed in one pass took the
+    pod over its memory limit; slicing bounds ghostscript, tesseract and
+    /tmp to one slice at a time. These tests build a small scanned-style
+    PDF (one image per page carrying a marker word) and force several
+    slices with a low DOCTOR_OCR_PAGES_PER_SLICE.
+    """
+
+    markers = ["ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdir = tempfile.TemporaryDirectory()
+        cls.pdf_path = os.path.join(cls.tmpdir.name, "scan.pdf")
+        font = ImageFont.load_default(size=48)
+        pages = []
+        for marker in cls.markers:
+            # A letter page at 150 DPI, white with one line of text.
+            page = Image.new("L", (1275, 1650), 255)
+            ImageDraw.Draw(page).text(
+                (200, 300), f"Page {marker} of the record", fill=0, font=font
+            )
+            pages.append(page)
+        pages[0].save(
+            cls.pdf_path,
+            save_all=True,
+            append_images=pages[1:],
+            resolution=150,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmpdir.cleanup()
+
+    @staticmethod
+    def leftover_tiffs():
+        return set(
+            glob.glob(os.path.join(tempfile.gettempdir(), "ocr_*.tiff"))
+        )
+
+    async def test_rasterize_page_range(self):
+        """Does a page range render exactly those pages, and no range all?"""
+        with NamedTemporaryFile(suffix=".tiff") as tiff:
+            _, stderr, returncode = await tasks.rasterize_pdf(
+                self.pdf_path, tiff.name, 2, 4
+            )
+            self.assertEqual(returncode, 0, msg=stderr)
+            with Image.open(tiff.name) as rendered:
+                self.assertEqual(rendered.n_frames, 3)
+
+        with NamedTemporaryFile(suffix=".tiff") as tiff:
+            _, stderr, returncode = await tasks.rasterize_pdf(
+                self.pdf_path, tiff.name
+            )
+            self.assertEqual(returncode, 0, msg=stderr)
+            with Image.open(tiff.name) as rendered:
+                self.assertEqual(rendered.n_frames, len(self.markers))
+
+    async def test_sliced_ocr_matches_single_pass(self):
+        """Do three slices produce the same text as one pass?"""
+        before = self.leftover_tiffs()
+        # Five pages in slices of two: 1-2, 3-4, 5.
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2):
+            success, sliced = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        for marker in (self.markers[0], self.markers[2], self.markers[-1]):
+            self.assertIn(marker, sliced, msg=sliced)
+        self.assertEqual(
+            sliced.count(tasks.OCR_PAGE_SEPARATOR),
+            len(self.markers) - 1,
+            msg="one separator between each pair of pages, none trailing",
+        )
+
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
+            success, single = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        self.assertEqual(sliced, single)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_failed_slice_fails_the_document(self):
+        """Does a ghostscript failure mid-document fail cleanly?
+
+        The failure must surface as the usual (False, message) result
+        without OCRing the remaining slices, and the failed slice's TIFF
+        must not be left behind in the temp dir.
+        """
+        before = self.leftover_tiffs()
+        real_rasterize = tasks.rasterize_pdf
+        calls = []
+
+        async def flaky_rasterize(path, destination, first=None, last=None):
+            calls.append((first, last))
+            if first == 3:
+                return b"", b"Unrecoverable error", 1
+            return await real_rasterize(path, destination, first, last)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.rasterize_pdf", side_effect=flaky_rasterize),
+            patch(
+                "doctor.tasks.convert_file_to_txt",
+                wraps=tasks.convert_file_to_txt,
+            ) as tesseract,
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertFalse(success)
+        self.assertEqual(text, tasks.OCR_FAIL_MSG)
+        self.assertEqual(calls, [(1, 2), (3, 4)])
+        self.assertEqual(tesseract.call_count, 1)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_failed_tesseract_slice_fails_the_document(self):
+        """Does a tesseract crash on one slice fail the whole document?
+
+        A killed tesseract leaves empty stdout and a nonzero exit code.
+        That must not be taken as a slice of blank pages, which would
+        leave a silent gap in the middle of the text.
+        """
+        before = self.leftover_tiffs()
+        real_tesseract = tasks.convert_file_to_txt
+        calls = []
+
+        async def killed_tesseract(path):
+            calls.append(path)
+            if len(calls) == 2:
+                return "", "Killed", -9
+            return await real_tesseract(path)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch(
+                "doctor.tasks.convert_file_to_txt",
+                side_effect=killed_tesseract,
+            ),
+            patch(
+                "doctor.tasks.rasterize_pdf", wraps=tasks.rasterize_pdf
+            ) as ghostscript,
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertFalse(success)
+        self.assertEqual(text, tasks.OCR_FAIL_MSG)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(ghostscript.call_count, 2)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_given_page_count_is_not_recomputed(self):
+        """Does a caller-supplied page count skip the pypdf parse?"""
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.get_page_count") as count,
+        ):
+            success, text = await tasks.extract_by_ocr(
+                self.pdf_path, page_count=len(self.markers)
+            )
+        self.assertTrue(success)
+        count.assert_not_called()
+        for marker in self.markers:
+            self.assertIn(marker, text)
+
+    async def test_last_slice_is_open_ended(self):
+        """Is the final slice rendered to the end of the file, not the count?
+
+        pypdf's count only sets the slice boundaries. The last slice gets
+        no last page, so ghostscript renders every page it finds there.
+        """
+        calls = []
+        real_rasterize = tasks.rasterize_pdf
+
+        async def spy(path, destination, first=None, last=None):
+            calls.append((first, last))
+            return await real_rasterize(path, destination, first, last)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.rasterize_pdf", side_effect=spy),
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        self.assertEqual(calls, [(1, 2), (3, 4), (5, None)])
+        self.assertEqual(text.count(tasks.OCR_PAGE_SEPARATOR), 4)
+
+    async def test_page_count_disagreement_loses_no_pages(self):
+        """Does a wrong pypdf page count still OCR every page exactly once?
+
+        A damaged page tree can make pypdf return a count that differs from
+        what ghostscript renders. An undercount must not drop the trailing
+        pages, and an overcount must not append empty slices.
+        """
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
+            success, single = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        for marker in self.markers:
+            self.assertIn(marker, single)
+
+        before = self.leftover_tiffs()
+        for wrong_count in (3, 4, 6, 20):
+            with (
+                self.subTest(pypdf_count=wrong_count),
+                override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+                patch("doctor.tasks.get_page_count", return_value=wrong_count),
+            ):
+                success, sliced = await tasks.extract_by_ocr(self.pdf_path)
+                self.assertTrue(success)
+                self.assertEqual(sliced, single)
+        self.assertEqual(self.leftover_tiffs(), before)
 
 
 class TestOCRConfidenceTests(unittest.TestCase):

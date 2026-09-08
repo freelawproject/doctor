@@ -88,6 +88,13 @@ curl 'http://localhost:5050/extract/doc/text/?ocr_available=True' \
   -F "file=@doctor/test_assets/image-pdf.pdf"
 ```
 
+OCR renders and reads the PDF in slices of `DOCTOR_OCR_PAGES_PER_SLICE`
+pages (default 25), one slice at a time, so a request's peak memory and
+`/tmp` usage are set by the slice size rather than by the document's page
+count. Lower it if pods with several concurrent OCR requests run out of
+memory; raise it to spend fewer ghostscript and tesseract invocations on
+large documents. The extracted text is the same whatever the value.
+
 Magic:
 
  - The mimetype of the file will be determined by the name of the file you pass in. For example, if you pass in medical_assessment.pdf, the `pdf` extractor will be used.
