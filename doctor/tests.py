@@ -1,21 +1,33 @@
 import glob
+import hashlib
+import io
 import json
 import os
 import re
+import subprocess
 import tempfile
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch
 from zipfile import ZipFile
 
+import centralia
 import django
 import eyed3
+import numpy as np
+import pikepdf
 import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
+from PIL import Image, ImageDraw, ImageFont
+from pypdf import PdfReader
 
+from doctor import tasks
 from doctor.lib.text_extraction import (
     adjust_caption_lines,
     cleanup_content,
@@ -618,6 +630,740 @@ class AudioConversionTests(unittest.TestCase):
         self.assertEqual(51.64, float(response.text), msg="Bad duration")
 
 
+def render_pdf_page_to_gray(pdf_bytes: bytes, page: int) -> np.ndarray:
+    """Rasterize one page of a PDF to a grayscale array at 100 dpi."""
+    with NamedTemporaryFile(suffix=".pdf") as tmp:
+        with open(tmp.name, "wb") as f:
+            f.write(pdf_bytes)
+        out = subprocess.run(
+            [
+                "pdftoppm",
+                "-singlefile",
+                "-gray",
+                "-r",
+                "100",
+                "-f",
+                str(page),
+                tmp.name,
+            ],
+            capture_output=True,
+            check=True,
+        ).stdout
+    return np.asarray(Image.open(io.BytesIO(out)).convert("L"))
+
+
+def marker_index(gray: np.ndarray) -> int:
+    """Decode the page index encoded in a fixture page's marker bar.
+
+    The bitonal fixtures draw a black bar at x 40-140px whose height
+    is (page index * 60px), so the index survives any conversion that
+    preserves the raster and is wrong if pages are reordered.
+    """
+    column = gray[:, 90]
+    return round((column < 128).sum() / 60)
+
+
+class BitonalConversionTests(unittest.TestCase):
+    """Inline (multipart) mode of /convert/pdf/bitonal/."""
+
+    endpoint = "http://doctor:5050/convert/pdf/bitonal/"
+    fixture = "bitonal_marker_scan.pdf"
+
+    def convert(self, data=None, filename=None):
+        return requests.post(
+            self.endpoint,
+            files=make_file(filename=filename or self.fixture),
+            data={"dpi": 100, "threshold": 128, **(data or {})},
+        )
+
+    def test_bitonal_structure(self):
+        """Is every output page a 1-bit raw CCITT G4 image?"""
+        response = self.convert()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/pdf")
+        source = PdfReader(f"{asset_path}/{self.fixture}")
+        result = PdfReader(io.BytesIO(response.content))
+        self.assertEqual(len(result.pages), len(source.pages))
+        for source_page, result_page in zip(source.pages, result.pages):
+            self.assertEqual(
+                [float(v) for v in source_page.mediabox],
+                [float(v) for v in result_page.mediabox],
+                msg="MediaBox must be copied from the source page",
+            )
+            image = result_page["/Resources"]["/XObject"]["/Im0"]
+            self.assertEqual(image["/Filter"], "/CCITTFaxDecode")
+            self.assertEqual(image["/BitsPerComponent"], 1)
+            self.assertEqual(image["/DecodeParms"]["/K"], -1)
+        source_size = os.path.getsize(f"{asset_path}/{self.fixture}")
+        self.assertLess(
+            len(response.content),
+            source_size / 2,
+            msg="bitonal output should be much smaller than the scan",
+        )
+
+    def test_page_order_and_polarity(self):
+        """Are pages in order, black-on-white, after conversion?"""
+        response = self.convert()
+        for page in range(1, 6):
+            gray = render_pdf_page_to_gray(response.content, page)
+            self.assertGreater(
+                (gray > 128).mean(),
+                0.5,
+                msg=f"page {page} should be mostly white paper",
+            )
+            self.assertEqual(
+                marker_index(gray),
+                page,
+                msg=f"page {page} marker decodes to the wrong index",
+            )
+
+    def test_page_range(self):
+        """Does a 1-indexed inclusive page range subset correctly?"""
+        response = self.convert(data={"first_page": 2, "last_page": 4})
+        self.assertEqual(response.status_code, 200)
+        result = PdfReader(io.BytesIO(response.content))
+        self.assertEqual(len(result.pages), 3)
+        for position, source_index in enumerate([2, 3, 4], start=1):
+            gray = render_pdf_page_to_gray(response.content, position)
+            self.assertEqual(marker_index(gray), source_index)
+
+    def test_thresholding_does_not_dither(self):
+        """Does a gradient threshold to one clean step, not speckle?"""
+        response = self.convert(filename="bitonal_gradient.pdf")
+        self.assertEqual(response.status_code, 200)
+        gray = render_pdf_page_to_gray(response.content, 1)
+        row = gray[gray.shape[0] // 2] > 128
+        transitions = int((row[1:] != row[:-1]).sum())
+        self.assertLessEqual(
+            transitions,
+            5,
+            msg="a thresholded gradient must be a single black/white "
+            "step; many transitions mean dithering happened",
+        )
+        self.assertFalse(row[0], msg="dark side should threshold black")
+        self.assertTrue(row[-1], msg="light side should threshold white")
+
+    def test_validation_failures(self):
+        """Are bad parameters rejected with the error taxonomy?"""
+        no_input = requests.post(self.endpoint, data={"dpi": 100})
+        self.assertEqual(no_input.status_code, 400)
+        self.assertEqual(no_input.json()["error_code"], "VALIDATION_FAILED")
+        for bad in ({"dpi": 1200}, {"threshold": 300}, {"first_page": 0}):
+            response = self.convert(data=bad)
+            self.assertEqual(response.status_code, 400, msg=str(bad))
+            self.assertEqual(
+                response.json()["error_code"],
+                "VALIDATION_FAILED",
+                msg=str(bad),
+            )
+
+    def test_page_range_beyond_document(self):
+        response = self.convert(data={"first_page": 99})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "PAGE_RANGE_INVALID")
+
+    def test_invalid_pdf_error_code(self):
+        """Do garbage bytes map to INVALID_PDF rather than a 500?"""
+        response = requests.post(
+            self.endpoint,
+            files={"file": ("bad.pdf", b"%PDF-1.7 not really a pdf")},
+            data={"dpi": 100},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "INVALID_PDF")
+
+    def test_corrupt_object_stream_error_code(self):
+        """Does a corrupt /ObjStm map to INVALID_PDF rather than a 500?
+
+        pypdf raises a bare AssertionError (not PdfReadError) on a
+        corrupted object-stream type tag, so this pins the widened
+        except tuple in convert_pdf_to_bitonal.
+        """
+        buffer = io.BytesIO()
+        with pikepdf.open(f"{asset_path}/{self.fixture}") as pdf:
+            pdf.save(
+                buffer,
+                object_stream_mode=pikepdf.ObjectStreamMode.generate,
+            )
+        corrupted = buffer.getvalue().replace(b"/ObjStm", b"/XObStm", 1)
+        response = requests.post(
+            self.endpoint,
+            files={"file": ("corrupt.pdf", corrupted)},
+            data={"dpi": 100},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "INVALID_PDF")
+
+
+class StubS3Server(ThreadingHTTPServer):
+    """An in-process stand-in for presigned S3 GET/PUT targets.
+
+    Behavior is a per-instance queue of status codes so tests can
+    script sequences like [500, 500, 200] to exercise retries.
+    """
+
+    def __init__(self, fixture_bytes: bytes):
+        super().__init__(("127.0.0.1", 0), StubS3Handler)
+        self.fixture_bytes = fixture_bytes
+        self.get_statuses: list[int] = []
+        self.put_statuses: list[int] = []
+        self.get_count = 0
+        self.put_count = 0
+        self.received_puts: list[dict] = []
+        # When True, GET responses omit Content-Length (HTTP/1.0
+        # close-delimited body), exercising the streamed-size check.
+        self.omit_get_content_length = False
+
+
+class StubS3Handler(BaseHTTPRequestHandler):
+    server: StubS3Server
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        self.server.get_count += 1
+        status = (
+            self.server.get_statuses.pop(0)
+            if self.server.get_statuses
+            else 200
+        )
+        if status != 200:
+            self.send_response(status)
+            self.end_headers()
+            return
+        body = self.server.fixture_bytes
+        self.send_response(200)
+        if not self.server.omit_get_content_length:
+            self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_PUT(self):
+        self.server.put_count += 1
+        body = self.rfile.read(int(self.headers["Content-Length"]))
+        status = (
+            self.server.put_statuses.pop(0)
+            if self.server.put_statuses
+            else 200
+        )
+        if status == 200:
+            self.server.received_puts.append(
+                {
+                    "sha256": hashlib.sha256(body).hexdigest(),
+                    "bytes": len(body),
+                    "content_type": self.headers["Content-Type"],
+                }
+            )
+        self.send_response(status)
+        self.end_headers()
+
+
+class BitonalTransportTests(unittest.TestCase):
+    """Presigned GET/PUT mode of /convert/pdf/bitonal/.
+
+    The stub server runs in this test process; the suite executes
+    inside the doctor container, so the service reaches it on
+    127.0.0.1.
+    """
+
+    endpoint = "http://doctor:5050/convert/pdf/bitonal/"
+    fixture = "bitonal_marker_scan.pdf"
+
+    def setUp(self):
+        with open(f"{asset_path}/{self.fixture}", "rb") as f:
+            self.fixture_bytes = f.read()
+        self.server = StubS3Server(self.fixture_bytes)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever, daemon=True
+        )
+        self.thread.start()
+        port = self.server.server_address[1]
+        self.input_url = f"http://127.0.0.1:{port}/in/shard_0001.pdf"
+        self.output_url = f"http://127.0.0.1:{port}/out/shard_0001.pdf"
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+    def convert(self, **extra):
+        return requests.post(
+            self.endpoint,
+            data={
+                "input_url": self.input_url,
+                "output_url": self.output_url,
+                "dpi": 100,
+                "threshold": 128,
+                **extra,
+            },
+        )
+
+    def test_presigned_roundtrip(self):
+        """Happy path: GET the input, PUT the result, JSON summary."""
+        response = self.convert()
+        self.assertEqual(response.status_code, 200, msg=response.text)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["pages"], 5)
+        self.assertEqual(
+            payload["source_sha256"],
+            hashlib.sha256(self.fixture_bytes).hexdigest(),
+        )
+        self.assertEqual(len(self.server.received_puts), 1)
+        received = self.server.received_puts[0]
+        self.assertEqual(received["sha256"], payload["sha256"])
+        self.assertEqual(received["bytes"], payload["bytes"])
+        self.assertEqual(received["content_type"], "application/pdf")
+
+    def test_multipart_input_presigned_output(self):
+        """Multipart in, presigned PUT out: is source_sha256 right?
+
+        The digest comes from the form's write-time hashing (the
+        upload is never re-read), so this pins that it still matches
+        the uploaded bytes.
+        """
+        response = requests.post(
+            self.endpoint,
+            files={"file": (self.fixture, self.fixture_bytes)},
+            data={
+                "output_url": self.output_url,
+                "dpi": 100,
+                "threshold": 128,
+            },
+        )
+        self.assertEqual(response.status_code, 200, msg=response.text)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(
+            payload["source_sha256"],
+            hashlib.sha256(self.fixture_bytes).hexdigest(),
+        )
+        self.assertEqual(self.server.get_count, 0)
+        self.assertEqual(len(self.server.received_puts), 1)
+
+    def test_input_url_expired(self):
+        """A 403 on the input URL must fail fast, without retries."""
+        self.server.get_statuses = [403]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["error_code"], "INPUT_URL_EXPIRED")
+        self.assertEqual(self.server.get_count, 1)
+        self.assertEqual(self.server.put_count, 0)
+
+    def test_input_url_5xx_is_retried(self):
+        self.server.get_statuses = [500, 500, 200]
+        response = self.convert()
+        self.assertEqual(response.status_code, 200, msg=response.text)
+        self.assertEqual(self.server.get_count, 3)
+
+    def test_result_url_expired(self):
+        """A 403 on the output URL must fail fast, without retries."""
+        self.server.put_statuses = [403]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["error_code"], "RESULT_URL_EXPIRED")
+        self.assertEqual(self.server.put_count, 1)
+
+    def test_result_upload_5xx_is_retried(self):
+        self.server.put_statuses = [500, 500, 200]
+        response = self.convert()
+        self.assertEqual(response.status_code, 200, msg=response.text)
+        self.assertEqual(self.server.put_count, 3)
+
+    def test_result_upload_exhausts_retries(self):
+        self.server.put_statuses = [500, 500, 500]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["error_code"], "RESULT_UPLOAD_FAILED")
+        self.assertEqual(self.server.put_count, 3)
+
+    def test_input_url_3xx_is_not_success(self):
+        """follow_redirects is off, so a 3xx must be a terminal failure."""
+        self.server.get_statuses = [307]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.json()["error_code"], "INPUT_DOWNLOAD_FAILED"
+        )
+        self.assertEqual(self.server.get_count, 1)
+        self.assertEqual(self.server.put_count, 0)
+
+    def test_result_url_3xx_is_not_success(self):
+        """A redirected PUT stored nothing and must not report success."""
+        self.server.put_statuses = [307]
+        response = self.convert()
+        self.assertEqual(response.status_code, 502)
+        payload = response.json()
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "RESULT_UPLOAD_FAILED")
+        self.assertEqual(self.server.put_count, 1)
+
+
+class EgressPolicyTests(unittest.TestCase):
+    """Tests for the egress allowlist."""
+
+    def test_egress_blocked_error_code_over_http(self):
+        """Does a blocked URL surface as EGRESS_BLOCKED, not VALIDATION_FAILED?
+
+        Runs the view in-process with the test client because the
+        containerized service runs with the allowlist disabled.
+        """
+        from django.test import override_settings
+
+        with override_settings(
+            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"input_url": "https://evil.example.com/shard.pdf"},
+            )
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "EGRESS_BLOCKED")
+
+    def test_egress_policy(self):
+        from django.test import override_settings
+
+        from doctor.lib.bitonal import BitonalError
+        from doctor.tasks import validate_egress_url
+
+        with override_settings(
+            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]
+        ):
+            validate_egress_url(
+                "https://bucket.s3.amazonaws.com/key?X-Amz-Signature=x"
+            )
+            for blocked in (
+                "http://bucket.s3.amazonaws.com/key",  # not https
+                "https://evil.example.com/key",  # host not allowed
+                "https://127.0.0.1:9/key",  # host not allowed
+            ):
+                with self.assertRaises(BitonalError, msg=blocked) as ctx:
+                    validate_egress_url(blocked)
+                self.assertEqual(ctx.exception.error_code, "EGRESS_BLOCKED")
+        with override_settings(DOCTOR_EGRESS_ALLOWED_HOSTS=[]):
+            validate_egress_url("http://anything.example.com/key")
+
+    def test_malformed_url_is_terminal(self):
+        """Does a malformed URL fail as a terminal 4xx, not INTERNAL_ERROR?
+
+        httpx.InvalidURL is not an httpx.HTTPError, and a malformed
+        port passes validate_egress_url (urlparse never parses the
+        port), so without an explicit catch it would escape the
+        retry loop into the retryable INTERNAL_ERROR/500 catch-all
+        even though retrying a broken URL can never succeed.
+        """
+        from django.test import override_settings
+
+        from doctor.lib.bitonal import BitonalError
+        from doctor.tasks import put_file_to_url, stream_url_to_file
+
+        url = "https://bucket.s3.amazonaws.com:notaport/shard.pdf"
+        with (
+            override_settings(DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]),
+            tempfile.NamedTemporaryFile(suffix=".pdf") as scratch,
+        ):
+            with self.assertRaises(BitonalError) as ctx:
+                stream_url_to_file(url, scratch.name)
+            self.assertEqual(ctx.exception.error_code, "INPUT_DOWNLOAD_FAILED")
+            self.assertEqual(ctx.exception.status, 400)
+
+            with self.assertRaises(BitonalError) as ctx:
+                put_file_to_url(url, scratch.name, "application/pdf")
+            self.assertEqual(ctx.exception.error_code, "RESULT_UPLOAD_FAILED")
+            self.assertEqual(ctx.exception.status, 400)
+
+
+class BitonalGuardrailTests(unittest.TestCase):
+    """Timeouts, the download cap, and the catch-all error path.
+
+    These run the view in-process with the test client (like
+    EgressPolicyTests) so that settings can be overridden and
+    failures injected per test.
+    """
+
+    fixture = "bitonal_marker_scan.pdf"
+
+    def upload(self):
+        with open(f"{asset_path}/{self.fixture}", "rb") as f:
+            return SimpleUploadedFile(
+                self.fixture, f.read(), "application/pdf"
+            )
+
+    def test_pdftoppm_timeout_error_code(self):
+        """Does a stuck pdftoppm surface as CONVERSION_TIMEOUT?"""
+        from doctor.lib.bitonal import BitonalError, rasterize_page_to_gray
+
+        with (
+            patch(
+                "doctor.lib.bitonal.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(["pdftoppm"], 120),
+            ),
+            self.assertRaises(BitonalError) as ctx,
+        ):
+            rasterize_page_to_gray("whatever.pdf", 1, 300)
+        self.assertEqual(ctx.exception.error_code, "CONVERSION_TIMEOUT")
+        self.assertIn("timed out", ctx.exception.message)
+
+    def test_pdftoppm_timeout_reports_stderr(self):
+        """Does the timeout carry poppler's stderr and the page?"""
+        from doctor.lib.bitonal import BitonalError, rasterize_page_to_gray
+
+        with (
+            patch(
+                "doctor.lib.bitonal.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(
+                    ["pdftoppm"], 120, stderr=b"Syntax Error: bad page"
+                ),
+            ),
+            self.assertRaises(BitonalError) as ctx,
+        ):
+            rasterize_page_to_gray("whatever.pdf", 3, 300)
+        self.assertIn("Syntax Error: bad page", ctx.exception.message)
+        self.assertEqual(ctx.exception.details["page_number"], 3)
+
+    def test_request_page_timeout_reaches_pdftoppm(self):
+        """Does page_timeout in the request bound the pdftoppm call?"""
+        with patch(
+            "doctor.lib.bitonal.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["pdftoppm"], 45),
+        ) as run:
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72, "page_timeout": 45},
+            )
+        self.assertEqual(run.call_args.kwargs["timeout"], 45)
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertEqual(payload["page_number"], 1)
+        self.assertEqual(payload["pages_completed"], 0)
+        self.assertEqual(payload["timeout_limit"], "page")
+        self.assertIn("elapsed_ms", payload)
+        self.assertGreater(payload["pixels"], 0)
+
+    def test_pdftoppm_failure_stays_permanent(self):
+        """Does a failed pdftoppm keep the permanent error code?
+
+        Only the timeout paths moved to CONVERSION_TIMEOUT. A defect
+        in the PDF must stay CONVERSION_FAILED: the shard daemon
+        retries a timeout, and retrying a corrupt page forever is
+        exactly what the split of the two codes has to prevent.
+        """
+        with patch(
+            "doctor.lib.bitonal.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                ["pdftoppm"], 1, b"", b"Syntax Error: damaged page tree"
+            ),
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_FAILED")
+        self.assertIn("damaged page tree", payload["msg"])
+        self.assertEqual(payload["page_number"], 1)
+        self.assertNotIn("timeout_limit", payload)
+
+    def test_budget_clamp_reports_the_budget(self):
+        """Does the budget, not the clamped page limit, get named?
+
+        The pdftoppm call is bounded by min(page_timeout, remaining).
+        When the budget is the smaller of the two, the failure must
+        name the budget: naming the clamp would send the caller to
+        raise page_timeout, which changes nothing.
+        """
+        with patch(
+            "doctor.lib.bitonal.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["pdftoppm"], 1),
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72, "total_timeout": 1},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertEqual(payload["timeout_limit"], "total")
+        self.assertIn("budget", payload["msg"])
+        self.assertNotIn("timed out after", payload["msg"])
+        self.assertEqual(payload["page_number"], 1)
+
+    def test_request_total_timeout_stops_the_loop(self):
+        """Does total_timeout in the request stop a later page?"""
+
+        def slow_page(input_path, page_number, dpi, timeout=None):
+            time.sleep(1.1)
+            return Image.new("L", (612, 792), 255)
+
+        with patch(
+            "doctor.lib.bitonal.rasterize_page_to_gray",
+            side_effect=slow_page,
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72, "total_timeout": 1},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertIn("budget", payload["msg"])
+        self.assertEqual(payload["page_number"], 2)
+        self.assertEqual(payload["pages_completed"], 1)
+
+    def test_timeout_above_the_ceiling_is_rejected(self):
+        """Is an over-ceiling page_timeout a validation failure?"""
+        from django.test import override_settings
+
+        with override_settings(DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS=200):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={
+                    "file": self.upload(),
+                    "dpi": 72,
+                    "page_timeout": 201,
+                },
+            )
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "VALIDATION_FAILED")
+        self.assertIn("page_timeout", payload["msg"])
+
+    def test_total_timeout_above_the_ceiling_is_rejected(self):
+        """Is an over-ceiling total_timeout a validation failure?"""
+        from django.test import override_settings
+
+        with override_settings(DOCTOR_BITONAL_TIMEOUT_SECONDS=1800):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={
+                    "file": self.upload(),
+                    "dpi": 72,
+                    "total_timeout": 1801,
+                },
+            )
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "VALIDATION_FAILED")
+        self.assertIn("total_timeout", payload["msg"])
+
+    def test_rejected_request_skips_the_upload_hash(self):
+        """Does a rejected request avoid copying the whole upload?"""
+        with patch("doctor.forms.hashlib.sha256") as digest:
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 9999},
+            )
+        self.assertEqual(response.status_code, 400)
+        digest.assert_not_called()
+
+    def test_conversion_budget_exhausted(self):
+        """Does an exhausted whole-conversion budget stop the loop?"""
+        from django.test import override_settings
+
+        with override_settings(DOCTOR_BITONAL_TIMEOUT_SECONDS=0):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "CONVERSION_TIMEOUT")
+        self.assertIn("budget", payload["msg"])
+        self.assertEqual(payload["page_number"], 1)
+        self.assertEqual(payload["pages_completed"], 0)
+
+    def test_unexpected_error_returns_documented_json(self):
+        """Does a non-BitonalError produce the JSON shape, not HTML?"""
+        with patch(
+            "doctor.views.convert_pdf_to_bitonal",
+            side_effect=RuntimeError("pikepdf exploded"),
+        ):
+            response = Client().post(
+                reverse("convert-pdf-bitonal"),
+                data={"file": self.upload(), "dpi": 72},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.content)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "INTERNAL_ERROR")
+
+    def test_geometry_mismatch_error_code(self):
+        """Does a MediaBox drift report PAGE_GEOMETRY_MISMATCH?"""
+        from doctor.lib import bitonal
+        from doctor.lib.bitonal import BitonalError, convert_pdf_to_bitonal
+
+        real_add = bitonal.add_bitonal_page
+
+        def skewed_add(pdf, g4, size, box, rotation):
+            x0, y0, x1, y1 = box
+            real_add(pdf, g4, size, (x0, y0, x1 + 5, y1), rotation)
+
+        with (
+            tempfile.NamedTemporaryFile(suffix=".pdf") as output,
+            patch(
+                "doctor.lib.bitonal.add_bitonal_page", side_effect=skewed_add
+            ),
+            self.assertRaises(BitonalError) as ctx,
+        ):
+            convert_pdf_to_bitonal(
+                f"{asset_path}/{self.fixture}",
+                output.name,
+                dpi=72,
+                threshold=128,
+                first_page=1,
+                last_page=1,
+            )
+        self.assertEqual(ctx.exception.error_code, "PAGE_GEOMETRY_MISMATCH")
+
+    def _download_capped(self, omit_content_length: bool):
+        """Run a presigned-GET conversion against a tiny download cap."""
+        from django.test import override_settings
+
+        with open(f"{asset_path}/{self.fixture}", "rb") as f:
+            server = StubS3Server(f.read())
+        server.omit_get_content_length = omit_content_length
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            with override_settings(
+                DOCTOR_EGRESS_ALLOWED_HOSTS=[],
+                DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES=1000,
+            ):
+                response = Client().post(
+                    reverse("convert-pdf-bitonal"),
+                    data={
+                        "input_url": f"http://127.0.0.1:{port}/in/shard.pdf",
+                        "output_url": f"http://127.0.0.1:{port}/out/shard.pdf",
+                    },
+                )
+            self.assertEqual(response.status_code, 400)
+            payload = json.loads(response.content)
+            self.assertFalse(payload["success"])
+            self.assertEqual(payload["error_code"], "INPUT_TOO_LARGE")
+            self.assertEqual(
+                server.get_count, 1, msg="an oversized input must not retry"
+            )
+            self.assertEqual(server.put_count, 0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_input_too_large_content_length(self):
+        """Is an oversized Content-Length rejected before downloading?"""
+        self._download_capped(omit_content_length=False)
+
+    def test_input_too_large_while_streaming(self):
+        """Is an oversized body without Content-Length still caught?"""
+        self._download_capped(omit_content_length=True)
+
+
 class TestFailedValidations(unittest.TestCase):
     def test_for_400s(self):
         """Test validation for missing audio file"""
@@ -754,6 +1500,215 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
         }
         result = insert_whitespace(content, word, prev)
         self.assertEqual(result, "foo")
+
+
+class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):
+    """OCR runs over fixed-size page slices.
+
+    A 900-page scanned record rasterized and OCRed in one pass took the
+    pod over its memory limit; slicing bounds ghostscript, tesseract and
+    /tmp to one slice at a time. These tests build a small scanned-style
+    PDF (one image per page carrying a marker word) and force several
+    slices with a low DOCTOR_OCR_PAGES_PER_SLICE.
+    """
+
+    markers = ["ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdir = tempfile.TemporaryDirectory()
+        cls.pdf_path = os.path.join(cls.tmpdir.name, "scan.pdf")
+        font = ImageFont.load_default(size=48)
+        pages = []
+        for marker in cls.markers:
+            # A letter page at 150 DPI, white with one line of text.
+            page = Image.new("L", (1275, 1650), 255)
+            ImageDraw.Draw(page).text(
+                (200, 300), f"Page {marker} of the record", fill=0, font=font
+            )
+            pages.append(page)
+        pages[0].save(
+            cls.pdf_path,
+            save_all=True,
+            append_images=pages[1:],
+            resolution=150,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmpdir.cleanup()
+
+    @staticmethod
+    def leftover_tiffs():
+        return set(
+            glob.glob(os.path.join(tempfile.gettempdir(), "ocr_*.tiff"))
+        )
+
+    async def test_rasterize_page_range(self):
+        """Does a page range render exactly those pages, and no range all?"""
+        with NamedTemporaryFile(suffix=".tiff") as tiff:
+            _, stderr, returncode = await tasks.rasterize_pdf(
+                self.pdf_path, tiff.name, 2, 4
+            )
+            self.assertEqual(returncode, 0, msg=stderr)
+            with Image.open(tiff.name) as rendered:
+                self.assertEqual(rendered.n_frames, 3)
+
+        with NamedTemporaryFile(suffix=".tiff") as tiff:
+            _, stderr, returncode = await tasks.rasterize_pdf(
+                self.pdf_path, tiff.name
+            )
+            self.assertEqual(returncode, 0, msg=stderr)
+            with Image.open(tiff.name) as rendered:
+                self.assertEqual(rendered.n_frames, len(self.markers))
+
+    async def test_sliced_ocr_matches_single_pass(self):
+        """Do three slices produce the same text as one pass?"""
+        before = self.leftover_tiffs()
+        # Five pages in slices of two: 1-2, 3-4, 5.
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2):
+            success, sliced = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        for marker in (self.markers[0], self.markers[2], self.markers[-1]):
+            self.assertIn(marker, sliced, msg=sliced)
+        self.assertEqual(
+            sliced.count(tasks.OCR_PAGE_SEPARATOR),
+            len(self.markers) - 1,
+            msg="one separator between each pair of pages, none trailing",
+        )
+
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
+            success, single = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        self.assertEqual(sliced, single)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_failed_slice_fails_the_document(self):
+        """Does a ghostscript failure mid-document fail cleanly?
+
+        The failure must surface as the usual (False, message) result
+        without OCRing the remaining slices, and the failed slice's TIFF
+        must not be left behind in the temp dir.
+        """
+        before = self.leftover_tiffs()
+        real_rasterize = tasks.rasterize_pdf
+        calls = []
+
+        async def flaky_rasterize(path, destination, first=None, last=None):
+            calls.append((first, last))
+            if first == 3:
+                return b"", b"Unrecoverable error", 1
+            return await real_rasterize(path, destination, first, last)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.rasterize_pdf", side_effect=flaky_rasterize),
+            patch(
+                "doctor.tasks.convert_file_to_txt",
+                wraps=tasks.convert_file_to_txt,
+            ) as tesseract,
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertFalse(success)
+        self.assertEqual(text, tasks.OCR_FAIL_MSG)
+        self.assertEqual(calls, [(1, 2), (3, 4)])
+        self.assertEqual(tesseract.call_count, 1)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_failed_tesseract_slice_fails_the_document(self):
+        """Does a tesseract crash on one slice fail the whole document?
+
+        A killed tesseract leaves empty stdout and a nonzero exit code.
+        That must not be taken as a slice of blank pages, which would
+        leave a silent gap in the middle of the text.
+        """
+        before = self.leftover_tiffs()
+        real_tesseract = tasks.convert_file_to_txt
+        calls = []
+
+        async def killed_tesseract(path):
+            calls.append(path)
+            if len(calls) == 2:
+                return "", "Killed", -9
+            return await real_tesseract(path)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch(
+                "doctor.tasks.convert_file_to_txt",
+                side_effect=killed_tesseract,
+            ),
+            patch(
+                "doctor.tasks.rasterize_pdf", wraps=tasks.rasterize_pdf
+            ) as ghostscript,
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertFalse(success)
+        self.assertEqual(text, tasks.OCR_FAIL_MSG)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(ghostscript.call_count, 2)
+        self.assertEqual(self.leftover_tiffs(), before)
+
+    async def test_given_page_count_is_not_recomputed(self):
+        """Does a caller-supplied page count skip the pypdf parse?"""
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.get_page_count") as count,
+        ):
+            success, text = await tasks.extract_by_ocr(
+                self.pdf_path, page_count=len(self.markers)
+            )
+        self.assertTrue(success)
+        count.assert_not_called()
+        for marker in self.markers:
+            self.assertIn(marker, text)
+
+    async def test_last_slice_is_open_ended(self):
+        """Is the final slice rendered to the end of the file, not the count?
+
+        pypdf's count only sets the slice boundaries. The last slice gets
+        no last page, so ghostscript renders every page it finds there.
+        """
+        calls = []
+        real_rasterize = tasks.rasterize_pdf
+
+        async def spy(path, destination, first=None, last=None):
+            calls.append((first, last))
+            return await real_rasterize(path, destination, first, last)
+
+        with (
+            override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+            patch("doctor.tasks.rasterize_pdf", side_effect=spy),
+        ):
+            success, text = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        self.assertEqual(calls, [(1, 2), (3, 4), (5, None)])
+        self.assertEqual(text.count(tasks.OCR_PAGE_SEPARATOR), 4)
+
+    async def test_page_count_disagreement_loses_no_pages(self):
+        """Does a wrong pypdf page count still OCR every page exactly once?
+
+        A damaged page tree can make pypdf return a count that differs from
+        what ghostscript renders. An undercount must not drop the trailing
+        pages, and an overcount must not append empty slices.
+        """
+        with override_settings(DOCTOR_OCR_PAGES_PER_SLICE=100):
+            success, single = await tasks.extract_by_ocr(self.pdf_path)
+        self.assertTrue(success)
+        for marker in self.markers:
+            self.assertIn(marker, single)
+
+        before = self.leftover_tiffs()
+        for wrong_count in (3, 4, 6, 20):
+            with (
+                self.subTest(pypdf_count=wrong_count),
+                override_settings(DOCTOR_OCR_PAGES_PER_SLICE=2),
+                patch("doctor.tasks.get_page_count", return_value=wrong_count),
+            ):
+                success, sliced = await tasks.extract_by_ocr(self.pdf_path)
+                self.assertTrue(success)
+                self.assertEqual(sliced, single)
+        self.assertEqual(self.leftover_tiffs(), before)
 
 
 class TestOCRConfidenceTests(unittest.TestCase):
@@ -909,3 +1864,156 @@ class TestCleanupContent(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StructuredOpinionTests(unittest.TestCase):
+    """Tests for centralia-backed structured opinion extraction.
+
+    Run in-process with the test client so the suite does not depend on
+    the containerized service being up.
+    """
+
+    def _post(self, filename="ca1-opinion.pdf", **extra):
+        with open(f"{asset_path}/{filename}", "rb") as f:
+            data = {
+                "file": SimpleUploadedFile(filename, f.read()),
+                **extra,
+            }
+            return Client().post(
+                reverse("extract-structured-opinion"), data=data
+            )
+
+    def test_structured_extraction(self):
+        """Does a digital ca1 PDF come back as a correctly parsed document?
+
+        The assertions check real extracted content, not just that the
+        keys are present: this is what proves centralia actually read
+        the PDF rather than returning an empty-but-well-shaped payload.
+        """
+        response = self._post(court_id="ca1")
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["status"], "valid")
+        self.assertEqual(payload["court_id"], "ca1")
+
+        # Case-level criteria, read off the cover page.
+        cluster = payload["cluster"]
+        self.assertEqual(
+            cluster["case_name"],
+            "DEMAN KIM v. TODD BLANCHE,* Acting Attorney General",
+        )
+        self.assertEqual(
+            cluster["court"],
+            "United States Court of Appeals For the First Circuit",
+        )
+        self.assertEqual(cluster["docket_number"], "No. 24-2042")
+        self.assertEqual(cluster["date_filed"], "July 30, 2026")
+        self.assertEqual(cluster["date_filed_iso"], "2026-07-30")
+        self.assertEqual(cluster["n_pages"], 12)
+        self.assertEqual(cluster["panel"], ["Aframe", "Lipez", "Dunlap"])
+        self.assertEqual(
+            cluster["parties"],
+            ["DEMAN KIM", "TODD BLANCHE,* Acting Attorney General"],
+        )
+        self.assertEqual(
+            cluster["lower_court"],
+            "PETITION FOR REVIEW OF AN ORDER OF THE BOARD OF "
+            "IMMIGRATION APPEALS",
+        )
+        self.assertTrue(cluster["attorneys"].startswith("Randy Olen"))
+
+        # One entry per writing, each with its own author and body text.
+        self.assertEqual(len(payload["opinions"]), 1)
+        opinion = payload["opinions"][0]
+        self.assertEqual(opinion["order"], 1)
+        self.assertEqual(opinion["type"], "majority")
+        self.assertEqual(opinion["author"], "AFRAME, Circuit Judge.")
+        self.assertEqual(opinion["author_name"], "AFRAME")
+        self.assertEqual(opinion["author_title"], "Circuit Judge")
+        self.assertTrue(
+            opinion["text"].startswith(
+                "Deman Kim petitions from the Board of Immigration Appeals'"
+            ),
+            msg=opinion["text"][:120],
+        )
+        self.assertIn("requiring vacatur under Rule 11.", opinion["text"])
+
+        # Footnotes are labeled and attached to their writing, and their
+        # text is already inside opinion["text"] -- callers do not
+        # stitch it back in.
+        self.assertEqual(
+            [f["label"] for f in opinion["footnotes"]], ["1", "2", "3"]
+        )
+        self.assertTrue(
+            opinion["footnotes"][0]["text"].startswith(
+                '"Sua sponte" typically describes a situation'
+            )
+        )
+        self.assertIn(opinion["footnotes"][0]["text"][:40], opinion["text"])
+
+        # The headmatter carries its own notes, separate from the body's.
+        headnotes = payload["headmatter"]["footnotes"]
+        self.assertEqual([f["label"] for f in headnotes], ["*"])
+        self.assertIn(
+            "automatically substituted for former Attorney General",
+            headnotes[0]["text"],
+        )
+        self.assertEqual(payload["diagnostics"]["footnote_count"], 4)
+
+        # Nothing went unaccounted for: no unplaced content, no warnings.
+        diagnostics = payload["diagnostics"]
+        self.assertEqual(diagnostics["rollout"], "released")
+        self.assertEqual(diagnostics["residual_content"], 0)
+        self.assertEqual(diagnostics["headmatter_untinted"], 0)
+        self.assertEqual(diagnostics["unbylined_opinions"], 0)
+        self.assertEqual(diagnostics["warnings"], [])
+
+        # The renderings CL consumes instead of a flat pdftotext string.
+        self.assertIn(
+            "United States Court of Appeals", payload["headmatter"]["text"]
+        )
+        self.assertIn(
+            "<docketnumber>No. 24-2042</docketnumber>", payload["casebody"]
+        )
+        self.assertIn("<parties>DEMAN KIM</parties>", payload["casebody"])
+        self.assertTrue(payload["html"].startswith("<div class="))
+
+    def test_unknown_court(self):
+        """Does an unregistered court id fail loudly rather than read worse?"""
+        response = self._post(court_id="notacourt")
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "UNKNOWN_COURT")
+
+    def test_court_not_released(self):
+        """Is a held-back court refused unless allow_pending is set?
+
+        The court is read off centralia's HELD_BACK rather than named
+        here: courts graduate to released as centralia is ported, and a
+        hardcoded id silently turns this into a test of the happy path.
+        """
+        if not centralia.HELD_BACK:
+            self.skipTest("centralia is holding no courts back")
+        court_id = sorted(centralia.HELD_BACK)[0]
+
+        response = self._post(court_id=court_id)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            json.loads(response.content)["error_code"], "COURT_NOT_RELEASED"
+        )
+
+        response = self._post(court_id=court_id, allow_pending="true")
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["diagnostics"]["rollout"], "pending")
+
+    def test_court_id_required(self):
+        """Is the court id required rather than sniffed?"""
+        response = self._post()
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.content)
+        self.assertEqual(payload["error_code"], "VALIDATION_FAILED")
+        self.assertIn("court_id", payload["msg"])

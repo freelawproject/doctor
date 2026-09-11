@@ -27,6 +27,53 @@ ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
 
+# Host allowlist for endpoints that fetch or upload caller-supplied
+# URLs (currently the bitonal endpoint). Comma-separated fnmatch
+# patterns; when set, URLs must be https and match one of them. The
+# default admits any AWS host (presigned S3 URLs) while blocking
+# SSRF at cluster-internal services; deployments can pin it down to
+# exact bucket hostnames. Set it empty to disable the check, which
+# is what local dev and the test suite need (see .env.example).
+DOCTOR_EGRESS_ALLOWED_HOSTS = [
+    host.strip()
+    for host in env(
+        "DOCTOR_EGRESS_ALLOWED_HOSTS", default="*.amazonaws.com"
+    ).split(",")
+    if host.strip()
+]
+
+# Bitonal guardrails: per-page pdftoppm timeout, whole-conversion
+# budget, and input_url download cap (0 disables). Defaults carry
+# 30-60x headroom over the designed workload (a 200-page shard at
+# 300 DPI converts in ~1 minute), so they only trip on stuck work.
+DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS", default=120
+)
+# A request can lower the page timeout, and it can raise the page
+# timeout to this ceiling. A scanned volume with one very slow page
+# needs more than the default, and only the caller knows which volume
+# that is. A larger default would instead hold a worker longer on
+# every stuck page, CourtListener's included. The budget below is its
+# own ceiling: a request can only lower it, because even a 200s page
+# is small against 1800s.
+DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS = env.int(
+    "DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS", default=200
+)
+DOCTOR_BITONAL_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_BITONAL_TIMEOUT_SECONDS", default=1800
+)
+DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
+    "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
+)
+
+# OCR runs ghostscript and tesseract over this many pages at a time, so a
+# request's peak memory and /tmp usage depend on the slice size rather
+# than on the document's page count. A 300 DPI letter page is ~8 MB of
+# grayscale pixels; the pod limit, the idle worker's footprint and the
+# expected concurrency decide how many of those fit. Documents with no
+# more pages than this take a single pass, exactly as before.
+DOCTOR_OCR_PAGES_PER_SLICE = env.int("DOCTOR_OCR_PAGES_PER_SLICE", default=25)
+
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     sentry_sdk.init(
@@ -36,3 +83,27 @@ if SENTRY_DSN:
         ],
         ignore_errors=[KeyboardInterrupt],
     )
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "()": "doctor.lib.utils.UTCFormatter",
+            "format": "%(asctime)s.%(msecs)03dZ %(levelname)s %(name)s: %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "doctor": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+    },
+}

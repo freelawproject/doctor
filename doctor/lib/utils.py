@@ -1,9 +1,13 @@
 import asyncio
 import datetime
+import functools
+import inspect
 import io
 import logging
 import os
 import re
+import time
+import uuid
 import warnings
 from collections import namedtuple
 from decimal import Decimal
@@ -11,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import six
-from PyPDF2 import PdfMerger
+from pypdf import PdfWriter
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
@@ -250,8 +254,7 @@ def strip_metadata_from_path(file_path):
     :param pdf_bytes: PDF as binary content
     :return: PDF bytes with metadata removed.
     """
-    with open(file_path, "rb") as f:
-        pdf_merger = PdfMerger()
+    with open(file_path, "rb") as f, PdfWriter() as pdf_merger:
         pdf_merger.append(io.BytesIO(f.read()))
         pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
         byte_writer = io.BytesIO()
@@ -267,12 +270,12 @@ def strip_metadata_from_bytes(pdf_bytes):
     :param pdf_bytes: PDF as binary content
     :return: PDF bytes with metadata removed.
     """
-    pdf_merger = PdfMerger()
-    pdf_merger.append(io.BytesIO(pdf_bytes))
-    pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
-    byte_writer = io.BytesIO()
-    pdf_merger.write(byte_writer)
-    return force_bytes(byte_writer.getvalue())
+    with PdfWriter() as pdf_merger:
+        pdf_merger.append(io.BytesIO(pdf_bytes))
+        pdf_merger.add_metadata({"/CreationDate": "", "/ModDate": ""})
+        byte_writer = io.BytesIO()
+        pdf_merger.write(byte_writer)
+        return force_bytes(byte_writer.getvalue())
 
 
 def cleanup_form(form):
@@ -393,6 +396,77 @@ def log_sentry_event(
     :return: None
     """
     logger.log(level, message, extra=extra, **kwargs)
+
+
+class UTCFormatter(logging.Formatter):
+    """Formatter that renders %(asctime)s in UTC so a trailing Z is accurate."""
+
+    converter = time.gmtime
+
+
+def _logfmt_quote(value) -> str:
+    """Return a double-quoted, logfmt-safe rendering of a value.
+
+    Logfmt breaks on unquoted spaces and `=`, so filenames and content-types
+    (which can contain either) have to be quoted at emit time.
+    """
+    s = "" if value is None else str(value)
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def log_upload_lifecycle(view):
+    """Decorator: emit "start" and "end" log lines around a view.
+
+    Attaches request_id for very simple tracing to find requests
+    that do not complete. Includes file sizes to track OOM causes.
+    """
+    view_logger = logging.getLogger(view.__module__)
+    view_name = view.__name__
+
+    def _log_start(request) -> str:
+        request_id = uuid.uuid4().hex[:8]
+        upload = request.FILES.get("file")
+        if upload is not None:
+            view_logger.info(
+                "Request start view=%s id=%s filename=%s content_type=%s size_bytes=%d",
+                view_name,
+                request_id,
+                _logfmt_quote(upload.name),
+                _logfmt_quote(upload.content_type),
+                upload.size or 0,
+            )
+        else:
+            view_logger.info(
+                "Request start view=%s id=%s (no file)",
+                view_name,
+                request_id,
+            )
+        return request_id
+
+    def _log_end(request_id: str) -> None:
+        view_logger.info("Request end view=%s id=%s", view_name, request_id)
+
+    if inspect.iscoroutinefunction(view):
+
+        @functools.wraps(view)
+        async def async_wrapper(request, *args, **kwargs):
+            request_id = _log_start(request)
+            try:
+                return await view(request, *args, **kwargs)
+            finally:
+                _log_end(request_id)
+
+        return async_wrapper
+
+    @functools.wraps(view)
+    def sync_wrapper(request, *args, **kwargs):
+        request_id = _log_start(request)
+        try:
+            return view(request, *args, **kwargs)
+        finally:
+            _log_end(request_id)
+
+    return sync_wrapper
 
 
 async def strip_metadata_with_exiftool(path: str) -> bool:
