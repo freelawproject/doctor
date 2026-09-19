@@ -1,9 +1,62 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Features:
+ - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
+   the caller may retry, rather than the permanent `CONVERSION_FAILED`. The
+   request can now send `page_timeout` and `total_timeout`, defaulting to
+   the settings and capped by them; the new
+   `DOCTOR_BITONAL_PAGE_TIMEOUT_MAX_SECONDS` (default 200) caps the former.
+   A failure on a page reports `page_number`, `pages_completed`,
+   `elapsed_ms`, `pixels` and `timeout_limit` as JSON fields.
+ - OCR (`/extract/doc/text/` with `ocr_available`) rasterizes and OCRs a
+   PDF in slices of `DOCTOR_OCR_PAGES_PER_SLICE` pages (default 25) instead
+   of rendering the whole document to one TIFF, so a request's peak memory
+   and `/tmp` usage depend on the slice size rather than the page count.
+
+Fixes:
+ - Delegate file identification to Magika's `identify_path`
+
+Changes:
+ - Bump `magika` to 1.0.3.
+ - Bump `centralia` to 0.0.6.
+
 ## Current
 
+Features:
+ - New `/extract/opinion/structured/` endpoint: given a digital (text-based)
+   court PDF and a `court_id`, returns a structured opinion extracted with
+   [centralia](https://github.com/freelawproject/centralia) — case-level
+   criteria, one entry per writing with its own author/text/footnotes,
+   rendered HTML and Harvard casebody XML. For the courts centralia has
+   readers for this replaces pdftotext/OCR; centralia's payload is passed
+   through unchanged. Unreadable court ids fail as `UNKNOWN_COURT` and
+   courts still being worked on as `COURT_NOT_RELEASED` (override with
+   `allow_pending`) rather than silently reading worse. Adds `centralia`
+   as a dependency.
+ - New `/convert/pdf/bitonal/` endpoint: converts a scanned PDF (or a page
+   range) to a bitonal CCITT G4 PDF, streaming page by page. Input arrives
+   as a multipart upload or a presigned GET URL; the result returns inline
+   or is uploaded to a presigned PUT URL. Adds the
+   `DOCTOR_EGRESS_ALLOWED_HOSTS` setting (default `*.amazonaws.com`) to
+   restrict which hosts caller-supplied URLs may point to, plus
+   per-request guardrails: a per-page `pdftoppm` timeout
+   (`DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS`), a whole-conversion budget
+   (`DOCTOR_BITONAL_TIMEOUT_SECONDS`) and a cap on `input_url` download
+   size (`DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES`). Unexpected failures
+   return the documented JSON error shape with code `INTERNAL_ERROR`
+   instead of an HTML 500.
+ - Added `pikepdf` as an explicit dependency (it was already present
+   transitively via `img2pdf`).
+
+**0.3.6 - 2026-05-27** #237
+
+Features:
  - Migrated to async Django 6.0.1
+
+Fixes:
+ - Update pypdf2 -> pypdf 5+ (6.12)
+ - Address small potential memory leak
 
 **0.3.5 - 2025-11-21** #228
 
