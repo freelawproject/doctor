@@ -921,6 +921,11 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
 
     # Load the file, delete the old tags and create a new one.
     audio_file = eyed3.load(mp3_path)
+    if audio_file is None:
+        # eyed3 returns None for a file it cannot parse as mp3. Say so
+        # here rather than letting every tag access below fail with an
+        # AttributeError on None.
+        raise ValueError(f"eyed3 could not load {mp3_path!r} as an mp3")
     # Undocumented API from eyed3.plugins.classic.ClassicPlugin#handleRemoves
     id3.Tag.remove(
         audio_file.tag.file_info.name,
