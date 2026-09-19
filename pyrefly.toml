@@ -1,0 +1,44 @@
+# The whole codebase is checked; add new files and modules here as they appear.
+project-includes = [
+    "doctor/**",
+    "manage.py",
+]
+# Leniency for the mostly-untyped codebase: don't check bodies of unannotated
+# functions, treat their return types as Any, honor `# type: ignore` comments,
+# and treat unresolvable imports as Any.
+check-unannotated-defs = false
+infer-return-types = "never"
+permissive-ignores = true
+ignore-missing-imports = ["*"]
+# Pre-existing errors are grandfathered here; only new errors fail the check.
+baseline = ".pyrefly-baseline.json"
+
+# Checks the codebase was never previously held to.
+[errors]
+unbound-name = false
+bad-override-param-name = false
+bad-override-mutable-attribute = false
+
+# Modules held to a stricter standard. Ideally the whole codebase will be held
+# to these standards eventually; add modules here as they become clean.
+[[sub-config]]
+matches = "doctor/forms.py"
+check-unannotated-defs = true
+infer-return-types = "checked"
+ignore-missing-imports = []
+
+[sub-config.errors]
+unbound-name = true
+bad-override-param-name = true
+bad-override-mutable-attribute = true
+
+[[sub-config]]
+matches = "doctor/lib/mojibake.py"
+check-unannotated-defs = true
+infer-return-types = "checked"
+ignore-missing-imports = []
+
+[sub-config.errors]
+unbound-name = true
+bad-override-param-name = true
+bad-override-mutable-attribute = true
