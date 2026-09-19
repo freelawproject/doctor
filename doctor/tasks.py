@@ -811,7 +811,7 @@ def put_file_to_url(url: str, input_path: str, content_type: str) -> str:
     )
 
 
-async def download_images(sorted_urls, dest_dir: str) -> list[str]:
+async def download_images(sorted_urls: list[str], dest_dir: str) -> list[str]:
     """Stream images to ``dest_dir`` and return their paths in input order.
 
     Caps concurrent downloads so a many-URL batch can't fan out an
