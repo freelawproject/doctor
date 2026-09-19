@@ -29,7 +29,7 @@ def is_skewed(obj: dict) -> bool:
     return my_char_ctm.skew_x == 0
 
 
-def get_page_text(page: pdfplumber.PDF.pages, strip_margin: bool) -> str:
+def get_page_text(page: pdfplumber.page.Page, strip_margin: bool) -> str:
     """Extract page text
 
     Using pdf plumber extract out the text of the document that is not
@@ -147,7 +147,7 @@ def page_needs_ocr(page: pdfplumber.pdf.Page, page_text: str) -> bool:
 
 def convert_pdf_page_to_image(
     page: pdfplumber.pdf.Page, strip_margin: bool
-) -> Image:
+) -> Image.Image:
     """Convert page to image and crop margin if applicable
 
     :param page: the pdf page
@@ -172,7 +172,7 @@ def convert_pdf_page_to_image(
     return image
 
 
-def ocr_image_to_data(image: Image) -> list[pd.DataFrame]:
+def ocr_image_to_data(image: Image.Image) -> list[pd.DataFrame]:
     """Perform OCR on an image to extract data
 
     Convert the image of the pdf page to OCR data
@@ -234,7 +234,9 @@ def extract_with_ocr(page: pdfplumber.pdf.Page, strip_margin: bool) -> str:
     return content
 
 
-def insert_whitespace(content: str, word: dict, prev: dict) -> str:
+def insert_whitespace(
+    content: str, word: pd.Series, prev: pd.Series | dict
+) -> str:
     """Insert whitespace after or before word
 
     :param content: The text extracted so far
@@ -259,7 +261,7 @@ def insert_whitespace(content: str, word: dict, prev: dict) -> str:
     return content
 
 
-def get_word(word_dict: dict, width: float, strip_margin: bool) -> str:
+def get_word(word_dict: pd.Series, width: float, strip_margin: bool) -> str:
     """Append word to content
 
     This function determines if a word should be added to the page content

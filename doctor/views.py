@@ -17,7 +17,12 @@ import requests
 from centralia import CourtNotReleased, UnknownCourt
 from centralia import read as centralia_read
 from django.core.exceptions import BadRequest
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import (
+    FileResponse,
+    HttpResponse,
+    HttpResponseBase,
+    JsonResponse,
+)
 from lxml.etree import ParserError, XMLSyntaxError
 from magika import Magika
 from PIL import Image
@@ -372,7 +377,7 @@ async def make_png_thumbnail(request) -> HttpResponse:
 
 
 @log_upload_lifecycle
-async def make_png_thumbnails_from_range(request) -> HttpResponse:
+async def make_png_thumbnails_from_range(request) -> HttpResponseBase:
     """Make a zip file that contains a thumbnail for each page requested.
 
     :param request: django request containing the uploaded file
@@ -402,7 +407,7 @@ async def make_png_thumbnails_from_range(request) -> HttpResponse:
 
 
 @log_upload_lifecycle
-def convert_pdf_bitonal(request) -> HttpResponse | JsonResponse:
+def convert_pdf_bitonal(request) -> HttpResponseBase:
     """Convert a PDF (or a page range of it) to bitonal CCITT G4.
 
     Input is a multipart upload or a presigned GET URL. With an

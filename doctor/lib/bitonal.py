@@ -364,9 +364,9 @@ def convert_pdf_to_bitonal(
     # rather than a doctor release, and the settings stay the
     # default and the ceiling (see the form).
     if total_timeout is None:
-        total_timeout = settings.DOCTOR_BITONAL_TIMEOUT_SECONDS
+        total_timeout = int(settings.DOCTOR_BITONAL_TIMEOUT_SECONDS)
     if page_timeout is None:
-        page_timeout = settings.DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS
+        page_timeout = int(settings.DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS)
     start = time.monotonic()
     deadline = start + total_timeout
 

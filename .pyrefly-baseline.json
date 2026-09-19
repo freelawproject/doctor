@@ -29,136 +29,10 @@
       "severity": "error"
     },
     {
-      "column": 16,
-      "path": "doctor/lib/bitonal.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `float` and `None`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "doctor/lib/bitonal.py",
-      "name": "bad-specialization",
-      "concise_description": "`float | None` is not assignable to upper bound `SupportsDunderGT[Any] | SupportsDunderLT[Any]` of type variable `SupportsRichComparisonT`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "doctor/lib/bitonal.py",
-      "name": "unsupported-operation",
-      "concise_description": "`<` is not supported between `float` and `None`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "doctor/lib/bitonal.py",
-      "name": "unsupported-operation",
-      "concise_description": "`<` is not supported between `None` and `float`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "doctor/lib/bitonal.py",
-      "name": "unsupported-operation",
-      "concise_description": "`<` is not supported between `None` and `None`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "doctor/lib/text_extraction.py",
-      "name": "not-a-type",
-      "concise_description": "Expected a type form, got instance of `(self: PDF) -> list[Page]`",
-      "severity": "error"
-    },
-    {
       "column": 17,
       "path": "doctor/lib/text_extraction.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 6,
-      "path": "doctor/lib/text_extraction.py",
-      "name": "not-a-type",
-      "concise_description": "Expected a type form, got instance of `Module[PIL.Image]`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "doctor/lib/text_extraction.py",
-      "name": "not-a-type",
-      "concise_description": "Expected a type form, got instance of `Module[PIL.Image]`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "doctor/lib/text_extraction.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Series` is not assignable to parameter `word` with type `dict[Unknown, Unknown]` in function `insert_whitespace`",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "doctor/lib/text_extraction.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Series | dict[Unknown, Unknown]` is not assignable to parameter `prev` with type `dict[Unknown, Unknown]` in function `insert_whitespace`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "doctor/lib/text_extraction.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Series` is not assignable to parameter `word_dict` with type `dict[Unknown, Unknown]` in function `get_word`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "unsupported-operation",
-      "concise_description": "`>=` is not supported between `None` and `int`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `tuple[str, str, int | None]` is not assignable to declared return type `tuple[str, str, int]`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `tuple[str, bytes, int | None]` is not assignable to declared return type `tuple[str, bytes, int]`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `tuple[str, bytes, int | None]` is not assignable to declared return type `tuple[str, bytes, int]`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `tuple[str, bytes, int | None]` is not assignable to declared return type `tuple[str, bytes, int]`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `AnyStr` is not assignable to declared return type `None`",
-      "severity": "error"
-    },
-    {
-      "column": 12,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `AnyStr` is not assignable to declared return type `None`",
       "severity": "error"
     },
     {
@@ -271,34 +145,6 @@
       "path": "doctor/tasks.py",
       "name": "bad-return",
       "concise_description": "Returned type `AudioFile | None` is not assignable to declared return type `AudioFile`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "doctor/tasks.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `str` is not assignable to declared return type `AnyStr`",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "doctor/tests.py",
-      "name": "bad-override",
-      "concise_description": "Class member `StubS3Handler.log_message` overrides parent class `BaseHTTPRequestHandler` in an inconsistent manner",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "doctor/views.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `FileResponse` is not assignable to declared return type `HttpResponse`",
-      "severity": "error"
-    },
-    {
-      "column": 24,
-      "path": "doctor/views.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `FileResponse` is not assignable to declared return type `HttpResponse | JsonResponse`",
       "severity": "error"
     },
     {

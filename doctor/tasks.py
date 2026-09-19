@@ -286,7 +286,7 @@ async def extract_by_ocr(
 
     parts: list[str] = []
     for first in range(1, page_count + 1, pages_per_slice):
-        last: int | None = first + pages_per_slice - 1
+        last = first + pages_per_slice - 1
         if last >= page_count:
             # Render through the real end of the file, wherever it is.
             last = None
@@ -392,7 +392,7 @@ def cleanup_ocr_text(txt: str) -> str:
     return txt
 
 
-async def convert_file_to_txt(path: str) -> tuple[str, str, int]:
+async def convert_file_to_txt(path: str) -> tuple[str, str, int | None]:
     """Converts a file to plain text with tesseract
 
     :param path: The path to the file
@@ -436,7 +436,7 @@ def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
     return pdf_bytes
 
 
-async def extract_from_doc(path) -> tuple[str, bytes, int]:
+async def extract_from_doc(path) -> tuple[str, bytes, int | None]:
     """Extract text from docs.
     We use antiword to pull the text out of MS Doc files.
 
@@ -456,7 +456,7 @@ async def extract_from_doc(path) -> tuple[str, bytes, int]:
     return content.decode("utf-8"), err, process.returncode
 
 
-async def extract_from_docx(path) -> tuple[str, bytes, int]:
+async def extract_from_docx(path) -> tuple[str, bytes, int | None]:
     """Extract text from docx files
     We use docx2txt to pull out the text. Pretty simple.
 
@@ -551,7 +551,7 @@ def extract_from_txt(filepath: str):
     return content, err, error_code
 
 
-async def extract_from_wpd(path: str) -> tuple[str, bytes, int]:
+async def extract_from_wpd(path: str) -> tuple[str, bytes, int | None]:
     """Extract text from a Word Perfect file
 
     Yes, courts still use these, so we extract their text using wpd2html. Once
@@ -833,7 +833,7 @@ assets_dir = os.path.join(root, "assets")
 
 async def convert_to_mp3[AnyStr: (bytes, str)](
     output_path: AnyStr, media: Any
-) -> None:
+) -> AnyStr:
     """Convert audio bytes to mp3 at temporary path
 
     :param output_path: Audio file bytes sent to Doctor
@@ -865,7 +865,7 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
 
 async def convert_to_ogg[AnyStr: (bytes, str)](
     output_path: AnyStr, media: Any
-) -> None:
+) -> AnyStr:
     """Converts audio data to the ogg format (.ogg)
 
     This function uses ffmpeg to convert the audio data provided in `media` to
@@ -980,7 +980,7 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
     return audio_file
 
 
-def convert_to_base64[AnyStr: (bytes, str)](tmp_path: AnyStr) -> AnyStr:
+def convert_to_base64[AnyStr: (bytes, str)](tmp_path: AnyStr) -> str:
     """Convert file base64 and decode it.
 
     This allows us to safely return the file in json to CL.
