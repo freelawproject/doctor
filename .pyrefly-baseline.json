@@ -36,6 +36,13 @@
       "severity": "error"
     },
     {
+      "column": 5,
+      "path": "doctor/tests.py",
+      "name": "bad-override-mutable-attribute",
+      "concise_description": "Class member `StubS3Handler.server` overrides parent class `BaseHTTPRequestHandler` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
       "column": 37,
       "path": "doctor/views.py",
       "name": "bad-argument-type",

@@ -38,10 +38,6 @@ linger in the baseline until pruned, so occasionally run
 and commit the result. Don't update the baseline to silence errors in new or
 changed code — fix the code instead.
 
-Modules that are already clean under stricter settings are listed as
-`sub-config` entries in `pyrefly.toml`; add modules there as they get cleaned
-up.
-
 
 ## Building Images
 
