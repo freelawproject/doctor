@@ -578,6 +578,9 @@ async def extract_from_wpd(path: str) -> tuple[str, bytes, int | None]:
     return content, err, process.returncode
 
 
+MAX_IMAGE_BYTES = 100 * 1024 * 1024  # 100 MB per image
+MAX_CONCURRENT_IMAGE_DOWNLOADS = 10
+
 # Presigned URL transport for the bitonal endpoint. Transient
 # failures (network errors, 5xx) are retried with backoff; a 403
 # means the presigned signature expired, so retrying the same URL
@@ -808,21 +811,47 @@ def put_file_to_url(url: str, input_path: str, content_type: str) -> str:
     )
 
 
-async def download_images(sorted_urls) -> list:
-    """Download images and convert to list of PIL images
+async def download_images(sorted_urls: list[str], dest_dir: str) -> list[str]:
+    """Stream images to ``dest_dir`` and return their paths in input order.
 
-    Once in an array of PIL.images we can easily convert this to a PDF.
+    Caps concurrent downloads so a many-URL batch can't fan out an
+    unbounded number of in-flight requests. Each response is streamed
+    straight to disk so no image's bytes sit in RAM during the fetch.
+    Files larger than ``MAX_IMAGE_BYTES`` are still kept, but logged with
+    their final size and URL because img2pdf will load each one back
+    into memory when it builds the PDF.
 
     :param sorted_urls: List of sorted URLs for split financial disclosure
-    :return: image_list
+    :param dest_dir: Directory to write downloaded images into. The
+        caller owns its lifecycle (typically a ``TemporaryDirectory``).
+    :return: Filesystem paths of each image, in the same order as
+        ``sorted_urls``
     """
+    sem = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_DOWNLOADS)
 
-    image_list = []
+    async def _fetch(client: AsyncClient, index: int, url: str) -> str:
+        path = os.path.join(dest_dir, f"{index:06d}")
+        size = 0
+        async with sem, client.stream("GET", url) as response:
+            with open(path, "wb") as f:
+                async for chunk in response.aiter_bytes():
+                    f.write(chunk)
+                    size += len(chunk)
+        if size > MAX_IMAGE_BYTES:
+            logger.warning(
+                "Image at %s is %s bytes, exceeding limit of %s; "
+                "img2pdf will load the full file into memory during "
+                "PDF construction",
+                url,
+                size,
+                MAX_IMAGE_BYTES,
+            )
+        return path
+
     async with AsyncClient(http2=True, follow_redirects=True) as client:
-        futures = [client.get(url) for url in sorted_urls]
-        for response in await asyncio.gather(*futures):
-            image_list.append(response.content)
-    return image_list
+        return await asyncio.gather(
+            *(_fetch(client, i, url) for i, url in enumerate(sorted_urls))
+        )
 
 
 # Audio
