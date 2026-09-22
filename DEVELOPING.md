@@ -22,6 +22,23 @@ container to run the tests against the `doctor` container:
     docker exec -it mock_web_app python3 -m unittest doctor.tests
 
 
+## Type checking
+
+[pyrefly](https://pyrefly.org) type checks the codebase. Run it with:
+
+    uv run pyrefly check
+
+New code should include type hints and pass the check; new files go in the
+`project-includes` section of `pyrefly.toml`. Pre-existing errors are
+grandfathered in `.pyrefly-baseline.json`, so only new ones fail. Fixed errors
+linger in the baseline until pruned, so occasionally run
+
+    uv run pyrefly check --update-baseline
+
+and commit the result. Don't update the baseline to silence errors in new or
+changed code — fix the code instead.
+
+
 ## Building Images
 
 Generally, images are automatically built and pushed to the docker repo when

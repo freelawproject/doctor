@@ -12,6 +12,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Any
 from unittest.mock import patch
 from zipfile import ZipFile
 
@@ -818,7 +819,7 @@ class StubS3Server(ThreadingHTTPServer):
 class StubS3Handler(BaseHTTPRequestHandler):
     server: StubS3Server
 
-    def log_message(self, *args):
+    def log_message(self, format: str, *args: Any) -> None:
         pass
 
     def do_GET(self):

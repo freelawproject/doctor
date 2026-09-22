@@ -1,0 +1,60 @@
+{
+  "errors": [
+    {
+      "column": 38,
+      "path": "doctor/lib/bitonal.py",
+      "name": "bad-assignment",
+      "concise_description": "`int` is not assignable to attribute `STRIP_SIZE` with type `Literal[65536]`",
+      "severity": "error"
+    },
+    {
+      "column": 15,
+      "path": "doctor/lib/bitonal.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `ImageFile` has no attribute `tag_v2`",
+      "severity": "error"
+    },
+    {
+      "column": 14,
+      "path": "doctor/lib/bitonal.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `ImageFile` has no attribute `tag_v2`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "doctor/lib/bitonal.py",
+      "name": "bad-return",
+      "concise_description": "Returned type `list[tuple[tuple[float, ...], int]]` is not assignable to declared return type `list[tuple[tuple[float, float, float, float], int]]`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "doctor/lib/text_extraction.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `get`",
+      "severity": "error"
+    },
+    {
+      "column": 5,
+      "path": "doctor/tests.py",
+      "name": "bad-override-mutable-attribute",
+      "concise_description": "Class member `StubS3Handler.server` overrides parent class `BaseHTTPRequestHandler` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "doctor/views.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `HTTPResponse | Any` is not assignable to parameter `fp` with type `IO[bytes] | PathLike[bytes] | PathLike[str] | bytes | str` in function `PIL.Image.open`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "doctor/views.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `info`",
+      "severity": "error"
+    }
+  ]
+}

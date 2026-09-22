@@ -1,0 +1,12 @@
+# The whole codebase is checked; add new files and modules here as they appear.
+project-includes = [
+    "doctor/**",
+    "manage.py",
+]
+# Leniency for the mostly-untyped codebase: don't check the bodies of
+# unannotated functions, and honor `# type: ignore` comments.
+check-unannotated-defs = false
+infer-return-types = "checked"
+permissive-ignores = true
+# Pre-existing errors are grandfathered here; only new errors fail the check.
+baseline = ".pyrefly-baseline.json"
