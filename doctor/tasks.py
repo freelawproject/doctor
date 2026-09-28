@@ -833,6 +833,7 @@ async def download_images(sorted_urls: list[str], dest_dir: str) -> list[str]:
         path = os.path.join(dest_dir, f"{index:06d}")
         size = 0
         async with sem, client.stream("GET", url) as response:
+            response.raise_for_status()
             with open(path, "wb") as f:
                 async for chunk in response.aiter_bytes():
                     f.write(chunk)
