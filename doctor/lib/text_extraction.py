@@ -1,4 +1,7 @@
 import re
+import statistics
+from collections.abc import Sequence
+from typing import TypeVar
 
 import pandas as pd
 import pdfplumber
@@ -213,6 +216,10 @@ def ocr_image_to_data(image: Image.Image) -> list[pd.DataFrame]:
     return blocks
 
 
+# A tesseract word: a row of image_to_data, or a dict of the same keys.
+OcrWord = TypeVar("OcrWord", pd.Series, dict)
+
+
 def extract_with_ocr(page: pdfplumber.pdf.Page, strip_margin: bool) -> str:
     """Extract the page using OCR
 
@@ -223,42 +230,153 @@ def extract_with_ocr(page: pdfplumber.pdf.Page, strip_margin: bool) -> str:
 
     image = convert_pdf_page_to_image(page, strip_margin)
     data = ocr_image_to_data(image)
+    words = [word for block in data for _, word in block.iterrows()]
+    char_width = estimate_char_width(words)
     content = ""
-    prev = {}
-    for words in data:
-        for _, word in words.iterrows():
-            content = insert_whitespace(content, word, prev)
+    prev: pd.Series | dict = {}
+    for line in split_lines(words):
+        gaps = column_gaps(line, char_width)
+        for i, word in enumerate(line):
+            column_gap = gaps[i - 1] if i else 0
+            content = insert_whitespace(
+                content, word, prev, char_width, column_gap
+            )
             content += get_word(word, image.size[0], strip_margin)
             prev = word
     content = cleanup_content(content, page.page_number)
     return content
 
 
+def estimate_char_width(
+    words: Sequence[pd.Series | dict], default: float = 30.0
+) -> float:
+    """Measure the width of a character on the page
+
+    A scan carries no font information, so the width of a character is
+    measured from the words tesseract found: the median, over the confident
+    words, of a word's pixel width divided by its length. Courier at 300
+    DPI measures about 28 px; proportional fonts in the low 20s.
+
+    :param words: The OCR word objects for the page
+    :param default: The width to use when the page has no confident words
+        to measure; a Courier character at 300 DPI
+    :return: The width of a character in pixels
+    """
+    samples = [
+        word["width"] / len(word["text"])
+        for word in words
+        if word["conf"] >= 60 and len(word["text"]) >= 3
+    ]
+    return statistics.median(samples) if samples else default
+
+
+def split_lines(words: Sequence[OcrWord]) -> list[list[OcrWord]]:
+    """Group the page's words into lines of text
+
+    A line ends where tesseract's paragraph or line number changes, which
+    is where insert_whitespace starts a new line.
+
+    :param words: The OCR word objects for the page, in reading order
+    :return: The words grouped by line, in reading order
+    """
+    lines: list[list[OcrWord]] = []
+    prev: pd.Series | dict = {}
+    for word in words:
+        if (
+            prev.get("line_num") != word["line_num"]
+            or prev.get("par_num") != word["par_num"]
+        ):
+            lines.append([])
+        lines[-1].append(word)
+        prev = word
+    return lines
+
+
+def column_gaps(
+    line: Sequence[pd.Series | dict],
+    char_width: float,
+    min_chars: float = 2.5,
+    min_line_gaps: int = 4,
+    ratio: float = 2,
+) -> list[int]:
+    """Find the gaps on a line that are columns rather than word spaces
+
+    Gaps are measured in characters of the page (see estimate_char_width),
+    so the test is the same whatever the font. A gap is a column gap, kept
+    at its measured width, only when it is at least min_chars wide and, on
+    a line with at least min_line_gaps gaps, at least ratio times the
+    typical gap of the rest of the line. Every other gap is a word space,
+    however far justification stretched it. Justification stretches every
+    gap on a line alike, so a stretched paragraph collapses to single
+    spaces, while a caption's `:` or `)` column, a heading's tab or a
+    table column leaves one gap far wider than its neighbours and keeps
+    its place.
+
+    :param line: The OCR word objects on one line, in reading order
+    :param char_width: The width of a character on the page, in pixels
+    :param min_chars: The narrowest gap, in characters, that can be a
+        column; narrower gaps are word spaces
+    :param min_line_gaps: How many gaps a line needs before a wide gap is
+        also compared with the rest of the line
+    :param ratio: How many times the line's typical gap a wide gap must be
+        to count as a column on such a line
+    :return: For each word after the first, the width in characters of
+        the column gap before it, or 0 when it is just a word space
+    """
+    gaps = [
+        (line[i]["left"] - (line[i - 1]["left"] + line[i - 1]["width"]))
+        / char_width
+        for i in range(1, len(line))
+    ]
+    columns = []
+    for i, gap in enumerate(gaps):
+        if gap < min_chars:
+            columns.append(0)
+            continue
+        if len(gaps) >= min_line_gaps:
+            others = gaps[:i] + gaps[i + 1 :]
+            if gap < ratio * statistics.median(others):
+                columns.append(0)
+                continue
+        columns.append(int(round(gap)))
+    return columns
+
+
 def insert_whitespace(
-    content: str, word: pd.Series, prev: pd.Series | dict
+    content: str,
+    word: pd.Series | dict,
+    prev: pd.Series | dict,
+    char_width: float,
+    column_gap: int,
 ) -> str:
-    """Insert whitespace after or before word
+    """Insert whitespace before a word
+
+    The first word on a line is indented to its column. Within a line the
+    single space get_word left after the previous word is all a word space
+    gets, however far justification stretched it; a column gap (see
+    column_gaps) is padded out to its measured width in characters.
 
     :param content: The text extracted so far
     :param word: The OCR extraction object
     :param prev: The previous word object extracted
+    :param char_width: The width of a character on the page, in pixels
+    :param column_gap: The width in characters of the column gap before
+        the word, or 0 for a word space
     :return: The content with the whitespace appended
     """
     is_new_line = prev.get("line_num", 0) != word["line_num"]
     is_new_par = prev.get("par_num", 0) != word["par_num"]
-    prev_end = prev.get("left", 1) + prev.get("width", 1)
 
-    # Add vertical whitespace
+    # Add vertical whitespace and indent to the word's column
     if is_new_line or is_new_par:
         vertical_gap = word["top"] - (
             prev.get("top", 0) + prev.get("height", 0)
         )
         content += "\n\n" if vertical_gap > 100 else "\n"
-        prev_end = 0
+        return content + " " * int(round(word["left"] / char_width))
 
-    # add horizontal whitespace
-    content += " " * int((word["left"] - prev_end) / 25)
-    return content
+    # add horizontal whitespace beyond the space get_word already left
+    return content + " " * max(column_gap - 1, 0)
 
 
 def get_word(word_dict: pd.Series, width: float, strip_margin: bool) -> str:
