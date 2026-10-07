@@ -32,9 +32,12 @@ from doctor import tasks
 from doctor.lib.text_extraction import (
     adjust_caption_lines,
     cleanup_content,
+    column_gaps,
+    estimate_char_width,
     get_word,
     insert_whitespace,
     remove_excess_whitespace,
+    split_lines,
 )
 from doctor.lib.utils import make_buffer, make_file
 
@@ -71,7 +74,7 @@ class RECAPExtractionTests(unittest.TestCase):
             response.json()["extracted_by_ocr"], msg="Not extracted correctly"
         )
         self.assertEqual(
-            "aséakOS- 08-0220 A25BA  BAD Gooonene 2627  Filed!  OL/2B/DE0IP ageahefi2of 2",
+            "aséakOS- 08-0220 A25BA BAD Gooonene 2627 Filed! OL/2B/DE0IP ageahefi2of 2",
             first_line,
             msg="Wrong Text",
         )
@@ -90,7 +93,7 @@ class RECAPExtractionTests(unittest.TestCase):
         first_line = response.json()["content"].splitlines()[0].strip()
         self.assertEqual(200, response.status_code, msg="Wrong status code")
         self.assertEqual(
-            "1  || DONALD W. CARLSON  [Bar No. 79258]",
+            "1 || DONALD W. CARLSON [Bar No. 79258]",
             first_line,
             msg="Wrong Text",
         )
@@ -1415,7 +1418,7 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
             "width": 30,
             "height": 20,
         }
-        result = insert_whitespace(content, word, prev)
+        result = insert_whitespace(content, word, prev, 25, 0)
         self.assertEqual(result, "foo\n  ")
 
     def test_insert_whitespace_new_paragraph(self):
@@ -1436,7 +1439,7 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
             "width": 30,
             "height": 20,
         }
-        result = insert_whitespace(content, word, prev)
+        result = insert_whitespace(content, word, prev, 25, 0)
         self.assertEqual(result, "foo\n  ")
 
     def test_insert_whitespace_vertical_gap(self):
@@ -1457,11 +1460,38 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
             "width": 30,
             "height": 20,
         }
-        result = insert_whitespace(content, word, prev)
+        result = insert_whitespace(content, word, prev, 25, 0)
         self.assertEqual(result, "foo\n\n  ")
 
-    def test_insert_whitespace_horizontal_gap(self):
+    def test_insert_whitespace_indents_by_char_width(self):
+        """Is the first word of a line indented in characters of the page?"""
         content = "foo"
+        word = {
+            "line_num": 2,
+            "par_num": 1,
+            "left": 150,
+            "top": 200,
+            "width": 10,
+            "height": 20,
+        }
+        prev = {
+            "line_num": 1,
+            "par_num": 1,
+            "left": 10,
+            "top": 100,
+            "width": 30,
+            "height": 20,
+        }
+        self.assertEqual(
+            insert_whitespace(content, word, prev, 30, 0), "foo\n     "
+        )
+        self.assertEqual(
+            insert_whitespace(content, word, prev, 50, 0), "foo\n   "
+        )
+
+    def test_insert_whitespace_column_gap(self):
+        """Is a column gap padded out, less the space get_word left?"""
+        content = "foo "
         word = {
             "line_num": 1,
             "par_num": 1,
@@ -1478,15 +1508,16 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
             "width": 30,
             "height": 20,
         }
-        result = insert_whitespace(content, word, prev)
+        result = insert_whitespace(content, word, prev, 25, 6)
         self.assertEqual(result, "foo      ")
 
-    def test_insert_whitespace_no_gap(self):
-        content = "foo"
+    def test_insert_whitespace_word_space(self):
+        """Does a word space add nothing to the space get_word left?"""
+        content = "foo "
         word = {
             "line_num": 1,
             "par_num": 1,
-            "left": 50,
+            "left": 200,
             "top": 100,
             "width": 10,
             "height": 20,
@@ -1494,13 +1525,75 @@ class TestRecapWhitespaceInsertions(unittest.TestCase):
         prev = {
             "line_num": 1,
             "par_num": 1,
-            "left": 40,
+            "left": 10,
             "top": 100,
-            "width": 10,
+            "width": 30,
             "height": 20,
         }
-        result = insert_whitespace(content, word, prev)
-        self.assertEqual(result, "foo")
+        result = insert_whitespace(content, word, prev, 25, 0)
+        self.assertEqual(result, "foo ")
+
+
+class TestRecapColumnGaps(unittest.TestCase):
+    """Test how the gaps on an OCR'd line are told apart"""
+
+    @staticmethod
+    def make_line(lefts: list[int], width: int = 100) -> list[dict]:
+        return [
+            {
+                "line_num": 1,
+                "par_num": 1,
+                "left": left,
+                "width": width,
+                "top": 0,
+                "height": 20,
+                "conf": 95.0,
+                "text": "word",
+            }
+            for left in lefts
+        ]
+
+    def test_word_spaces_are_not_columns(self):
+        """Are gaps of about a character left as word spaces?"""
+        line = self.make_line([0, 130, 260, 390])
+        self.assertEqual(column_gaps(line, 25), [0, 0, 0])
+
+    def test_justified_line_collapses(self):
+        """Do the gaps of a justified line, all stretched alike, collapse?"""
+        line = self.make_line([0, 165, 330, 495, 660])
+        self.assertEqual(column_gaps(line, 25), [0, 0, 0, 0])
+
+    def test_caption_column_is_kept(self):
+        """Is a caption's separator, far out from its line, kept in place?"""
+        line = self.make_line([0, 130, 260, 390, 740])
+        self.assertEqual(column_gaps(line, 25), [0, 0, 0, 10])
+
+    def test_short_line_uses_width_alone(self):
+        """With too few gaps to compare, does the width alone decide?"""
+        line = self.make_line([0, 350, 480])
+        self.assertEqual(column_gaps(line, 25), [10, 0])
+
+    def test_char_width_measured_from_confident_words(self):
+        words = [
+            {"width": 174, "text": "UNITED", "conf": 96.0},
+            {"width": 145, "text": "STATE", "conf": 95.0},
+            {"width": 1000, "text": "||", "conf": 10.0},
+            {"width": 500, "text": "garbage", "conf": 20.0},
+        ]
+        self.assertEqual(estimate_char_width(words), 29.0)
+
+    def test_char_width_defaults_without_confident_words(self):
+        words = [{"width": 10, "text": "a", "conf": 95.0}]
+        self.assertEqual(estimate_char_width(words), 30.0)
+
+    def test_split_lines(self):
+        words = [
+            {"line_num": 1, "par_num": 1},
+            {"line_num": 1, "par_num": 1},
+            {"line_num": 2, "par_num": 1},
+            {"line_num": 1, "par_num": 2},
+        ]
+        self.assertEqual([len(line) for line in split_lines(words)], [2, 1, 1])
 
 
 class OCRSlicingTests(unittest.IsolatedAsyncioTestCase):

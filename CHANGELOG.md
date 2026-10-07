@@ -16,6 +16,12 @@ Features:
 
 Fixes:
  - Delegate file identification to Magika's `identify_path`
+ - `/extract/recap/text/` no longer double- and triple-spaces the words of
+   an OCR'd page. Word gaps are now measured against the width of a
+   character on that page rather than a fixed 25 px, which a Courier scan
+   exceeds between every word, and a gap keeps its width only when it is a
+   column (a caption's `:` or `)`, a heading's tab) rather than a word
+   space stretched by justification.
 
 Changes:
  - Bump `magika` to 1.0.3.
