@@ -1,7 +1,6 @@
 import re
 import statistics
 from collections.abc import Sequence
-from typing import TypeVar
 
 import pandas as pd
 import pdfplumber
@@ -216,10 +215,6 @@ def ocr_image_to_data(image: Image.Image) -> list[pd.DataFrame]:
     return blocks
 
 
-# A tesseract word: a row of image_to_data, or a dict of the same keys.
-OcrWord = TypeVar("OcrWord", pd.Series, dict)
-
-
 def extract_with_ocr(page: pdfplumber.pdf.Page, strip_margin: bool) -> str:
     """Extract the page using OCR
 
@@ -270,11 +265,14 @@ def estimate_char_width(
     return statistics.median(samples) if samples else default
 
 
-def split_lines(words: Sequence[OcrWord]) -> list[list[OcrWord]]:
+def split_lines[OcrWord: (pd.Series, dict)](
+    words: Sequence[OcrWord],
+) -> list[list[OcrWord]]:
     """Group the page's words into lines of text
 
     A line ends where tesseract's paragraph or line number changes, which
-    is where insert_whitespace starts a new line.
+    is where insert_whitespace starts a new line. A word is a row of
+    tesseract's image_to_data, or a dict of the same keys.
 
     :param words: The OCR word objects for the page, in reading order
     :return: The words grouped by line, in reading order
