@@ -13,14 +13,13 @@ from typing import Any, AnyStr
 from urllib.parse import urlparse
 
 import eyed3
-import httpx
+import httpx2
 import magic
 import pdfplumber
-import requests
 import xray
 from django.conf import settings
 from eyed3 import id3
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from pypdf import PdfReader
@@ -140,14 +139,14 @@ async def rasterize_pdf(
     return stdout, stderr, p.returncode
 
 
-def get_xray(path):
+async def get_xray(path):
     """Get bad redactions
 
     :param path: A path to the file
     :return: dictionary of bounding boxes.
     """
     try:
-        bad_redactions = xray.inspect(path)
+        bad_redactions = await xray.inspect(path)
         return bad_redactions
     except (
         OSError,
@@ -587,7 +586,7 @@ MAX_CONCURRENT_IMAGE_DOWNLOADS = 10
 # cannot succeed and the caller must re-presign.
 EGRESS_MAX_ATTEMPTS = 3
 EGRESS_BACKOFF_SECONDS = 1.0
-EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+EGRESS_TIMEOUT = httpx2.Timeout(30.0, connect=10.0)
 
 
 def validate_egress_url(url: str) -> None:
@@ -657,10 +656,10 @@ def _classify_status(
 def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
     """Run one transfer attempt under the shared retry/backoff policy.
 
-    Retries _TransientTransferError and httpx transport errors with
+    Retries _TransientTransferError and httpx2 transport errors with
     exponential backoff. BitonalError — the fail-fast
     classifications from _classify_status — propagates immediately,
-    and a malformed URL (httpx.InvalidURL) fails fast as a terminal
+    and a malformed URL (httpx2.InvalidURL) fails fast as a terminal
     4xx with failed_code.
 
     :param attempt: Zero-argument callable performing one attempt.
@@ -674,8 +673,8 @@ def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
             time.sleep(EGRESS_BACKOFF_SECONDS * 2 ** (attempt_number - 1))
         try:
             return attempt()
-        except httpx.InvalidURL as e:
-            # Not an httpx.HTTPError: raised when the request is
+        except httpx2.InvalidURL as e:
+            # Not an httpx2.HTTPError: raised when the request is
             # built, for a malformed port or host that urlparse (and
             # so validate_egress_url) accepts. A broken URL can never
             # succeed, so it must neither retry here nor escape to
@@ -683,7 +682,7 @@ def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
             raise BitonalError(
                 failed_code, f"invalid URL: {e}", status=400
             ) from e
-        except (_TransientTransferError, httpx.HTTPError) as e:
+        except (_TransientTransferError, httpx2.HTTPError) as e:
             last_error = str(e)
     raise BitonalError(
         failed_code,
@@ -714,8 +713,8 @@ def stream_url_to_file(url: str, output_path: str) -> str:
 
     def attempt() -> str:
         with (
-            httpx.Client(
-                follow_redirects=False, timeout=EGRESS_TIMEOUT
+            httpx2.Client(
+                http2=True, follow_redirects=False, timeout=EGRESS_TIMEOUT
             ) as client,
             client.stream("GET", url) as response,
         ):
@@ -787,8 +786,8 @@ def put_file_to_url(url: str, input_path: str, content_type: str) -> str:
         digest = hashlib.sha256()
         with (
             open(input_path, "rb") as f,
-            httpx.Client(
-                follow_redirects=False, timeout=EGRESS_TIMEOUT
+            httpx2.Client(
+                http2=True, follow_redirects=False, timeout=EGRESS_TIMEOUT
             ) as client,
         ):
 
@@ -939,7 +938,7 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     return output_path
 
 
-def set_mp3_meta_data[AnyStr: (bytes, str)](
+async def set_mp3_meta_data[AnyStr: (bytes, str)](
     audio_data: dict, mp3_path: AnyStr
 ) -> eyed3.core.AudioFile:
     """Set the metadata in audio_data to an mp3 at path.
@@ -992,7 +991,12 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
     ]
 
     if url:
-        seal_content = requests.get(url, timeout=30).content
+        async with AsyncClient(
+            http2=True, follow_redirects=True, timeout=30
+        ) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            seal_content = response.content
         audio_file.tag.images.set(
             3,
             seal_content,

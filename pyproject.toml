@@ -11,7 +11,7 @@ dependencies = [
   "django-environ>=0.8.1",
   "eyed3",
   "gunicorn>=20.1",
-  "httpx[http2]>=0.28.1",
+  "httpx2[http2]>=2.13.1",
   "idna>=2.10",
   "img2pdf",
   "lxml>=4.5.2",
@@ -34,7 +34,7 @@ dependencies = [
   "six>=1.15",
   "urllib3>=1.25.10",
   "uvicorn",
-  "x-ray==0.3.5",
+  "x-ray==0.4.0",
 ]
 
 [dependency-groups]

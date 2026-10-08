@@ -6,6 +6,7 @@ import re
 import shutil
 import time
 from http.client import BAD_REQUEST
+from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
@@ -13,7 +14,6 @@ import eyed3
 import img2pdf
 import magic
 import pytesseract
-import requests
 from centralia import CourtNotReleased, UnknownCourt
 from centralia import read as centralia_read
 from django.core.exceptions import BadRequest
@@ -23,6 +23,7 @@ from django.http import (
     HttpResponseBase,
     JsonResponse,
 )
+from httpx2 import AsyncClient
 from lxml.etree import ParserError, XMLSyntaxError
 from magika import Magika
 from PIL import Image
@@ -530,7 +531,7 @@ def convert_pdf_bitonal(request) -> HttpResponseBase:
 
 
 @log_upload_lifecycle
-def xray(request) -> JsonResponse:
+async def xray(request) -> JsonResponse:
     """Check PDF for bad redactions
 
     :param request: django request containing the uploaded file
@@ -547,7 +548,7 @@ def xray(request) -> JsonResponse:
             return JsonResponse(
                 {"error": True, "msg": "Failed file type"}, status=BAD_REQUEST
             )
-        results = get_xray(form.cleaned_data["fp"])
+        results = await get_xray(form.cleaned_data["fp"])
         if results.get("error", False):
             return JsonResponse(results, status=BAD_REQUEST)
     finally:
@@ -809,13 +810,18 @@ async def images_to_pdf(request) -> HttpResponse:
                     img2pdf.convert(image_paths, outputstream=f)
                 cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
     else:
-        with requests.get(sorted_urls[0], stream=True, timeout=60 * 5) as r:
-            tiff_image = Image.open(r.raw)
-            # Force PIL to read all pixel data before the HTTP connection
-            # closes. Without this, later crop() calls would try to pull
-            # from a dead socket.
-            tiff_image.load()
-        pdf_bytes = convert_tiff_to_pdf_bytes(tiff_image)
+        with BytesIO() as image_buffer:
+            async with (
+                AsyncClient(
+                    http2=True, follow_redirects=True, timeout=60 * 5
+                ) as client,
+                client.stream("GET", sorted_urls[0]) as response,
+            ):
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes():
+                    image_buffer.write(chunk)
+            with Image.open(image_buffer) as tiff_image:
+                pdf_bytes = convert_tiff_to_pdf_bytes(tiff_image)
         cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
     return HttpResponse(cleaned_pdf_bytes, content_type="application/pdf")
 
@@ -863,7 +869,7 @@ async def convert_audio(
         match output_format:
             case "mp3":
                 await convert_to_mp3(filepath, media_file)
-                set_mp3_meta_data(audio_data, filepath)
+                await set_mp3_meta_data(audio_data, filepath)
             case "ogg":
                 await convert_to_ogg(filepath, media_file)
             case _:
