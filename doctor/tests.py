@@ -19,9 +19,9 @@ from zipfile import ZipFile
 import centralia
 import django
 import eyed3
+import httpx2
 import numpy as np
 import pikepdf
-import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, override_settings
 from django.urls import reverse
@@ -47,23 +47,33 @@ django.setup()
 asset_path = f"{Path.cwd()}/doctor/test_assets"
 
 
-class HeartbeatTests(unittest.TestCase):
-    def test_heartbeat(self):
+class HTTPIntegrationTestCase(unittest.IsolatedAsyncioTestCase):
+    """Exercise the running service over HTTP without blocking the test loop."""
+
+    async def asyncSetUp(self):
+        self.http_client = httpx2.AsyncClient(
+            http2=True, follow_redirects=True, timeout=None
+        )
+        self.addAsyncCleanup(self.http_client.aclose)
+
+
+class HeartbeatTests(HTTPIntegrationTestCase):
+    async def test_heartbeat(self):
         """Can we curl the heartbeat endpoint?"""
-        response = requests.get("http://doctor:5050/")
+        response = await self.http_client.get("http://doctor:5050/")
         self.assertEqual(
             response.text, "Heartbeat detected.", msg="Heartbeat failed"
         )
 
 
-class RECAPExtractionTests(unittest.TestCase):
-    def test_recap_extraction(self):
+class RECAPExtractionTests(HTTPIntegrationTestCase):
+    async def test_recap_extraction(self):
         """Can we extract from the new recap text endpoint"""
         files = make_file(
             filename="recap_extract/gov.uscourts.cand.203070.27.0.pdf"
         )
         params = {"strip_margin": False}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/recap/text/",
             files=files,
             params=params,
@@ -79,13 +89,13 @@ class RECAPExtractionTests(unittest.TestCase):
             msg="Wrong Text",
         )
 
-    def test_recap_extraction_with_strip_margin(self):
+    async def test_recap_extraction_with_strip_margin(self):
         """Can we extract from the new recap text endpoint with strip margin?"""
         files = make_file(
             filename="recap_extract/gov.uscourts.cand.203070.27.0.pdf"
         )
         params = {"strip_margin": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/recap/text/",
             files=files,
             params=params,
@@ -98,14 +108,14 @@ class RECAPExtractionTests(unittest.TestCase):
             msg="Wrong Text",
         )
 
-    def test_recap_strip_marign_with_multiple_shaped_pdfs(self):
+    async def test_recap_strip_marign_with_multiple_shaped_pdfs(self):
         """Can we extract atypical shape pdf with strip margin?"""
 
         files = make_file(
             filename="recap_extract/gov.uscourts.azd.1085839.3.0.pdf"
         )
         params = {"strip_margin": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/recap/text/",
             files=files,
             params=params,
@@ -118,13 +128,13 @@ class RECAPExtractionTests(unittest.TestCase):
             msg="Wrong Text",
         )
 
-    def test_strip_margin_without_ocr(self):
+    async def test_strip_margin_without_ocr(self):
         """Can we extract from the new recap text endpoint with strip margin?"""
         files = make_file(
             filename="recap_extract/gov.uscourts.cacd.652774.40.0.pdf"
         )
         params = {"strip_margin": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/recap/text/",
             files=files,
             params=params,
@@ -134,12 +144,12 @@ class RECAPExtractionTests(unittest.TestCase):
         self.assertEqual("1", first_line, msg="Wrong Text")
 
 
-class ExtractionTests(unittest.TestCase):
-    def test_pdf_to_text(self):
+class ExtractionTests(HTTPIntegrationTestCase):
+    async def test_pdf_to_text(self):
         """"""
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
         text = response.json()["content"][:100].replace("\n", "").strip()
@@ -150,14 +160,14 @@ class ExtractionTests(unittest.TestCase):
             msg=text,
         )
 
-    def test_content_extraction(self):
+    async def test_content_extraction(self):
         """"""
         files = make_file(filename="vector-pdf.pdf")
         data = {"ocr_available": False}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
+        self.assertTrue(response.is_success, msg="Content extraction failed")
         self.assertEqual(
             response.json()["content"][:100].replace("\n", "").strip(),
             "(Slip Opinion)              OCTOBER TERM, 2012                                       1",
@@ -173,15 +183,15 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract by OCR",
         )
 
-    def test_pdf_ocr_extraction(self):
+    async def test_pdf_ocr_extraction(self):
         files = make_file(filename="image-pdf.pdf")
         params = {"ocr_available": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
             params=params,
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
+        self.assertTrue(response.is_success, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(
             content,
@@ -193,15 +203,15 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract by OCR",
         )
 
-    def test_pdf_v2_ocr_extraction(self):
+    async def test_pdf_v2_ocr_extraction(self):
         files = make_file(filename="ocr_pdf_variation.pdf")
         params = {"ocr_available": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
             params=params,
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
+        self.assertTrue(response.is_success, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
         self.assertIn(
             "UNITED",
@@ -213,28 +223,28 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract by OCR",
         )
 
-    def test_docx_format(self):
+    async def test_docx_format(self):
         files = make_file(filename="word-docx.docx")
         params = {"ocr_available": False}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
             params=params,
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
+        self.assertTrue(response.is_success, msg="Content extraction failed")
         self.assertEqual(
             response.json()["content"][:200].replace("\n", "").strip(),
             "ex- Cpl,                                                                                                 Current Discharge and Applicant's RequestApplication R",
             msg="Failed to extract content from .docx file",
         )
 
-    def test_doc_format(self):
+    async def test_doc_format(self):
         files = make_file(filename="word-doc.doc")
         data = {"ocr_available": False}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
+        self.assertTrue(response.is_success, msg="Content extraction failed")
         content = response.json()["content"][:100].replace("\n", "").strip()
         self.assertEqual(
             content,
@@ -247,13 +257,13 @@ class ExtractionTests(unittest.TestCase):
             msg="Failed to extract by OCR",
         )
 
-    def test_wpd_format(self):
+    async def test_wpd_format(self):
         files = make_file(filename="word-perfect.wpd")
         data = {"ocr_available": False}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/", files=files, data=data
         )
-        self.assertTrue(response.ok, msg="Content extraction failed")
+        self.assertTrue(response.is_success, msg="Content extraction failed")
         self.assertIn(
             "ATTORNEY FOR APPELLANT",
             response.json()["content"],
@@ -266,14 +276,14 @@ class ExtractionTests(unittest.TestCase):
         )
 
 
-class ThumbnailTests(unittest.TestCase):
+class ThumbnailTests(HTTPIntegrationTestCase):
     """Can we generate thumbnail images from PDF files"""
 
-    def test_convert_pdf_to_thumbnail_png(self):
+    async def test_convert_pdf_to_thumbnail_png(self):
         """Can we generate four thumbanils a pdf?"""
         files = make_file(filename="image-pdf.pdf")
         data = {"max_dimension": 350}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/convert/pdf/thumbnail/",
             files=files,
             data=data,
@@ -283,7 +293,7 @@ class ThumbnailTests(unittest.TestCase):
         self.assertEqual(answer, response.content)
 
         files = make_file(filename="image-pdf-2.pdf")
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/convert/pdf/thumbnail/", files=files
         )
         with open("doctor/test_assets/image-pdf-2-thumbnail.png", "rb") as f:
@@ -291,12 +301,12 @@ class ThumbnailTests(unittest.TestCase):
         self.assertEqual(second_answer, response.content)
 
         files = make_file(filename="empty.pdf")
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/convert/pdf/thumbnail/", files=files
         )
         self.assertEqual(response.status_code, 400, msg="Wrong status code")
 
-    def test_thumbnail_range(self):
+    async def test_thumbnail_range(self):
         """Can we generate a thumbnail for a range of pages?"""
         files = make_file(filename="vector-pdf.pdf")
         pages = [1, 2, 3, 4]
@@ -305,7 +315,7 @@ class ThumbnailTests(unittest.TestCase):
             "pages": json.dumps(pages),
         }
 
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/convert/pdf/thumbnails/",
             files=files,
             data=data,
@@ -322,25 +332,29 @@ class ThumbnailTests(unittest.TestCase):
         )
 
 
-class MetadataTests(unittest.TestCase):
+class MetadataTests(HTTPIntegrationTestCase):
     """Can we count page numbers in PDF files"""
 
-    def test_page_count_pdf(self):
+    async def test_page_count_pdf(self):
         """"""
         files = make_file(filename="image-pdf.pdf")
-        page_count = requests.post(
-            "http://doctor:5050/utils/page-count/pdf/", files=files
+        page_count = (
+            await self.http_client.post(
+                "http://doctor:5050/utils/page-count/pdf/", files=files
+            )
         ).text
         self.assertEqual(int(page_count), 2, "Failed to get page count")
 
-    def test_mime_type(self):
+    async def test_mime_type(self):
         """"""
         files = make_file(filename="image-pdf.pdf")
         params = {"mime": True}
-        response = requests.post(
-            "http://doctor:5050/utils/mime-type/",
-            files=files,
-            params=params,
+        response = (
+            await self.http_client.post(
+                "http://doctor:5050/utils/mime-type/",
+                files=files,
+                params=params,
+            )
         ).json()
         self.assertEqual(
             response["mimetype"],
@@ -348,11 +362,11 @@ class MetadataTests(unittest.TestCase):
             msg="Failed to get mime type",
         )
 
-    def test_broken_mime_type(self):
+    async def test_broken_mime_type(self):
         """"""
         files = make_buffer(filename="broken-mime.pdf")
         params = {"mime": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/utils/file/extension/",
             files=files,
             params=params,
@@ -361,20 +375,22 @@ class MetadataTests(unittest.TestCase):
 
         files = make_buffer(filename="missouri.pdf")
         params = {"mime": True}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/utils/file/extension/",
             files=files,
             params=params,
         )
         self.assertEqual(response.text, ".pdf", msg="Failed to get mime type")
 
-    def test_mime_type_unknown_name(self):
+    async def test_mime_type_unknown_name(self):
         """"""
         files = make_buffer(filename="image-pdf.pdf")
-        response = requests.post(
-            "http://doctor:5050/utils/mime-type/",
-            files=files,
-            params={"mime": True},
+        response = (
+            await self.http_client.post(
+                "http://doctor:5050/utils/mime-type/",
+                files=files,
+                params={"mime": True},
+            )
         ).json()
         self.assertEqual(
             response["mimetype"],
@@ -382,7 +398,7 @@ class MetadataTests(unittest.TestCase):
             msg="Failed to get mime type",
         )
 
-    def test_get_extension(self):
+    async def test_get_extension(self):
         """Verify that /utils/file/extension/ correctly infers extensions for common types."""
         test_files = [
             ("image-pdf.pdf", ".pdf"),
@@ -407,7 +423,7 @@ class MetadataTests(unittest.TestCase):
         for filename, expected_ext in test_files:
             with self.subTest(filename=filename):
                 files = make_buffer(filename=filename)
-                response = requests.post(
+                response = await self.http_client.post(
                     "http://doctor:5050/utils/file/extension/", files=files
                 )
                 self.assertEqual(
@@ -466,12 +482,12 @@ class MetadataTests(unittest.TestCase):
         )
 
 
-def test_embedding_text_to_image_pdf(self):
+async def test_embedding_text_to_image_pdf(self):
     """Can we embed text into an image PDF?"""
     data = {"ocr_available": False}
 
     files = make_file(filename="image-pdf.pdf")
-    image_response = requests.post(
+    image_response = await self.http_client.post(
         "http://doctor:5050/extract/doc/text/", files=files, data=data
     )
     self.assertEqual(
@@ -481,7 +497,7 @@ def test_embedding_text_to_image_pdf(self):
     )
 
     # Embed text into the image pdf and check that we get some text
-    new_pdf = requests.post(
+    new_pdf = await self.http_client.post(
         "http://doctor:5050/utils/add/text/pdf/", files=files
     )
     with NamedTemporaryFile(suffix=".pdf") as tmp:
@@ -491,7 +507,7 @@ def test_embedding_text_to_image_pdf(self):
             files = {"file": (tmp.name, f.read())}
 
         # Confirm that text is now embedded in the PDF
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/",
             files=files,
             data=data,
@@ -502,7 +518,7 @@ def test_embedding_text_to_image_pdf(self):
             msg=f"Got {response.json()}",
         )
 
-    def test_get_document_number(self):
+    async def test_get_document_number(self):
         """Check if the PACER document number is correctly extracted from
         documents from multiple jurisdictions.
         """
@@ -516,16 +532,18 @@ def test_embedding_text_to_image_pdf(self):
             with open(file, "rb") as f:
                 files = {"file": (filename, f.read())}
 
-                document_number = requests.post(
-                    "http://doctor:5050/utils/document-number/pdf/",
-                    files=files,
+                document_number = (
+                    await self.http_client.post(
+                        "http://doctor:5050/utils/document-number/pdf/",
+                        files=files,
+                    )
                 ).text
 
             self.assertEqual(doc_num, document_number)
 
 
-class RedactionTest(unittest.TestCase):
-    def test_xray_no_pdf(self):
+class RedactionTest(HTTPIntegrationTestCase):
+    async def test_redactions(self):
         """Are we able to discover bad redacts?"""
         filepath = f"{Path.cwd()}/doctor/test_assets/x-ray/"
         test_files = (
@@ -537,15 +555,15 @@ class RedactionTest(unittest.TestCase):
             for file in glob.glob(os.path.join(filepath, pattern)):
                 filename = os.path.relpath(file, filepath)
 
-                with open(file, "rb") as f:
+                with self.subTest(filename=filename), open(file, "rb") as f:
                     files = {"file": (filename, f.read())}
-                    response = requests.post(
+                    response = await self.http_client.post(
                         "http://doctor:5050/utils/check-redactions/pdf/",
                         files=files,
                     )
                     # Break up the assertion so that testers can see which
                     # part is actually failing
-                    self.assertTrue(response.ok)
+                    self.assertEqual(response.status_code, 200)
                     bb = response.json()
                     self.assertFalse(bb["error"])
                     if not direction:
@@ -553,9 +571,19 @@ class RedactionTest(unittest.TestCase):
                     else:
                         self.assertFalse(len(bb["results"]) == 0)
 
+    async def test_invalid_pdf(self):
+        response = await self.http_client.post(
+            "http://doctor:5050/utils/check-redactions/pdf/",
+            files={
+                "file": ("invalid.pdf", b"%PDF-1.7 invalid", "application/pdf")
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(response.json()["error"])
 
-class ImageDisclosuresTest(unittest.TestCase):
-    def test_images_to_pdf(self):
+
+class ImageDisclosuresTest(HTTPIntegrationTestCase):
+    async def test_images_to_pdf(self):
         """Do we create a PDF from several tiffs successfully?"""
         base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
         sorted_urls = [
@@ -563,7 +591,7 @@ class ImageDisclosuresTest(unittest.TestCase):
             f"{base}_2.tiff",
         ]
         params = {"sorted_urls": json.dumps(sorted_urls)}
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/convert/images/pdf/",
             params=params,
         )
@@ -575,10 +603,10 @@ class ImageDisclosuresTest(unittest.TestCase):
         )
 
 
-class AudioConversionTests(unittest.TestCase):
+class AudioConversionTests(HTTPIntegrationTestCase):
     """Test Audio Conversion"""
 
-    def test_wma_to_mp3(self):
+    async def test_wma_to_mp3(self):
         """Can we convert to mp3 with metadata"""
 
         audio_details = {
@@ -596,7 +624,7 @@ class AudioConversionTests(unittest.TestCase):
         }
 
         files = make_file(filename="1.wma")
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/convert/audio/mp3/",
             files=files,
             params=audio_details,
@@ -625,9 +653,9 @@ class AudioConversionTests(unittest.TestCase):
                 msg="Audio conversion to mp3 failed.",
             )
 
-    def test_audio_duration(self):
+    async def test_audio_duration(self):
         files = make_file(filename="1.mp3")
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/utils/audio/duration/",
             files=files,
         )
@@ -667,22 +695,22 @@ def marker_index(gray: np.ndarray) -> int:
     return round((column < 128).sum() / 60)
 
 
-class BitonalConversionTests(unittest.TestCase):
+class BitonalConversionTests(HTTPIntegrationTestCase):
     """Inline (multipart) mode of /convert/pdf/bitonal/."""
 
     endpoint = "http://doctor:5050/convert/pdf/bitonal/"
     fixture = "bitonal_marker_scan.pdf"
 
-    def convert(self, data=None, filename=None):
-        return requests.post(
+    async def convert(self, data=None, filename=None):
+        return await self.http_client.post(
             self.endpoint,
             files=make_file(filename=filename or self.fixture),
             data={"dpi": 100, "threshold": 128, **(data or {})},
         )
 
-    def test_bitonal_structure(self):
+    async def test_bitonal_structure(self):
         """Is every output page a 1-bit raw CCITT G4 image?"""
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["Content-Type"], "application/pdf")
         source = PdfReader(f"{asset_path}/{self.fixture}")
@@ -705,9 +733,9 @@ class BitonalConversionTests(unittest.TestCase):
             msg="bitonal output should be much smaller than the scan",
         )
 
-    def test_page_order_and_polarity(self):
+    async def test_page_order_and_polarity(self):
         """Are pages in order, black-on-white, after conversion?"""
-        response = self.convert()
+        response = await self.convert()
         for page in range(1, 6):
             gray = render_pdf_page_to_gray(response.content, page)
             self.assertGreater(
@@ -721,9 +749,9 @@ class BitonalConversionTests(unittest.TestCase):
                 msg=f"page {page} marker decodes to the wrong index",
             )
 
-    def test_page_range(self):
+    async def test_page_range(self):
         """Does a 1-indexed inclusive page range subset correctly?"""
-        response = self.convert(data={"first_page": 2, "last_page": 4})
+        response = await self.convert(data={"first_page": 2, "last_page": 4})
         self.assertEqual(response.status_code, 200)
         result = PdfReader(io.BytesIO(response.content))
         self.assertEqual(len(result.pages), 3)
@@ -731,9 +759,9 @@ class BitonalConversionTests(unittest.TestCase):
             gray = render_pdf_page_to_gray(response.content, position)
             self.assertEqual(marker_index(gray), source_index)
 
-    def test_thresholding_does_not_dither(self):
+    async def test_thresholding_does_not_dither(self):
         """Does a gradient threshold to one clean step, not speckle?"""
-        response = self.convert(filename="bitonal_gradient.pdf")
+        response = await self.convert(filename="bitonal_gradient.pdf")
         self.assertEqual(response.status_code, 200)
         gray = render_pdf_page_to_gray(response.content, 1)
         row = gray[gray.shape[0] // 2] > 128
@@ -747,13 +775,15 @@ class BitonalConversionTests(unittest.TestCase):
         self.assertFalse(row[0], msg="dark side should threshold black")
         self.assertTrue(row[-1], msg="light side should threshold white")
 
-    def test_validation_failures(self):
+    async def test_validation_failures(self):
         """Are bad parameters rejected with the error taxonomy?"""
-        no_input = requests.post(self.endpoint, data={"dpi": 100})
+        no_input = await self.http_client.post(
+            self.endpoint, data={"dpi": 100}
+        )
         self.assertEqual(no_input.status_code, 400)
         self.assertEqual(no_input.json()["error_code"], "VALIDATION_FAILED")
         for bad in ({"dpi": 1200}, {"threshold": 300}, {"first_page": 0}):
-            response = self.convert(data=bad)
+            response = await self.convert(data=bad)
             self.assertEqual(response.status_code, 400, msg=str(bad))
             self.assertEqual(
                 response.json()["error_code"],
@@ -761,14 +791,14 @@ class BitonalConversionTests(unittest.TestCase):
                 msg=str(bad),
             )
 
-    def test_page_range_beyond_document(self):
-        response = self.convert(data={"first_page": 99})
+    async def test_page_range_beyond_document(self):
+        response = await self.convert(data={"first_page": 99})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error_code"], "PAGE_RANGE_INVALID")
 
-    def test_invalid_pdf_error_code(self):
+    async def test_invalid_pdf_error_code(self):
         """Do garbage bytes map to INVALID_PDF rather than a 500?"""
-        response = requests.post(
+        response = await self.http_client.post(
             self.endpoint,
             files={"file": ("bad.pdf", b"%PDF-1.7 not really a pdf")},
             data={"dpi": 100},
@@ -776,7 +806,7 @@ class BitonalConversionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error_code"], "INVALID_PDF")
 
-    def test_corrupt_object_stream_error_code(self):
+    async def test_corrupt_object_stream_error_code(self):
         """Does a corrupt /ObjStm map to INVALID_PDF rather than a 500?
 
         pypdf raises a bare AssertionError (not PdfReadError) on a
@@ -790,7 +820,7 @@ class BitonalConversionTests(unittest.TestCase):
                 object_stream_mode=pikepdf.ObjectStreamMode.generate,
             )
         corrupted = buffer.getvalue().replace(b"/ObjStm", b"/XObStm", 1)
-        response = requests.post(
+        response = await self.http_client.post(
             self.endpoint,
             files={"file": ("corrupt.pdf", corrupted)},
             data={"dpi": 100},
@@ -863,7 +893,7 @@ class StubS3Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-class BitonalTransportTests(unittest.TestCase):
+class BitonalTransportTests(HTTPIntegrationTestCase):
     """Presigned GET/PUT mode of /convert/pdf/bitonal/.
 
     The stub server runs in this test process; the suite executes
@@ -891,8 +921,8 @@ class BitonalTransportTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=5)
 
-    def convert(self, **extra):
-        return requests.post(
+    async def convert(self, **extra):
+        return await self.http_client.post(
             self.endpoint,
             data={
                 "input_url": self.input_url,
@@ -903,9 +933,9 @@ class BitonalTransportTests(unittest.TestCase):
             },
         )
 
-    def test_presigned_roundtrip(self):
+    async def test_presigned_roundtrip(self):
         """Happy path: GET the input, PUT the result, JSON summary."""
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 200, msg=response.text)
         payload = response.json()
         self.assertTrue(payload["success"])
@@ -920,14 +950,14 @@ class BitonalTransportTests(unittest.TestCase):
         self.assertEqual(received["bytes"], payload["bytes"])
         self.assertEqual(received["content_type"], "application/pdf")
 
-    def test_multipart_input_presigned_output(self):
+    async def test_multipart_input_presigned_output(self):
         """Multipart in, presigned PUT out: is source_sha256 right?
 
         The digest comes from the form's write-time hashing (the
         upload is never re-read), so this pins that it still matches
         the uploaded bytes.
         """
-        response = requests.post(
+        response = await self.http_client.post(
             self.endpoint,
             files={"file": (self.fixture, self.fixture_bytes)},
             data={
@@ -946,46 +976,46 @@ class BitonalTransportTests(unittest.TestCase):
         self.assertEqual(self.server.get_count, 0)
         self.assertEqual(len(self.server.received_puts), 1)
 
-    def test_input_url_expired(self):
+    async def test_input_url_expired(self):
         """A 403 on the input URL must fail fast, without retries."""
         self.server.get_statuses = [403]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["error_code"], "INPUT_URL_EXPIRED")
         self.assertEqual(self.server.get_count, 1)
         self.assertEqual(self.server.put_count, 0)
 
-    def test_input_url_5xx_is_retried(self):
+    async def test_input_url_5xx_is_retried(self):
         self.server.get_statuses = [500, 500, 200]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 200, msg=response.text)
         self.assertEqual(self.server.get_count, 3)
 
-    def test_result_url_expired(self):
+    async def test_result_url_expired(self):
         """A 403 on the output URL must fail fast, without retries."""
         self.server.put_statuses = [403]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["error_code"], "RESULT_URL_EXPIRED")
         self.assertEqual(self.server.put_count, 1)
 
-    def test_result_upload_5xx_is_retried(self):
+    async def test_result_upload_5xx_is_retried(self):
         self.server.put_statuses = [500, 500, 200]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 200, msg=response.text)
         self.assertEqual(self.server.put_count, 3)
 
-    def test_result_upload_exhausts_retries(self):
+    async def test_result_upload_exhausts_retries(self):
         self.server.put_statuses = [500, 500, 500]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["error_code"], "RESULT_UPLOAD_FAILED")
         self.assertEqual(self.server.put_count, 3)
 
-    def test_input_url_3xx_is_not_success(self):
+    async def test_input_url_3xx_is_not_success(self):
         """follow_redirects is off, so a 3xx must be a terminal failure."""
         self.server.get_statuses = [307]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(
             response.json()["error_code"], "INPUT_DOWNLOAD_FAILED"
@@ -993,10 +1023,10 @@ class BitonalTransportTests(unittest.TestCase):
         self.assertEqual(self.server.get_count, 1)
         self.assertEqual(self.server.put_count, 0)
 
-    def test_result_url_3xx_is_not_success(self):
+    async def test_result_url_3xx_is_not_success(self):
         """A redirected PUT stored nothing and must not report success."""
         self.server.put_statuses = [307]
-        response = self.convert()
+        response = await self.convert()
         self.assertEqual(response.status_code, 502)
         payload = response.json()
         self.assertFalse(payload["success"])
@@ -1053,7 +1083,7 @@ class EgressPolicyTests(unittest.TestCase):
     def test_malformed_url_is_terminal(self):
         """Does a malformed URL fail as a terminal 4xx, not INTERNAL_ERROR?
 
-        httpx.InvalidURL is not an httpx.HTTPError, and a malformed
+        httpx2.InvalidURL is not an httpx2.HTTPError, and a malformed
         port passes validate_egress_url (urlparse never parses the
         port), so without an explicit catch it would escape the
         retry loop into the retryable INTERNAL_ERROR/500 catch-all
@@ -1368,17 +1398,17 @@ class BitonalGuardrailTests(unittest.TestCase):
         self._download_capped(omit_content_length=True)
 
 
-class TestFailedValidations(unittest.TestCase):
-    def test_for_400s(self):
+class TestFailedValidations(HTTPIntegrationTestCase):
+    async def test_for_400s(self):
         """Test validation for missing audio file"""
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/utils/audio/duration/",
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
-    def test_pdf_400s(self):
+    async def test_pdf_400s(self):
         """Test validation for missing PDF file"""
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/extract/doc/text/",
         )
         self.assertEqual(
@@ -1388,9 +1418,9 @@ class TestFailedValidations(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400, msg="Wrong validation")
 
-    def test_pdf_400_mime(self):
+    async def test_pdf_400_mime(self):
         """Test return 400 on missing file for mime extraction"""
-        response = requests.post(
+        response = await self.http_client.post(
             "http://doctor:5050/utils/mime-type/",
             params={"mime": True},
         )
