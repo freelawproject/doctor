@@ -68,6 +68,18 @@ DOCTOR_EGRESS_ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+# Host allowlist for the court seal that audio conversion embeds in an
+# MP3. Same syntax as above and always https. The seal URL is built from
+# a court id, not from caller input, but the check keeps doctor from ever
+# fetching from anywhere else. Empty disables it.
+DOCTOR_SEAL_ALLOWED_HOSTS = [
+    host.strip()
+    for host in env(
+        "DOCTOR_SEAL_ALLOWED_HOSTS", default="seals.free.law"
+    ).split(",")
+    if host.strip()
+]
+
 # Bitonal guardrails: per-page pdftoppm timeout, whole-conversion
 # budget, and input_url download cap (0 disables). Defaults carry
 # 30-60x headroom over the designed workload (a 200-page shard at

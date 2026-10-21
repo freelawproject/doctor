@@ -23,6 +23,7 @@ from PIL import Image as PILImage
 from PIL.Image import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
+from seal_rookery.search import ImageSizes, seal
 
 from doctor.lib.bitonal import BitonalError
 from doctor.lib.mojibake import fix_mojibake
@@ -552,17 +553,22 @@ EGRESS_BACKOFF_SECONDS = 1.0
 EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def validate_egress_url(url: str) -> None:
+def validate_egress_url(
+    url: str, allowed_hosts: list[str] | None = None
+) -> None:
     """Check a caller-supplied URL against the egress policy.
 
-    When DOCTOR_EGRESS_ALLOWED_HOSTS is set, the URL must be https
-    and its host must match one of the configured fnmatch patterns.
-    An empty setting disables the check.
+    When the allowlist is set, the URL must be https and its host must
+    match one of the configured fnmatch patterns. An empty allowlist
+    disables the check.
 
     :param url: The URL doctor was asked to fetch from or upload to.
+    :param allowed_hosts: Host patterns to allow; defaults to
+        DOCTOR_EGRESS_ALLOWED_HOSTS.
     :raises BitonalError: EGRESS_BLOCKED when the URL is not allowed.
     """
-    allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
+    if allowed_hosts is None:
+        allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
     if not allowed_hosts:
         return
     parsed = urlparse(url)
@@ -865,43 +871,56 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
 
 MAX_SEAL_BYTES = 2 * 1024 * 1024
 SEAL_FORMATS = {"PNG": "image/png", "JPEG": "image/jpeg"}
+SEAL_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def validate_seal_image(seal_image: bytes) -> str:
-    """Check a caller-supplied seal is a small PNG or JPEG.
+def fetch_seal(court_pk: str) -> tuple[bytes, str] | None:
+    """Fetch a court's seal, only ever from the pinned seal host.
 
-    The bytes go into an ID3 tag, so they must really be an image of a
-    sane size, not arbitrary data.
+    This is doctor's one outbound request that isn't a caller-supplied
+    presigned URL, so the pin lives here, in the application: a
+    Kubernetes NetworkPolicy can't allow egress by hostname. The URL
+    must be https on DOCTOR_SEAL_ALLOWED_HOSTS, redirects are not
+    followed, and the body is capped and checked to be a PNG or JPEG
+    before it goes into an ID3 tag.
 
-    :param seal_image: The uploaded seal.
-    :return: Its MIME type.
-    :raises ValueError: If it is too large or not a PNG or JPEG.
+    :param court_pk: The CourtListener court id.
+    :return: (image bytes, MIME type), or None if the court has no seal.
+    :raises BitonalError: EGRESS_BLOCKED if the URL is off the allowlist.
+    :raises ValueError: If the response is oversized or not an image.
     """
-    if len(seal_image) > MAX_SEAL_BYTES:
-        raise ValueError(f"seal exceeds {MAX_SEAL_BYTES} bytes")
+    url = seal(court=court_pk, size=ImageSizes.MEDIUM)
+    if not url:
+        return None
+    validate_egress_url(url, settings.DOCTOR_SEAL_ALLOWED_HOSTS)
+    content = bytearray()
+    with (
+        httpx.Client(follow_redirects=False, timeout=SEAL_TIMEOUT) as client,
+        client.stream("GET", url) as response,
+    ):
+        response.raise_for_status()
+        for chunk in response.iter_bytes():
+            content += chunk
+            if len(content) > MAX_SEAL_BYTES:
+                raise ValueError(f"seal exceeds {MAX_SEAL_BYTES} bytes")
     try:
-        with PILImage.open(io.BytesIO(seal_image)) as image:
+        with PILImage.open(io.BytesIO(content)) as image:
             image.verify()
             image_format = image.format
     except Exception as e:
         raise ValueError("seal is not a readable image") from e
     if image_format not in SEAL_FORMATS:
         raise ValueError("seal must be a PNG or JPEG")
-    return SEAL_FORMATS[image_format]
+    return bytes(content), SEAL_FORMATS[image_format]
 
 
 def set_mp3_meta_data[AnyStr: (bytes, str)](
-    audio_data: dict, mp3_path: AnyStr, seal_image: bytes | None = None
+    audio_data: dict, mp3_path: AnyStr
 ) -> eyed3.core.AudioFile:
     """Set the metadata in audio_data to an mp3 at path.
 
-    Doctor never fetches the seal itself: the calling application
-    supplies it, so this service needs no outbound access for audio.
-
     :param audio_data: The new metadata to embed in the mp3.
     :param mp3_path: The path to the mp3 to be converted.
-    :param seal_image: The court's seal as PNG or JPEG bytes, already
-        checked with validate_seal_image. None if the court has none.
     :return: Eyed3 audio file object
     """
 
@@ -945,11 +964,13 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
         14,  # "Publisher logo".
     ]
 
+    seal_image = fetch_seal(audio_data["court_pk"])
     if seal_image:
+        seal_content, seal_mime = seal_image
         audio_file.tag.images.set(
             3,
-            seal_image,
-            validate_seal_image(seal_image),
+            seal_content,
+            seal_mime,
             f"Seal for {audio_data['court_short_name']}",
         )
         flp_image_frames.remove(3)

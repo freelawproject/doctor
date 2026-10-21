@@ -12,11 +12,12 @@ import os
 import shutil
 import unittest
 from pathlib import Path
-from urllib.parse import urlencode
+from unittest.mock import patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "doctor.settings")
 
 import django  # noqa: E402
+import httpx  # noqa: E402
 
 django.setup()
 
@@ -24,14 +25,15 @@ from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
 from django.test import Client, SimpleTestCase, override_settings  # noqa: E402
 from PIL import Image  # noqa: E402
 
+from doctor.lib.bitonal import BitonalError  # noqa: E402
 from doctor.lib.sentry_scrub import scrub_breadcrumb, scrub_event  # noqa: E402
 from doctor.lib.subprocesses import TIMED_OUT, run_limited  # noqa: E402
 from doctor.middleware import GatekeeperMiddleware  # noqa: E402
 from doctor.tasks import (  # noqa: E402
     MAX_SEAL_BYTES,
     convert_to_mp3,
+    fetch_seal,
     set_mp3_meta_data,
-    validate_seal_image,
 )
 
 
@@ -229,108 +231,120 @@ def _image_bytes(image_format="PNG", size=(32, 32)):
     return buffer.getvalue()
 
 
-class SealTest(SimpleTestCase):
-    """The caller supplies the court seal; doctor never fetches it."""
+class SealFetchTest(SimpleTestCase):
+    """Audio conversion may fetch a seal, but only from the pinned host."""
 
-    AUDIO_DATA = {
-        "court_full_name": "Testing Supreme Court",
-        "court_short_name": "Testing",
-        "court_pk": "test",
-        "court_url": "http://www.example.com/",
-        "docket_number": "1",
-        "date_argued": "2020-01-01",
-        "date_argued_year": "2020",
-        "case_name": "A v. B",
-        "case_name_full": "A v. B",
-        "case_name_short": "A",
-        "download_url": "http://www.example.com/a.mp3",
-    }
+    SEAL_URL = "https://seals.free.law/v2/256/mad.png"
 
-    def test_validate_accepts_png_and_jpeg(self):
-        self.assertEqual(validate_seal_image(_image_bytes("PNG")), "image/png")
-        self.assertEqual(
-            validate_seal_image(_image_bytes("JPEG")), "image/jpeg"
-        )
+    def client_returning(self, handler):
+        """Patch doctor's httpx.Client to answer from `handler`, and
+        record the keyword arguments it was built with."""
+        built = {}
+        real = httpx.Client
 
-    def test_validate_rejects_bad_seals(self):
-        for bad in (
+        def make_client(**kwargs):
+            built.update(kwargs)
+            return real(transport=httpx.MockTransport(handler), **kwargs)
+
+        return patch("doctor.tasks.httpx.Client", make_client), built
+
+    def fetch(self, handler, url=SEAL_URL):
+        patched, built = self.client_returning(handler)
+        with patch("doctor.tasks.seal", return_value=url), patched:
+            return fetch_seal("mad"), built
+
+    def test_court_without_a_seal(self):
+        with patch("doctor.tasks.seal", return_value=None):
+            self.assertIsNone(fetch_seal("nonexistent"))
+
+    def test_fetches_the_seal(self):
+        png = _image_bytes("PNG")
+        seen = []
+
+        def handler(request):
+            seen.append(str(request.url))
+            return httpx.Response(200, content=png)
+
+        (result, built) = self.fetch(handler)
+        self.assertEqual(result, (png, "image/png"))
+        self.assertEqual(seen, [self.SEAL_URL])
+        self.assertFalse(built["follow_redirects"])
+
+    def test_other_hosts_are_blocked_before_any_request(self):
+        def handler(request):
+            raise AssertionError(f"made a request to {request.url}")
+
+        for url in (
+            "https://evil.example/seal.png",
+            "http://seals.free.law/v2/256/mad.png",
+            "https://seals.free.law.evil.example/mad.png",
+            "https://evil.example/seals.free.law/mad.png",
+            "https://169.254.169.254/latest/meta-data",
+            "file:///etc/passwd",
+        ):
+            with self.assertRaises(BitonalError, msg=url):
+                self.fetch(handler, url=url)
+
+    def test_redirects_are_not_followed(self):
+        def handler(request):
+            if request.url.host == "seals.free.law":
+                return httpx.Response(
+                    302, headers={"Location": "http://169.254.169.254/"}
+                )
+            raise AssertionError(f"followed a redirect to {request.url}")
+
+        with self.assertRaises(httpx.HTTPStatusError):
+            self.fetch(handler)
+
+    def test_bad_responses_are_rejected(self):
+        for body in (
             b"not an image",
-            b"",
             _image_bytes("GIF"),
-            b"\x89PNG\r\n\x1a\n" + b"\0" * 20,
             b"\0" * (MAX_SEAL_BYTES + 1),
         ):
             with self.assertRaises(ValueError):
-                validate_seal_image(bad)
-
-    def mp3_with(self, tmp, seal_image):
-        import eyed3
-
-        path = os.path.join(tmp, "a.mp3")
-        shutil.copy("doctor/test_assets/1.mp3", path)
-        set_mp3_meta_data(dict(self.AUDIO_DATA), path, seal_image)
-        return {i.picture_type: i for i in eyed3.load(path).tag.images}
+                self.fetch(
+                    lambda request, b=body: httpx.Response(200, content=b)
+                )
 
     def test_seal_becomes_the_front_cover(self):
         import tempfile
 
-        seal = _image_bytes("PNG", (48, 48))
-        with tempfile.TemporaryDirectory() as tmp:
-            images = self.mp3_with(tmp, seal)
-        self.assertEqual(images[3].image_data, seal)
-        self.assertEqual(images[3].description, "Seal for Testing")
-        self.assertIn(14, images)  # publisher logo stays the FLP one
-        self.assertNotEqual(images[14].image_data, seal)
-
-    def test_without_a_seal_only_the_flp_logo_is_used(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            images = self.mp3_with(tmp, None)
-        # Both fallback frames share a description, so eyed3 keeps one.
-        self.assertIn(14, images)
-        self.assertNotIn("Seal for", images[14].description)
-
-    def test_endpoint_rejects_an_invalid_seal(self):
-        with open("doctor/test_assets/1.wma", "rb") as audio:
-            response = Client().post(
-                "/convert/audio/mp3/?" + urlencode(self.AUDIO_DATA),
-                {
-                    "file": audio,
-                    "seal": SimpleUploadedFile("s.png", b"nope", "image/png"),
-                },
-            )
-        self.assertEqual(response.status_code, 400)
-
-    def test_endpoint_accepts_a_seal(self):
-        import tempfile
-
         import eyed3
 
-        seal = _image_bytes("PNG")
-        with open("doctor/test_assets/1.wma", "rb") as audio:
-            response = Client().post(
-                "/convert/audio/mp3/?" + urlencode(self.AUDIO_DATA),
-                {
-                    "file": audio,
-                    "seal": SimpleUploadedFile("s.png", seal, "image/png"),
-                },
-            )
-        self.assertEqual(response.status_code, 200)
-        with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp:
-            tmp.write(b"".join(response.streaming_content))
-            tmp.flush()
-            images = {
-                i.picture_type: i for i in eyed3.load(tmp.name).tag.images
-            }
-        self.assertEqual(images[3].image_data, seal)
+        seal_png = _image_bytes("PNG", (48, 48))
+        audio_data = {
+            "court_full_name": "Testing Supreme Court",
+            "court_short_name": "Testing",
+            "court_pk": "mad",
+            "court_url": "http://www.example.com/",
+            "docket_number": "1",
+            "date_argued": "2020-01-01",
+            "date_argued_year": "2020",
+            "case_name": "A v. B",
+            "case_name_full": "A v. B",
+            "case_name_short": "A",
+            "download_url": "http://www.example.com/a.mp3",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "a.mp3")
+            shutil.copy("doctor/test_assets/1.mp3", path)
+            with patch(
+                "doctor.tasks.fetch_seal", return_value=(seal_png, "image/png")
+            ):
+                set_mp3_meta_data(audio_data, path)
+            images = {i.picture_type: i for i in eyed3.load(path).tag.images}
+        self.assertEqual(images[3].image_data, seal_png)
+        self.assertEqual(images[3].description, "Seal for Testing")
+        self.assertIn(14, images)  # the publisher logo is still FLP's
 
 
 class NetworkImportGuardTest(unittest.TestCase):
     """New outbound network code must be added on purpose.
 
     Doctor's only legitimate egress is the allowlisted bitonal S3
-    transfer, in doctor/tasks.py. An import of a network library anywhere else is how an unreviewed SSRF
+    transfer and the seal fetch pinned to seals.free.law, both in
+    doctor/tasks.py. An import of a network library anywhere else is how an unreviewed SSRF
     gets in: if you need one, review it and extend ALLOWED_FILES.
     """
 

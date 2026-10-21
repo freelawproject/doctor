@@ -635,40 +635,6 @@ class AudioConversionTests(unittest.TestCase):
                 msg="Audio conversion to mp3 failed.",
             )
 
-    def test_wma_to_mp3_with_seal(self):
-        """Is a caller-supplied seal embedded as the front cover?"""
-        buffer = io.BytesIO()
-        Image.new("RGB", (32, 32), "navy").save(buffer, "PNG")
-        seal = buffer.getvalue()
-        params = {
-            "court_full_name": "Testing Supreme Court",
-            "court_short_name": "Testing",
-            "court_pk": "test",
-            "court_url": "http://www.example.com/",
-            "docket_number": "1",
-            "date_argued": "2020-01-01",
-            "date_argued_year": "2020",
-            "case_name": "A v. B",
-            "case_name_full": "A v. B",
-            "case_name_short": "A",
-            "download_url": "http://www.example.com/a.mp3",
-        }
-        files = make_file(filename="1.wma")
-        files["seal"] = ("seal.png", seal, "image/png")
-        response = requests.post(
-            "http://doctor:5050/convert/audio/mp3/",
-            files=files,
-            params=params,
-        )
-        self.assertEqual(response.status_code, 200)
-        with NamedTemporaryFile(suffix=".mp3") as tmp:
-            tmp.write(response.content)
-            tmp.flush()
-            images = {
-                i.picture_type: i for i in eyed3.load(tmp.name).tag.images
-            }
-        self.assertEqual(images[3].image_data, seal)
-
     def test_audio_duration(self):
         files = make_file(filename="1.mp3")
         response = requests.post(

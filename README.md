@@ -38,10 +38,10 @@ Doctor has no per-user state and is meant to be reachable by many applications, 
  - **Authentication.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked on its own. Every endpoint except the heartbeat (`/`) then requires `Authorization: Bearer <token>` and returns `401` otherwise. Unset, authentication is off. This keeps out anything that can reach doctor but isn't one of your apps; it does not protect against a compromised caller, which holds a token.
  - **Request size.** Bodies over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected with `413` before they are read or written to disk. Set it to your largest real upload.
  - **Time limits.** Each external tool doctor runs (ghostscript, tesseract, ffmpeg, ...) has a wall-clock timeout: `DOCTOR_SUBPROCESS_TIMEOUT_SECONDS` (default 900) and `DOCTOR_AUDIO_TIMEOUT_SECONDS` (default 3600) for audio. A crafted file that hangs a tool has it killed and reported as a failure instead of holding the worker for gunicorn's 90 minutes. A limit of 0 disables it. Memory is left to the pod's own limit. The defaults are conservative guesses; tune them from your real workload.
- - **Outbound requests.** Doctor's only outbound requests are the presigned S3 transfers for the bitonal endpoint (https and `DOCTOR_EGRESS_ALLOWED_HOSTS` only, no redirects), in `doctor/tasks.py`. Everything else, including the court seal for audio conversion, is supplied by the caller. A test fails if a network library is imported anywhere else.
+ - **Outbound requests.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`, and checks each in the application because a Kubernetes `NetworkPolicy` can't filter egress by hostname. Bitonal transfers go to presigned S3 URLs (https and `DOCTOR_EGRESS_ALLOWED_HOSTS` only, no redirects). Audio conversion fetches the court seal, only from `seals.free.law` (`DOCTOR_SEAL_ALLOWED_HOSTS`, https, no redirects, 2 MB cap, must be a PNG or JPEG). A test fails if a network library is imported anywhere else.
  - **Container.** The image runs as an unprivileged user and only writes to `/tmp`. Run it with a read-only root filesystem, `/tmp` on a tmpfs, all capabilities dropped, `no-new-privileges` and a process limit (see `compose.yaml`; mirror it in your pod spec).
  - **Sentry.** With `SENTRY_DSN` set, local variables and request bodies are not sent, and URL query strings (presigned signatures) and `Authorization` headers are scrubbed from events and breadcrumbs.
- - **Network policy.** Do this in your orchestrator, since the application can't enforce it. Allow ingress only from the applications that use Doctor, and egress only to S3 and Sentry if `SENTRY_DSN` is set. Block cloud metadata addresses (`169.254.169.254`) and cluster-internal ranges. Because the allowlist can only check that a presigned URL points at `*.amazonaws.com`, route S3 traffic through a VPC endpoint whose policy allows only your own account's buckets, so a caller can't send results to an attacker's bucket.
+ - **Network policy.** Do this in your orchestrator, since the application can't enforce it. Allow ingress only from the applications that use Doctor, and egress only to S3, `seals.free.law` if you use the audio endpoint, and Sentry if `SENTRY_DSN` is set. Block cloud metadata addresses (`169.254.169.254`) and cluster-internal ranges. Because the allowlist can only check that a presigned URL points at `*.amazonaws.com`, route S3 traffic through a VPC endpoint whose policy allows only your own account's buckets, so a caller can't send results to an attacker's bucket.
 
 After the image is running, you should be able to test that you have a working environment by running
 
@@ -477,12 +477,11 @@ from courts across the country and standardizes the format for our end users.
 
 This endpoint also adds the SEAL of the court to the MP3 file and updates the metadata to reflect our updates.
 
-Doctor does not fetch the seal; the caller supplies it. Send it as an optional `seal` file field next to `file`: a PNG or JPEG of at most 2 MB (anything else is a `400`). It becomes the front cover. Without one, the Free Law Project logo is used. Seals are served at `https://seals.free.law/v2/256/<court_id>.png`, so the calling application can fetch the one it needs and pass it along.
+Doctor fetches the seal itself, but only from `seals.free.law` (see `DOCTOR_SEAL_ALLOWED_HOSTS`): https only, no redirects, at most 2 MB, and it must be a PNG or JPEG.
 
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
      -X 'POST' \
-     -F "file=@doctor/test_assets/1.wma" \
-     -F "seal=@seal.png"
+     -F "file=@doctor/test_assets/1.wma"
 
 This returns the audio file as a file response.
 

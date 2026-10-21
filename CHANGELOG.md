@@ -2,12 +2,9 @@
 The following changes are not yet released, but are code complete:
 
 Security:
- - **Breaking:** `/convert/audio/mp3/` no longer fetches the court seal from
-   seals.free.law. The caller sends it as an optional `seal` file (PNG or
-   JPEG, at most 2 MB); without one the Free Law Project logo is used.
-   Update callers first: an updated caller's extra `seal` field is ignored
-   by older doctor versions, which still fetch it themselves. The
-   `seal-rookery` dependency is gone.
+ - `/convert/audio/mp3/` fetches the court seal only from `seals.free.law`
+   (`DOCTOR_SEAL_ALLOWED_HOSTS`): https, no redirects, 2 MB cap, and the
+   body must be a PNG or JPEG.
  - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
    uploaded images as repeated `file` fields (at most
    `DOCTOR_MAX_IMAGE_FILES`, default 500) instead of a `sorted_urls` list,
