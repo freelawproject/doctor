@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import fnmatch
 import hashlib
@@ -20,7 +19,6 @@ import requests
 import xray
 from django.conf import settings
 from eyed3 import id3
-from httpx import AsyncClient
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from pypdf import PdfReader
@@ -29,6 +27,7 @@ from seal_rookery.search import ImageSizes, seal
 
 from doctor.lib.bitonal import BitonalError
 from doctor.lib.mojibake import fix_mojibake
+from doctor.lib.subprocesses import DEVNULL, run_limited
 from doctor.lib.text_extraction import (
     extract_with_ocr,
     get_page_text,
@@ -72,19 +71,16 @@ async def make_pdftotext_process(path):
     :return: Subprocess results
     """
 
-    process = await asyncio.create_subprocess_exec(
+    content, err, returncode = await run_limited(
         "pdftotext",
         "-layout",
         "-enc",
         "UTF-8",
         path,
         "-",
-        shell=False,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=DEVNULL,
     )
-    content, err = await process.communicate()
-    return content.decode(), err, process.returncode
+    return content.decode(), err, returncode
 
 
 async def rasterize_pdf(
@@ -130,14 +126,7 @@ async def rasterize_pdf(
         gs.append(f"-dLastPage={last_page}")
     gs += ["-o", destination, path]
 
-    p = await asyncio.create_subprocess_exec(
-        *gs,
-        close_fds=True,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await p.communicate()
-    return stdout, stderr, p.returncode
+    return await run_limited(*gs)
 
 
 def get_xray(path):
@@ -407,13 +396,8 @@ async def convert_file_to_txt(path: str) -> tuple[str, str, int | None]:
         "-c",
         "tessedit_do_invert=0",  # Assume a white background for speed
     ]
-    p = await asyncio.create_subprocess_exec(
-        *tesseract_command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    out, err = await p.communicate()
-    return out.decode(), err.decode(errors="replace"), p.returncode
+    out, err, returncode = await run_limited(*tesseract_command)
+    return out.decode(), err.decode(errors="replace"), returncode
 
 
 def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
@@ -443,17 +427,10 @@ async def extract_from_doc(path) -> tuple[str, bytes, int | None]:
     :param path: The path to the file
     :return: A tuple containing the extracted text, any error output, and the subprocess return code
     """
-    process = await asyncio.create_subprocess_exec(
-        "antiword",
-        path,
-        "-i",
-        "1",
-        shell=False,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+    content, err, returncode = await run_limited(
+        "antiword", path, "-i", "1", stderr=DEVNULL
     )
-    content, err = await process.communicate()
-    return content.decode("utf-8"), err, process.returncode
+    return content.decode("utf-8"), err, returncode
 
 
 async def extract_from_docx(path) -> tuple[str, bytes, int | None]:
@@ -463,16 +440,10 @@ async def extract_from_docx(path) -> tuple[str, bytes, int | None]:
     :param path: The path to the .docx file
     :return: A tuple containing the extracted text, any error output (empty bytes), and the subprocess return code
     """
-    process = await asyncio.create_subprocess_exec(
-        "docx2txt",
-        path,
-        "-",
-        shell=False,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+    content, err, returncode = await run_limited(
+        "docx2txt", path, "-", stderr=DEVNULL
     )
-    content, err = await process.communicate()
-    return content.decode("utf-8"), err, process.returncode
+    return content.decode("utf-8"), err, returncode
 
 
 def extract_from_html(path: str) -> tuple[str, str, int]:
@@ -564,22 +535,14 @@ async def extract_from_wpd(path: str) -> tuple[str, bytes, int | None]:
              - The standard error output from the wpd2html subprocess (bytes)
              - The return code of the wpd2html subprocess (int). Returns 1 on Python-level errors
     """
-    process = await asyncio.create_subprocess_exec(
-        "wpd2html",
-        path,
-        shell=False,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+    content_bytes, err, returncode = await run_limited(
+        "wpd2html", path, stderr=DEVNULL
     )
-    content_bytes, err = await process.communicate()
     content_str = content_bytes.decode("utf-8")
     content = get_clean_body_content(content_str)
 
-    return content, err, process.returncode
+    return content, err, returncode
 
-
-MAX_IMAGE_BYTES = 100 * 1024 * 1024  # 100 MB per image
-MAX_CONCURRENT_IMAGE_DOWNLOADS = 10
 
 # Presigned URL transport for the bitonal endpoint. Transient
 # failures (network errors, 5xx) are retried with backoff; a 403
@@ -811,50 +774,6 @@ def put_file_to_url(url: str, input_path: str, content_type: str) -> str:
     )
 
 
-async def download_images(sorted_urls: list[str], dest_dir: str) -> list[str]:
-    """Stream images to ``dest_dir`` and return their paths in input order.
-
-    Caps concurrent downloads so a many-URL batch can't fan out an
-    unbounded number of in-flight requests. Each response is streamed
-    straight to disk so no image's bytes sit in RAM during the fetch.
-    Files larger than ``MAX_IMAGE_BYTES`` are still kept, but logged with
-    their final size and URL because img2pdf will load each one back
-    into memory when it builds the PDF.
-
-    :param sorted_urls: List of sorted URLs for split financial disclosure
-    :param dest_dir: Directory to write downloaded images into. The
-        caller owns its lifecycle (typically a ``TemporaryDirectory``).
-    :return: Filesystem paths of each image, in the same order as
-        ``sorted_urls``
-    """
-    sem = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_DOWNLOADS)
-
-    async def _fetch(client: AsyncClient, index: int, url: str) -> str:
-        path = os.path.join(dest_dir, f"{index:06d}")
-        size = 0
-        async with sem, client.stream("GET", url) as response:
-            response.raise_for_status()
-            with open(path, "wb") as f:
-                async for chunk in response.aiter_bytes():
-                    f.write(chunk)
-                    size += len(chunk)
-        if size > MAX_IMAGE_BYTES:
-            logger.warning(
-                "Image at %s is %s bytes, exceeding limit of %s; "
-                "img2pdf will load the full file into memory during "
-                "PDF construction",
-                url,
-                size,
-                MAX_IMAGE_BYTES,
-            )
-        return path
-
-    async with AsyncClient(http2=True, follow_redirects=True) as client:
-        return await asyncio.gather(
-            *(_fetch(client, i, url) for i, url in enumerate(sorted_urls))
-        )
-
-
 # Audio
 
 root = os.path.dirname(os.path.realpath(__file__))
@@ -872,8 +791,13 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        # Playlist-style containers (HLS, concat) can name other files
+        # and URLs; with only the pipe protocol allowed an uploaded
+        # "audio" file can't make ffmpeg read or fetch anything else.
+        "-protocol_whitelist",
+        "pipe",
         "-i",
-        "/dev/stdin",
+        "pipe:0",
         "-ar",
         "22050",
         "-ab",
@@ -883,13 +807,11 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
         output_path,
     ]
 
-    ffmpeg_cmd = await asyncio.create_subprocess_exec(
+    await run_limited(
         *av_command,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        shell=False,
+        input=media.read(),
+        timeout=settings.DOCTOR_AUDIO_TIMEOUT_SECONDS,
     )
-    await ffmpeg_cmd.communicate(media.read())
     return output_path
 
 
@@ -911,8 +833,13 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        # Playlist-style containers (HLS, concat) can name other files
+        # and URLs; with only the pipe protocol allowed an uploaded
+        # "audio" file can't make ffmpeg read or fetch anything else.
+        "-protocol_whitelist",
+        "pipe",
         "-i",
-        "/dev/stdin",
+        "pipe:0",
         "-vn",
         "-map_metadata",
         "-1",
@@ -929,13 +856,11 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
         output_path,
     ]
 
-    ffmpeg_cmd = await asyncio.create_subprocess_exec(
+    await run_limited(
         *av_command,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        shell=False,
+        input=media.read(),
+        timeout=settings.DOCTOR_AUDIO_TIMEOUT_SECONDS,
     )
-    await ffmpeg_cmd.communicate(media.read())
     return output_path
 
 

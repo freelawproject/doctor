@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import functools
 import inspect
@@ -17,6 +16,8 @@ from typing import Any
 import six
 from pypdf import PdfWriter
 from reportlab.pdfgen import canvas
+
+from doctor.lib.subprocesses import DEVNULL, run_limited
 
 logger = logging.getLogger(__name__)
 
@@ -188,14 +189,8 @@ async def make_png_thumbnail_for_instance(filepath, max_dimension):
         filepath,
         "-png",
     ]
-    p = await asyncio.create_subprocess_exec(
-        *command,
-        close_fds=True,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await p.communicate()
-    return stdout, stderr.decode("utf-8"), str(p.returncode)
+    stdout, stderr, returncode = await run_limited(*command)
+    return stdout, stderr.decode("utf-8"), str(returncode)
 
 
 async def make_png_thumbnails(filepath, max_dimension, pages, directory):
@@ -219,13 +214,7 @@ async def make_png_thumbnails(filepath, max_dimension, pages, directory):
             "-png",
             f"{directory.name}/thumb-{page}",
         ]
-        p = await asyncio.create_subprocess_exec(
-            *command,
-            close_fds=True,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await p.wait()
+        await run_limited(*command, stdout=DEVNULL, stderr=DEVNULL)
 
 
 def pdf_bytes_from_image_array(image_list, output_path) -> None:
@@ -475,16 +464,14 @@ async def strip_metadata_with_exiftool(path: str) -> bool:
     :param path: Temporary file path
     :return: True if exiftool succeeded or False if exiftool failed
     """
-    process = await asyncio.create_subprocess_exec(
+    _, _, result = await run_limited(
         "exiftool",
         "-all=",
         "-overwrite_original",
         path,
-        close_fds=True,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stdout=DEVNULL,
+        stderr=DEVNULL,
     )
-    result = await process.wait()
 
     # exiftool returns 0 = success
     return result == 0

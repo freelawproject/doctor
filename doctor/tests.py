@@ -555,24 +555,34 @@ class RedactionTest(unittest.TestCase):
 
 
 class ImageDisclosuresTest(unittest.TestCase):
+    URL = "http://doctor:5050/convert/images/pdf/"
+
     def test_images_to_pdf(self):
-        """Do we create a PDF from several tiffs successfully?"""
-        base = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/financial-disclosures/2011/A-E/Armstrong-SB%20J3.%2009.%20CAN_R_11/Armstrong-SB%20J3.%2009.%20CAN_R_11_Page"
-        sorted_urls = [
-            f"{base}_1.tiff",
-            f"{base}_2.tiff",
-        ]
-        params = {"sorted_urls": json.dumps(sorted_urls)}
-        response = requests.post(
-            "http://doctor:5050/convert/images/pdf/",
-            params=params,
-        )
+        """Do we create a PDF from several uploaded images?"""
+        files = []
+        for name in ("image-pdf-thumbnail.png", "image-pdf-2-thumbnail.png"):
+            with open(f"{asset_path}/{name}", "rb") as f:
+                files.append(("file", (name, f.read(), "image/png")))
+        response = requests.post(self.URL, files=files)
         self.assertEqual(response.status_code, 200, msg="Failed status code.")
-        self.assertEqual(
-            b"%PDF-1.3\n",
-            response.content[:9],
-            msg="PDF generation failed",
+        self.assertEqual(response.content[:5], b"%PDF-")
+        self.assertEqual(len(PdfReader(io.BytesIO(response.content)).pages), 2)
+
+    def test_single_long_image_is_split_into_pages(self):
+        """Is one long image split into page-sized slices?"""
+        with open(f"{asset_path}/long-image.tiff", "rb") as f:
+            response = requests.post(self.URL, files={"file": f})
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(
+            len(PdfReader(io.BytesIO(response.content)).pages), 1
         )
+
+    def test_urls_are_not_fetched(self):
+        """Doctor never fetches image URLs; there is nothing to upload."""
+        response = requests.post(
+            self.URL, params={"sorted_urls": '["http://localhost:5050/"]'}
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 class AudioConversionTests(unittest.TestCase):

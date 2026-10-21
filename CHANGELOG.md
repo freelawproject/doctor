@@ -1,6 +1,27 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Security:
+ - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
+   uploaded images as repeated `file` fields (at most
+   `DOCTOR_MAX_IMAGE_FILES`, default 500) instead of a `sorted_urls` list,
+   which let any caller make doctor fetch internal URLs. Nothing in
+   courtlistener, bigcases2 or scanning calls it.
+ - New `DOCTOR_AUTH_TOKENS` setting enables bearer-token authentication on
+   every endpoint but the heartbeat; unset keeps today's behavior.
+ - Requests over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected
+   before the body is read.
+ - External tools run with a timeout and memory/CPU limits
+   (`DOCTOR_SUBPROCESS_TIMEOUT_SECONDS`, `DOCTOR_AUDIO_TIMEOUT_SECONDS`,
+   `DOCTOR_SUBPROCESS_MAX_MEMORY_MB`).
+ - ffmpeg is limited to the pipe protocol so an uploaded playlist file
+   can't make it read local files or fetch URLs.
+ - Sentry events no longer carry local variables or request bodies, and
+   presigned URL signatures and `Authorization` headers are scrubbed.
+ - The image runs as a non-root user without curl or ImageMagick, and
+   `compose.yaml` runs it read-only with dropped capabilities.
+ - A test fails if a network library is imported outside `doctor/tasks.py`.
+
 Features:
  - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
    the caller may retry, rather than the permanent `CONVERSION_FAILED`. The

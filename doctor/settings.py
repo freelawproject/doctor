@@ -16,6 +16,8 @@ import environ
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
+from doctor.lib.sentry_scrub import scrub_breadcrumb, scrub_event
+
 env = environ.FileAwareEnv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,6 +28,30 @@ INSTALLED_APPS = []
 ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
+
+# Service-to-service authentication. Comma-separated bearer tokens; when
+# any are set, every endpoint except the heartbeat requires
+# "Authorization: Bearer <token>". Several tokens may be live at once so
+# each calling application gets its own and tokens can be rotated without
+# downtime. Empty disables authentication, which is only appropriate
+# when a network policy already restricts who can reach the service.
+DOCTOR_AUTH_TOKENS = [
+    token.strip()
+    for token in env("DOCTOR_AUTH_TOKENS", default="").split(",")
+    if token.strip()
+]
+
+# Requests larger than this are refused with 413 before the body is read
+# or spooled to disk. The default matches the largest input the bitonal
+# endpoint downloads; lower it to your largest real upload.
+DOCTOR_MAX_REQUEST_BYTES = env.int("DOCTOR_MAX_REQUEST_BYTES", default=1024**3)
+# Images accepted by one images-to-pdf request.
+DOCTOR_MAX_IMAGE_FILES = env.int("DOCTOR_MAX_IMAGE_FILES", default=500)
+# Non-file form fields are small; file parts are bounded by the count
+# below and by DOCTOR_MAX_REQUEST_BYTES.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024**2
+DATA_UPLOAD_MAX_NUMBER_FILES = DOCTOR_MAX_IMAGE_FILES
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 50
 
 # Host allowlist for endpoints that fetch or upload caller-supplied
 # URLs (currently the bitonal endpoint). Comma-separated fnmatch
@@ -66,6 +92,22 @@ DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
     "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
 )
 
+# Limits on each external tool doctor runs (ghostscript, tesseract,
+# ffmpeg, ...), so one crafted file can't hang a worker or exhaust the
+# pod's memory. A tool over its timeout is killed and reported as failed.
+# 0 disables a limit. The memory limit is address space (RLIMIT_AS), which
+# runs above resident memory; tune both from your real workload.
+DOCTOR_SUBPROCESS_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_SUBPROCESS_TIMEOUT_SECONDS", default=900
+)
+# Audio conversions legitimately run long (hours of recording).
+DOCTOR_AUDIO_TIMEOUT_SECONDS = env.int(
+    "DOCTOR_AUDIO_TIMEOUT_SECONDS", default=3600
+)
+DOCTOR_SUBPROCESS_MAX_MEMORY_MB = env.int(
+    "DOCTOR_SUBPROCESS_MAX_MEMORY_MB", default=4096
+)
+
 # OCR runs ghostscript and tesseract over this many pages at a time, so a
 # request's peak memory and /tmp usage depend on the slice size rather
 # than on the document's page count. A 300 DPI letter page is ~8 MB of
@@ -82,6 +124,14 @@ if SENTRY_DSN:
             DjangoIntegration(),
         ],
         ignore_errors=[KeyboardInterrupt],
+        # Locals and request bodies hold document text and presigned
+        # URLs (bearer credentials for scanned documents in S3), and
+        # Sentry is a third party. See doctor/lib/sentry_scrub.py.
+        include_local_variables=False,
+        max_request_body_size="never",
+        send_default_pii=False,
+        before_send=scrub_event,
+        before_breadcrumb=scrub_breadcrumb,
     )
 
 LOGGING = {

@@ -31,6 +31,18 @@ If you are not using a system that supports horizontal scaling, you may wish to 
 
 If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving Doctor many workers becomes particularly important. If it does not have a worker available, your call to Doctor will probably time out.
 
+## Running Doctor on a shared network
+
+Doctor has no per-user state and is meant to be reachable by many applications, so limit who can call it and what it can do:
+
+ - **Authentication.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked on its own. Every endpoint except the heartbeat (`/`) then requires `Authorization: Bearer <token>` and returns `401` otherwise. Unset, authentication is off. This keeps out anything that can reach doctor but isn't one of your apps; it does not protect against a compromised caller, which holds a token.
+ - **Request size.** Bodies over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected with `413` before they are read or written to disk. Set it to your largest real upload.
+ - **Resource limits.** Each external tool doctor runs (ghostscript, tesseract, ffmpeg, ...) has a wall-clock timeout, `DOCTOR_SUBPROCESS_TIMEOUT_SECONDS` (default 900; `DOCTOR_AUDIO_TIMEOUT_SECONDS`, default 3600, for audio) and an address-space limit, `DOCTOR_SUBPROCESS_MAX_MEMORY_MB` (default 4096). A crafted file that hangs or balloons kills its own child process rather than the pod. A limit of 0 disables it. The defaults are conservative guesses; tune them from your real workload.
+ - **Outbound requests.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`: presigned S3 transfers for the bitonal endpoint (https and `DOCTOR_EGRESS_ALLOWED_HOSTS` only, no redirects) and the court seal for audio conversion (always `seals.free.law`). A test fails if a network library is imported anywhere else.
+ - **Container.** The image runs as an unprivileged user and only writes to `/tmp`. Run it with a read-only root filesystem, `/tmp` on a tmpfs, all capabilities dropped, `no-new-privileges` and a process limit (see `compose.yaml`; mirror it in your pod spec).
+ - **Sentry.** With `SENTRY_DSN` set, local variables and request bodies are not sent, and URL query strings (presigned signatures) and `Authorization` headers are scrubbed from events and breadcrumbs.
+ - **Network policy.** Do this in your orchestrator, since the application can't enforce it. Allow ingress only from the applications that use Doctor, and egress only to S3, `seals.free.law` if you use the audio endpoint, and Sentry if `SENTRY_DSN` is set. Block cloud metadata addresses (`169.254.169.254`) and cluster-internal ranges. Because the allowlist can only check that a presigned URL points at `*.amazonaws.com`, route S3 traffic through a VPC endpoint whose policy allows only your own account's buckets, so a caller can't send results to an attacker's bucket.
+
 After the image is running, you should be able to test that you have a working environment by running
 
     curl http://localhost:5050
@@ -325,13 +337,15 @@ Keep in mind that this curl will write the file to the current directory.
 
 ### Endpoint: /convert/images/pdf/
 
-Given a list of urls for images, this endpoint will convert them to a pdf. This can be used to convert multiple images to a multi-page PDF. We use this to convert financial disclosure images to simple PDFs.
+Converts uploaded images to a PDF. Send each image as a `file` field, in page order, and each becomes one page of a multi-page PDF. Send a single image and it is treated as one long scan and split into page-sized slices. We use this to convert financial disclosure images to simple PDFs.
 
-    curl 'http://localhost:5050/convert/images/pdf/?sorted_urls=%5B%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_1.tiff%22%2C+%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_2.tiff%22%5D' \
+    curl 'http://localhost:5050/convert/images/pdf/' \
         -X POST \
+        -F "file=@page-1.tiff" \
+        -F "file=@page-2.tiff" \
         -o image.pdf
 
-This returns the binary data of the pdf.
+This returns the binary data of the pdf. At most `DOCTOR_MAX_IMAGE_FILES` (default 500) images are accepted per request. Doctor never fetches image URLs: earlier versions took a `sorted_urls` list and downloaded each one, which let any caller point doctor at internal addresses. Download the images and upload them instead.
 
 
 ### Endpoint: /convert/pdf/bitonal/
