@@ -13,4 +13,6 @@ from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "doctor.settings")
 
-application = get_asgi_application()
+from doctor.middleware import GatekeeperMiddleware  # noqa: E402
+
+application = GatekeeperMiddleware(get_asgi_application())

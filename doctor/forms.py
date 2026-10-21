@@ -57,9 +57,26 @@ class ImagePdfForm(forms.Form):
     sorted_urls = forms.CharField(required=True, label="sorted-urls")
 
     def clean(self):
-        self.cleaned_data["sorted_urls"] = json.loads(
-            self.cleaned_data["sorted_urls"]
-        )
+        raw = self.cleaned_data.get("sorted_urls")
+        if raw is None:
+            return self.cleaned_data
+        try:
+            urls = json.loads(raw)
+        except ValueError as e:
+            raise ValidationError("sorted_urls must be a JSON list.") from e
+        if (
+            not isinstance(urls, list)
+            or not urls
+            or not all(isinstance(url, str) for url in urls)
+        ):
+            raise ValidationError(
+                "sorted_urls must be a non-empty JSON list of URLs."
+            )
+        if len(urls) > settings.DOCTOR_MAX_IMAGE_URLS:
+            raise ValidationError(
+                f"At most {settings.DOCTOR_MAX_IMAGE_URLS} URLs are allowed."
+            )
+        self.cleaned_data["sorted_urls"] = urls
         return self.cleaned_data
 
 

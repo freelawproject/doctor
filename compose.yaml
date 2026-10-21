@@ -13,3 +13,12 @@ services:
       - .:/opt/app
     env_file:
       - .env.dev
+    # Hardening: the service only needs to write to /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512

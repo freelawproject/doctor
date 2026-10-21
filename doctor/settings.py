@@ -27,6 +27,26 @@ ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
 
+# Service-to-service authentication. Comma-separated bearer tokens; when
+# any are set, every endpoint except the heartbeat requires
+# "Authorization: Bearer <token>". Several tokens may be live at once so
+# each calling application gets its own and tokens can be rotated without
+# downtime. Empty disables authentication, which is only appropriate
+# when a network policy already restricts who can reach the service.
+DOCTOR_AUTH_TOKENS = [
+    token.strip()
+    for token in env("DOCTOR_AUTH_TOKENS", default="").split(",")
+    if token.strip()
+]
+
+# Requests larger than this are refused with 413 before the body is read.
+# The default matches the largest input the bitonal endpoint downloads.
+DOCTOR_MAX_REQUEST_BYTES = env.int("DOCTOR_MAX_REQUEST_BYTES", default=1024**3)
+# Non-file form fields (e.g. the images-to-pdf URL list) are small.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024**2
+DATA_UPLOAD_MAX_NUMBER_FILES = 5
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 50
+
 # Host allowlist for endpoints that fetch or upload caller-supplied
 # URLs (currently the bitonal endpoint). Comma-separated fnmatch
 # patterns; when set, URLs must be https and match one of them. The
@@ -41,6 +61,19 @@ DOCTOR_EGRESS_ALLOWED_HOSTS = [
     ).split(",")
     if host.strip()
 ]
+
+# Host allowlist for the images-to-pdf endpoint, which fetches
+# caller-supplied image URLs. Same syntax as above; unset, it falls back
+# to DOCTOR_EGRESS_ALLOWED_HOSTS. Empty disables the check.
+DOCTOR_IMAGE_ALLOWED_HOSTS = [
+    host.strip()
+    for host in env(
+        "DOCTOR_IMAGE_ALLOWED_HOSTS",
+        default=",".join(DOCTOR_EGRESS_ALLOWED_HOSTS),
+    ).split(",")
+    if host.strip()
+]
+DOCTOR_MAX_IMAGE_URLS = env.int("DOCTOR_MAX_IMAGE_URLS", default=500)
 
 # Bitonal guardrails: per-page pdftoppm timeout, whole-conversion
 # budget, and input_url download cap (0 disables). Defaults carry

@@ -1,6 +1,21 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Security:
+ - New `DOCTOR_AUTH_TOKENS` setting enables bearer-token authentication on
+   every endpoint but the heartbeat; unset keeps today's behavior.
+ - Requests over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected
+   before the body is read.
+ - `/convert/images/pdf/` applies an egress allowlist
+   (`DOCTOR_IMAGE_ALLOWED_HOSTS`, defaulting to
+   `DOCTOR_EGRESS_ALLOWED_HOSTS`), no longer follows redirects, validates
+   its `sorted_urls` input and caps it at `DOCTOR_MAX_IMAGE_URLS`.
+   **Callers using hosts outside `*.amazonaws.com` must set the new
+   variable before deploying.**
+ - ffmpeg is limited to the pipe protocol so an uploaded playlist file
+   can't make it read local files or fetch URLs.
+ - The image runs as a non-root user without curl or ImageMagick.
+
 Features:
  - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
    the caller may retry, rather than the permanent `CONVERSION_FAILED`. The

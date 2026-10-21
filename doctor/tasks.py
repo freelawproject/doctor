@@ -590,17 +590,22 @@ EGRESS_BACKOFF_SECONDS = 1.0
 EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def validate_egress_url(url: str) -> None:
+def validate_egress_url(
+    url: str, allowed_hosts: list[str] | None = None
+) -> None:
     """Check a caller-supplied URL against the egress policy.
 
-    When DOCTOR_EGRESS_ALLOWED_HOSTS is set, the URL must be https
-    and its host must match one of the configured fnmatch patterns.
-    An empty setting disables the check.
+    When the allowlist is set, the URL must be https and its host must
+    match one of the configured fnmatch patterns. An empty allowlist
+    disables the check.
 
     :param url: The URL doctor was asked to fetch from or upload to.
+    :param allowed_hosts: Host patterns to allow; defaults to
+        DOCTOR_EGRESS_ALLOWED_HOSTS.
     :raises BitonalError: EGRESS_BLOCKED when the URL is not allowed.
     """
-    allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
+    if allowed_hosts is None:
+        allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
     if not allowed_hosts:
         return
     parsed = urlparse(url)
@@ -849,7 +854,10 @@ async def download_images(sorted_urls: list[str], dest_dir: str) -> list[str]:
             )
         return path
 
-    async with AsyncClient(http2=True, follow_redirects=True) as client:
+    # Redirects stay off: the allowlist vets the URL the caller sent, and a
+    # redirect would let an allowed host bounce the fetch somewhere it
+    # was never checked.
+    async with AsyncClient(http2=True, follow_redirects=False) as client:
         return await asyncio.gather(
             *(_fetch(client, i, url) for i, url in enumerate(sorted_urls))
         )
@@ -872,8 +880,13 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        # Playlist-style containers (HLS, concat) can name other files
+        # and URLs; with only the pipe protocol allowed an uploaded
+        # "audio" file can't make ffmpeg read or fetch anything else.
+        "-protocol_whitelist",
+        "pipe",
         "-i",
-        "/dev/stdin",
+        "pipe:0",
         "-ar",
         "22050",
         "-ab",
@@ -911,8 +924,13 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        # Playlist-style containers (HLS, concat) can name other files
+        # and URLs; with only the pipe protocol allowed an uploaded
+        # "audio" file can't make ffmpeg read or fetch anything else.
+        "-protocol_whitelist",
+        "pipe",
         "-i",
-        "/dev/stdin",
+        "pipe:0",
         "-vn",
         "-map_metadata",
         "-1",

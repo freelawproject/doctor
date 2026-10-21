@@ -16,6 +16,7 @@ import pytesseract
 import requests
 from centralia import CourtNotReleased, UnknownCourt
 from centralia import read as centralia_read
+from django.conf import settings
 from django.core.exceptions import BadRequest
 from django.http import (
     FileResponse,
@@ -800,6 +801,18 @@ async def images_to_pdf(request) -> HttpResponse:
     if not form.is_valid():
         raise BadRequest("Invalid form")
     sorted_urls = form.cleaned_data["sorted_urls"]
+    try:
+        for url in sorted_urls:
+            validate_egress_url(url, settings.DOCTOR_IMAGE_ALLOWED_HOSTS)
+    except BitonalError as e:
+        return JsonResponse(
+            {
+                "success": False,
+                "error_code": e.error_code,
+                "msg": e.message,
+            },
+            status=e.status,
+        )
 
     if len(sorted_urls) > 1:
         with TemporaryDirectory() as image_dir:
@@ -809,7 +822,13 @@ async def images_to_pdf(request) -> HttpResponse:
                     img2pdf.convert(image_paths, outputstream=f)
                 cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
     else:
-        with requests.get(sorted_urls[0], stream=True, timeout=60 * 5) as r:
+        with requests.get(
+            sorted_urls[0],
+            stream=True,
+            timeout=60 * 5,
+            allow_redirects=False,
+        ) as r:
+            r.raise_for_status()
             tiff_image = Image.open(r.raw)
             # Force PIL to read all pixel data before the HTTP connection
             # closes. Without this, later crop() calls would try to pull

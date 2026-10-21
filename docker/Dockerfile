@@ -13,7 +13,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get install -y --no-install-recommends apt-utils && \
     apt-get install -y \
         build-essential \
-        curl \
         libjpeg-dev \
         libleptonica-dev \
         libtesseract-dev \
@@ -35,8 +34,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         `# Audio extraction/manipulation tools` \
         ffmpeg \
         libmagic1 \
-        `# Image & OCR tools` \
-        imagemagick \
         `# Other dependencies` \
         libffi-dev \
         libxml2-dev \
@@ -62,6 +59,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 
 COPY . .
+
+# Run unprivileged. Every temp file lives under /tmp, so the container
+# also works with a read-only root filesystem and a tmpfs on /tmp.
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin doctor
+ENV HOME=/tmp
+USER doctor
 
 EXPOSE 5050
 

@@ -31,6 +31,16 @@ If you are not using a system that supports horizontal scaling, you may wish to 
 
 If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving Doctor many workers becomes particularly important. If it does not have a worker available, your call to Doctor will probably time out.
 
+## Running Doctor on a shared network
+
+Doctor has no per-user state and is meant to be reachable by many applications, so lock down what it can reach and who can reach it:
+
+ - **Authentication.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets (one per calling app, so each can be rotated independently). Every endpoint except the heartbeat (`/`) then requires `Authorization: Bearer <token>` and returns `401` otherwise. Unset, authentication is off.
+ - **Request size.** Bodies over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) get `413` before they are read. Set it to your largest real upload.
+ - **Outbound requests.** Doctor fetches caller-supplied URLs in two places: the bitonal endpoint (`DOCTOR_EGRESS_ALLOWED_HOSTS`) and `/convert/images/pdf/` (`DOCTOR_IMAGE_ALLOWED_HOSTS`, falling back to the former). Both require https and an allowlisted host, never follow redirects, and `/convert/images/pdf/` accepts at most `DOCTOR_MAX_IMAGE_URLS` (default 500) URLs. Pin them to the exact hosts you use.
+ - **Container.** The image runs as an unprivileged user and only writes to `/tmp`. Run it with a read-only root filesystem, `/tmp` on a tmpfs, all capabilities dropped and `no-new-privileges` (see `compose.yaml`).
+ - **Network policy.** Do this in your orchestrator, since the application can't enforce it: allow ingress only from the applications that use Doctor, and allow egress only to your object storage (plus Sentry if `SENTRY_DSN` is set), and to `seals.free.law` if you use the audio endpoint. Block cloud metadata addresses (`169.254.169.254`) and cluster-internal ranges.
+
 After the image is running, you should be able to test that you have a working environment by running
 
     curl http://localhost:5050
