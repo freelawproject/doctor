@@ -2,6 +2,12 @@
 The following changes are not yet released, but are code complete:
 
 Security:
+ - **Breaking:** `/convert/audio/mp3/` no longer fetches the court seal from
+   seals.free.law. The caller sends it as an optional `seal` file (PNG or
+   JPEG, at most 2 MB); without one the Free Law Project logo is used.
+   Update callers first: an updated caller's extra `seal` field is ignored
+   by older doctor versions, which still fetch it themselves. The
+   `seal-rookery` dependency is gone.
  - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
    uploaded images as repeated `file` fields (at most
    `DOCTOR_MAX_IMAGE_FILES`, default 500) instead of a `sorted_urls` list,
@@ -11,9 +17,8 @@ Security:
    every endpoint but the heartbeat; unset keeps today's behavior.
  - Requests over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected
    before the body is read.
- - External tools run with a timeout and memory/CPU limits
-   (`DOCTOR_SUBPROCESS_TIMEOUT_SECONDS`, `DOCTOR_AUDIO_TIMEOUT_SECONDS`,
-   `DOCTOR_SUBPROCESS_MAX_MEMORY_MB`).
+ - External tools run with a wall-clock timeout
+   (`DOCTOR_SUBPROCESS_TIMEOUT_SECONDS`, `DOCTOR_AUDIO_TIMEOUT_SECONDS`).
  - ffmpeg is limited to the pipe protocol so an uploaded playlist file
    can't make it read local files or fetch URLs.
  - Sentry events no longer carry local variables or request bodies, and

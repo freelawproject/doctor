@@ -92,20 +92,16 @@ DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
     "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
 )
 
-# Limits on each external tool doctor runs (ghostscript, tesseract,
-# ffmpeg, ...), so one crafted file can't hang a worker or exhaust the
-# pod's memory. A tool over its timeout is killed and reported as failed.
-# 0 disables a limit. The memory limit is address space (RLIMIT_AS), which
-# runs above resident memory; tune both from your real workload.
+# Wall-clock limit on each external tool doctor runs (ghostscript,
+# tesseract, ffmpeg, ...), so one crafted file can't hang a worker. A tool
+# over its timeout is killed and reported as failed. 0 disables the limit.
+# Memory is bounded by the pod's own limit.
 DOCTOR_SUBPROCESS_TIMEOUT_SECONDS = env.int(
     "DOCTOR_SUBPROCESS_TIMEOUT_SECONDS", default=900
 )
 # Audio conversions legitimately run long (hours of recording).
 DOCTOR_AUDIO_TIMEOUT_SECONDS = env.int(
     "DOCTOR_AUDIO_TIMEOUT_SECONDS", default=3600
-)
-DOCTOR_SUBPROCESS_MAX_MEMORY_MB = env.int(
-    "DOCTOR_SUBPROCESS_MAX_MEMORY_MB", default=4096
 )
 
 # OCR runs ghostscript and tesseract over this many pages at a time, so a

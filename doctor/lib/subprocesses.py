@@ -1,11 +1,10 @@
-"""Run the external tools doctor shells out to under resource limits.
+"""Run the external tools doctor shells out to under a time limit.
 
 Every parser here (ghostscript, tesseract, ffmpeg, ...) is fed files
-from callers. A crafted file can hang one or ask it for far more memory
-than the pod has, and either takes down every request sharing the pod.
-Each call gets a wall-clock timeout, a CPU-seconds limit and an
-address-space limit, so a bad file kills its own child process and
-nothing else. Limits of 0 disable the matching check.
+from callers. A crafted file can hang one, and a hang holds the worker for
+gunicorn's 90 minutes. Each call gets a wall-clock timeout; a child that overruns it is killed,
+along with anything it spawned, and reported as failed. Memory is left to
+the pod's own limit. A timeout of 0 disables the check.
 """
 
 import asyncio
@@ -23,25 +22,6 @@ DEVNULL = asyncio.subprocess.DEVNULL
 
 # Returncode reported for a child killed for exceeding its timeout.
 TIMED_OUT = -signal.SIGKILL
-
-
-def limit_prefix(timeout: float | None = None) -> list[str]:
-    """The ``prlimit`` invocation that applies the CPU and memory limits.
-
-    Prepend it to a command. prlimit (util-linux) sets the limits and
-    execs the program, which avoids a ``preexec_fn`` in a process that
-    runs threads.
-
-    :param timeout: Wall-clock seconds the call is allowed; the CPU limit
-        sits a little above it, as a backstop if the timeout fails.
-    """
-    prefix = ["prlimit"]
-    max_memory = settings.DOCTOR_SUBPROCESS_MAX_MEMORY_MB * 1024 * 1024
-    if max_memory:
-        prefix.append(f"--as={max_memory}")
-    if timeout:
-        prefix.append(f"--cpu={int(timeout) + 5}")
-    return [*prefix, "--"] if len(prefix) > 1 else []
 
 
 async def run_limited(
@@ -69,7 +49,6 @@ async def run_limited(
     if timeout is None:
         timeout = settings.DOCTOR_SUBPROCESS_TIMEOUT_SECONDS
     process = await asyncio.create_subprocess_exec(
-        *limit_prefix(timeout),
         *command,
         stdin=PIPE if input is not None else DEVNULL,
         stdout=stdout,

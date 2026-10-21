@@ -29,8 +29,6 @@ from PIL import Image, TiffImagePlugin
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
-from doctor.lib.subprocesses import limit_prefix
-
 # TIFF tag ids (PIL.TiffTags exposes no named constants for these)
 TIFF_STRIP_OFFSETS = 273
 TIFF_STRIP_BYTE_COUNTS = 279
@@ -113,11 +111,7 @@ def rasterize_page_to_gray(
         input_path,
     ]
     try:
-        p = subprocess.run(
-            [*limit_prefix(timeout), *command],
-            capture_output=True,
-            timeout=timeout,
-        )
+        p = subprocess.run(command, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         # A timeout is not a verdict on the PDF: the same page can
         # convert on a node under less load, or with more time. Hence

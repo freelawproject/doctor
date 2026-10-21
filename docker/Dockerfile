@@ -62,9 +62,10 @@ COPY . .
 
 # Run unprivileged. Every temp file lives under /tmp, so the container
 # also works with a read-only root filesystem and a tmpfs on /tmp.
-RUN useradd --system --no-create-home --shell /usr/sbin/nologin doctor
+# The UID is numeric so Kubernetes' runAsNonRoot can verify it.
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin doctor
 ENV HOME=/tmp
-USER doctor
+USER 10001
 
 EXPOSE 5050
 

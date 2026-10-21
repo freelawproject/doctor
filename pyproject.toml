@@ -29,7 +29,6 @@ dependencies = [
   "pytesseract>=0.3.5",
   "python-magic",
   "reportlab",
-  "seal-rookery>=2.2.1",
   "sentry-sdk",
   "six>=1.15",
   "urllib3>=1.25.10",

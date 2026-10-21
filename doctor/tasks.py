@@ -15,15 +15,14 @@ import eyed3
 import httpx
 import magic
 import pdfplumber
-import requests
 import xray
 from django.conf import settings
 from eyed3 import id3
 from lxml.html.clean import Cleaner
+from PIL import Image as PILImage
 from PIL.Image import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from seal_rookery.search import ImageSizes, seal
 
 from doctor.lib.bitonal import BitonalError
 from doctor.lib.mojibake import fix_mojibake
@@ -864,13 +863,45 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     return output_path
 
 
+MAX_SEAL_BYTES = 2 * 1024 * 1024
+SEAL_FORMATS = {"PNG": "image/png", "JPEG": "image/jpeg"}
+
+
+def validate_seal_image(seal_image: bytes) -> str:
+    """Check a caller-supplied seal is a small PNG or JPEG.
+
+    The bytes go into an ID3 tag, so they must really be an image of a
+    sane size, not arbitrary data.
+
+    :param seal_image: The uploaded seal.
+    :return: Its MIME type.
+    :raises ValueError: If it is too large or not a PNG or JPEG.
+    """
+    if len(seal_image) > MAX_SEAL_BYTES:
+        raise ValueError(f"seal exceeds {MAX_SEAL_BYTES} bytes")
+    try:
+        with PILImage.open(io.BytesIO(seal_image)) as image:
+            image.verify()
+            image_format = image.format
+    except Exception as e:
+        raise ValueError("seal is not a readable image") from e
+    if image_format not in SEAL_FORMATS:
+        raise ValueError("seal must be a PNG or JPEG")
+    return SEAL_FORMATS[image_format]
+
+
 def set_mp3_meta_data[AnyStr: (bytes, str)](
-    audio_data: dict, mp3_path: AnyStr
+    audio_data: dict, mp3_path: AnyStr, seal_image: bytes | None = None
 ) -> eyed3.core.AudioFile:
     """Set the metadata in audio_data to an mp3 at path.
 
+    Doctor never fetches the seal itself: the calling application
+    supplies it, so this service needs no outbound access for audio.
+
     :param audio_data: The new metadata to embed in the mp3.
     :param mp3_path: The path to the mp3 to be converted.
+    :param seal_image: The court's seal as PNG or JPEG bytes, already
+        checked with validate_seal_image. None if the court has none.
     :return: Eyed3 audio file object
     """
 
@@ -909,19 +940,16 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
     # Add images to the mp3. If it has a seal, use that for the Front Cover
     # and use the FLP logo for the Publisher Logo. If it lacks a seal, use the
     # Publisher logo for both the front cover and the Publisher logo.
-    url = seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM)
-
     flp_image_frames = [
         3,  # "Front Cover". Complete list at eyed3/id3/frames.py
         14,  # "Publisher logo".
     ]
 
-    if url:
-        seal_content = requests.get(url, timeout=30).content
+    if seal_image:
         audio_file.tag.images.set(
             3,
-            seal_content,
-            "image/png",
+            seal_image,
+            validate_seal_image(seal_image),
             f"Seal for {audio_data['court_short_name']}",
         )
         flp_image_frames.remove(3)

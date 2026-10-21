@@ -10,9 +10,9 @@ import asyncio
 import io
 import os
 import shutil
-import sys
 import unittest
 from pathlib import Path
+from urllib.parse import urlencode
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "doctor.settings")
 
@@ -27,7 +27,12 @@ from PIL import Image  # noqa: E402
 from doctor.lib.sentry_scrub import scrub_breadcrumb, scrub_event  # noqa: E402
 from doctor.lib.subprocesses import TIMED_OUT, run_limited  # noqa: E402
 from doctor.middleware import GatekeeperMiddleware  # noqa: E402
-from doctor.tasks import convert_to_mp3  # noqa: E402
+from doctor.tasks import (  # noqa: E402
+    MAX_SEAL_BYTES,
+    convert_to_mp3,
+    set_mp3_meta_data,
+    validate_seal_image,
+)
 
 
 async def _inner(scope, receive, send):
@@ -132,20 +137,6 @@ class SubprocessLimitTest(unittest.TestCase):
         _, _, code = self.run_it("sleep", "30", timeout=1)
         self.assertEqual(code, TIMED_OUT)
 
-    @override_settings(DOCTOR_SUBPROCESS_MAX_MEMORY_MB=128)
-    def test_memory_hog_fails_alone(self):
-        _, _, code = self.run_it(
-            sys.executable, "-I", "-c", "x = bytearray(1024**3)"
-        )
-        self.assertNotEqual(code, 0)
-
-    @override_settings(DOCTOR_SUBPROCESS_MAX_MEMORY_MB=0)
-    def test_limits_can_be_disabled(self):
-        _, _, code = self.run_it(
-            sys.executable, "-I", "-c", "x = bytearray(1024**2)"
-        )
-        self.assertEqual(code, 0)
-
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not installed")
 class FfmpegProtocolTest(unittest.TestCase):
@@ -232,12 +223,114 @@ class ImagesToPdfTest(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
 
 
+def _image_bytes(image_format="PNG", size=(32, 32)):
+    buffer = io.BytesIO()
+    Image.new("RGB", size, "navy").save(buffer, image_format)
+    return buffer.getvalue()
+
+
+class SealTest(SimpleTestCase):
+    """The caller supplies the court seal; doctor never fetches it."""
+
+    AUDIO_DATA = {
+        "court_full_name": "Testing Supreme Court",
+        "court_short_name": "Testing",
+        "court_pk": "test",
+        "court_url": "http://www.example.com/",
+        "docket_number": "1",
+        "date_argued": "2020-01-01",
+        "date_argued_year": "2020",
+        "case_name": "A v. B",
+        "case_name_full": "A v. B",
+        "case_name_short": "A",
+        "download_url": "http://www.example.com/a.mp3",
+    }
+
+    def test_validate_accepts_png_and_jpeg(self):
+        self.assertEqual(validate_seal_image(_image_bytes("PNG")), "image/png")
+        self.assertEqual(
+            validate_seal_image(_image_bytes("JPEG")), "image/jpeg"
+        )
+
+    def test_validate_rejects_bad_seals(self):
+        for bad in (
+            b"not an image",
+            b"",
+            _image_bytes("GIF"),
+            b"\x89PNG\r\n\x1a\n" + b"\0" * 20,
+            b"\0" * (MAX_SEAL_BYTES + 1),
+        ):
+            with self.assertRaises(ValueError):
+                validate_seal_image(bad)
+
+    def mp3_with(self, tmp, seal_image):
+        import eyed3
+
+        path = os.path.join(tmp, "a.mp3")
+        shutil.copy("doctor/test_assets/1.mp3", path)
+        set_mp3_meta_data(dict(self.AUDIO_DATA), path, seal_image)
+        return {i.picture_type: i for i in eyed3.load(path).tag.images}
+
+    def test_seal_becomes_the_front_cover(self):
+        import tempfile
+
+        seal = _image_bytes("PNG", (48, 48))
+        with tempfile.TemporaryDirectory() as tmp:
+            images = self.mp3_with(tmp, seal)
+        self.assertEqual(images[3].image_data, seal)
+        self.assertEqual(images[3].description, "Seal for Testing")
+        self.assertIn(14, images)  # publisher logo stays the FLP one
+        self.assertNotEqual(images[14].image_data, seal)
+
+    def test_without_a_seal_only_the_flp_logo_is_used(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            images = self.mp3_with(tmp, None)
+        # Both fallback frames share a description, so eyed3 keeps one.
+        self.assertIn(14, images)
+        self.assertNotIn("Seal for", images[14].description)
+
+    def test_endpoint_rejects_an_invalid_seal(self):
+        with open("doctor/test_assets/1.wma", "rb") as audio:
+            response = Client().post(
+                "/convert/audio/mp3/?" + urlencode(self.AUDIO_DATA),
+                {
+                    "file": audio,
+                    "seal": SimpleUploadedFile("s.png", b"nope", "image/png"),
+                },
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_endpoint_accepts_a_seal(self):
+        import tempfile
+
+        import eyed3
+
+        seal = _image_bytes("PNG")
+        with open("doctor/test_assets/1.wma", "rb") as audio:
+            response = Client().post(
+                "/convert/audio/mp3/?" + urlencode(self.AUDIO_DATA),
+                {
+                    "file": audio,
+                    "seal": SimpleUploadedFile("s.png", seal, "image/png"),
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp:
+            tmp.write(b"".join(response.streaming_content))
+            tmp.flush()
+            images = {
+                i.picture_type: i for i in eyed3.load(tmp.name).tag.images
+            }
+        self.assertEqual(images[3].image_data, seal)
+
+
 class NetworkImportGuardTest(unittest.TestCase):
     """New outbound network code must be added on purpose.
 
     Doctor's only legitimate egress is the allowlisted bitonal S3
-    transfer and the audio seal fetch, both in doctor/tasks.py. An
-    import of a network library anywhere else is how an unreviewed SSRF
+    transfer, in doctor/tasks.py. An import of a network library anywhere else is how an unreviewed SSRF
     gets in: if you need one, review it and extend ALLOWED_FILES.
     """
 

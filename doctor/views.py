@@ -51,6 +51,7 @@ from doctor.lib.utils import (
     strip_metadata_with_exiftool,
 )
 from doctor.tasks import (
+    MAX_SEAL_BYTES,
     convert_tiff_to_pdf_bytes,
     convert_to_mp3,
     convert_to_ogg,
@@ -70,6 +71,7 @@ from doctor.tasks import (
     set_mp3_meta_data,
     stream_url_to_file,
     validate_egress_url,
+    validate_seal_image,
 )
 
 logger = logging.getLogger(__name__)
@@ -874,10 +876,17 @@ async def convert_audio(
         filepath = form.cleaned_data["fp"]
         media_file = form.cleaned_data["file"]
         audio_data = {k: v[0] for k, v in dict(request.GET).items()}
+        seal_image = None
+        if output_format == "mp3" and "seal" in request.FILES:
+            seal_image = request.FILES["seal"].read(MAX_SEAL_BYTES + 1)
+            try:
+                validate_seal_image(seal_image)
+            except ValueError as e:
+                return HttpResponse(str(e), status=HTTPStatus.BAD_REQUEST)
         match output_format:
             case "mp3":
                 await convert_to_mp3(filepath, media_file)
-                set_mp3_meta_data(audio_data, filepath)
+                set_mp3_meta_data(audio_data, filepath, seal_image)
             case "ogg":
                 await convert_to_ogg(filepath, media_file)
             case _:
