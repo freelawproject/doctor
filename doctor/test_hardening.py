@@ -287,12 +287,8 @@ class SealFetchTest(SimpleTestCase):
 
     def fetch(self, handler, url=SEAL_URL):
         patched, built = self.client_returning(handler)
-        with patch("doctor.tasks.seal", return_value=url), patched:
-            return fetch_seal("mad"), built
-
-    def test_court_without_a_seal(self):
-        with patch("doctor.tasks.seal", return_value=None):
-            self.assertIsNone(fetch_seal("nonexistent"))
+        with patched:
+            return fetch_seal(url), built
 
     def test_fetches_the_seal(self):
         png = _image_bytes("PNG")
@@ -336,36 +332,45 @@ class SealFetchTest(SimpleTestCase):
                 result, _ = self.fetch(lambda request, r=response: r)
             self.assertIsNone(result)
 
-    def test_seal_becomes_the_front_cover(self):
+    AUDIO_DATA = {
+        "court_full_name": "Testing Supreme Court",
+        "court_short_name": "Testing",
+        "court_pk": "mad",
+        "court_url": "http://www.example.com/",
+        "docket_number": "1",
+        "date_argued": "2020-01-01",
+        "date_argued_year": "2020",
+        "case_name": "A v. B",
+        "case_name_full": "A v. B",
+        "case_name_short": "A",
+        "download_url": "http://www.example.com/a.mp3",
+    }
+
+    def tag_images(self, fetched):
+        """Tag a copy of the test mp3 with fetch_seal patched to return
+        `fetched`, and return its images by picture type."""
         import tempfile
 
         import eyed3
 
-        seal_png = _image_bytes("PNG", (48, 48))
-        audio_data = {
-            "court_full_name": "Testing Supreme Court",
-            "court_short_name": "Testing",
-            "court_pk": "mad",
-            "court_url": "http://www.example.com/",
-            "docket_number": "1",
-            "date_argued": "2020-01-01",
-            "date_argued_year": "2020",
-            "case_name": "A v. B",
-            "case_name_full": "A v. B",
-            "case_name_short": "A",
-            "download_url": "http://www.example.com/a.mp3",
-        }
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "a.mp3")
             shutil.copy("doctor/test_assets/1.mp3", path)
-            with patch(
-                "doctor.tasks.fetch_seal", return_value=(seal_png, "image/png")
-            ):
-                set_mp3_meta_data(audio_data, path)
-            images = {i.picture_type: i for i in eyed3.load(path).tag.images}
+            with patch("doctor.tasks.fetch_seal", return_value=fetched):
+                set_mp3_meta_data(dict(self.AUDIO_DATA), path)
+            return {i.picture_type: i for i in eyed3.load(path).tag.images}
+
+    def test_seal_becomes_the_front_cover(self):
+        seal_png = _image_bytes("PNG", (48, 48))
+        images = self.tag_images((seal_png, "image/png"))
         self.assertEqual(images[3].image_data, seal_png)
         self.assertEqual(images[3].description, "Seal for Testing")
         self.assertIn(14, images)  # the publisher logo is still FLP's
+
+    def test_failed_fetch_means_no_cover_art(self):
+        images = self.tag_images(None)
+        self.assertNotIn(3, images)
+        self.assertIn(14, images)
 
 
 class NetworkImportGuardTest(unittest.TestCase):

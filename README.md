@@ -35,7 +35,7 @@ If you are doing OCR or audio conversion, scaling through a system like Kubernet
 
 Doctor parses untrusted files with a long list of third-party tools and is reachable by several applications, so treat a compromise of it as likely and make it worth little. Everything below that the application can't enforce itself belongs in the pod spec and a `NetworkPolicy`.
 
-**Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone (`DOCTOR_AUTH_TOKENS_FILE` reads it from a mounted Secret). Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict ingress in the `NetworkPolicy` to the pods that use doctor.
+**Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone. Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict ingress in the `NetworkPolicy` to the pods that use doctor.
 
 **What a caller can make it do.**
 

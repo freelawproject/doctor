@@ -888,24 +888,21 @@ SEAL_FORMATS = {"PNG": "image/png", "JPEG": "image/jpeg"}
 SEAL_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def fetch_seal(court_pk: str) -> tuple[bytes, str] | None:
-    """Fetch a court's seal, only ever from the pinned seal host.
+def fetch_seal(url: str) -> tuple[bytes, str] | None:
+    """Fetch a court seal, only ever from the pinned seal host.
 
     This is doctor's one outbound request that isn't a caller-supplied
     presigned URL. The pin lives here because a Kubernetes NetworkPolicy
     can't allow egress by hostname: https on DOCTOR_SEAL_ALLOWED_HOSTS
     only, no redirects, a size cap, and the body must be a PNG or JPEG
-    before it goes into an ID3 tag. The seal is cosmetic, so a failed
-    fetch is logged and the conversion goes on without it.
+    before it goes into an ID3 tag.
 
-    :param court_pk: The CourtListener court id.
-    :return: (image bytes, MIME type), or None if there is no usable seal.
+    :param url: The seal URL from seal_rookery.
+    :return: (image bytes, MIME type), or None if the fetch failed, which
+        is logged; the seal is cosmetic.
     :raises BitonalError: EGRESS_BLOCKED if the URL is off the allowlist,
-        which is a deployment error worth failing loudly on.
+        a deployment error worth failing loudly on.
     """
-    url = seal(court=court_pk, size=ImageSizes.MEDIUM)
-    if not url:
-        return None
     validate_egress_url(url, settings.DOCTOR_SEAL_ALLOWED_HOSTS)
     try:
         content = bytearray()
@@ -926,7 +923,7 @@ def fetch_seal(court_pk: str) -> tuple[bytes, str] | None:
         if image_format not in SEAL_FORMATS:
             raise ValueError(f"seal is {image_format}, not PNG or JPEG")
     except (httpx.HTTPError, ValueError, OSError) as e:
-        logger.warning("No seal for %s: %s", court_pk, e)
+        logger.warning("Seal fetch failed for %s: %s", url, e)
         return None
     return bytes(content), SEAL_FORMATS[image_format]
 
@@ -973,24 +970,26 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
     audio_file.tag.publisher_url = "https://free.law"
     audio_file.tag.recording_date = date_argued
 
-    # Add images to the mp3. If it has a seal, use that for the Front Cover
-    # and use the FLP logo for the Publisher Logo. If it lacks a seal, use the
-    # Publisher logo for both the front cover and the Publisher logo.
+    # Add images to the mp3. A court with a seal gets it as the Front
+    # Cover and the FLP logo as the Publisher Logo; one without gets the
+    # FLP logo for both. If the seal exists but can't be fetched, the
+    # Front Cover is left empty rather than mislabeled.
     flp_image_frames = [
         3,  # "Front Cover". Complete list at eyed3/id3/frames.py
         14,  # "Publisher logo".
     ]
-
-    seal_image = fetch_seal(audio_data["court_pk"])
-    if seal_image:
-        seal_content, seal_mime = seal_image
-        audio_file.tag.images.set(
-            3,
-            seal_content,
-            seal_mime,
-            f"Seal for {audio_data['court_short_name']}",
-        )
+    url = seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM)
+    if url:
         flp_image_frames.remove(3)
+        seal_image = fetch_seal(url)
+        if seal_image:
+            seal_content, seal_mime = seal_image
+            audio_file.tag.images.set(
+                3,
+                seal_content,
+                seal_mime,
+                f"Seal for {audio_data['court_short_name']}",
+            )
 
     for frame in flp_image_frames:
         cover_art_fp = os.path.join(assets_dir, "producer-300x300.png")

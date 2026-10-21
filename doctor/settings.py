@@ -32,7 +32,6 @@ ASGI_APPLICATION = "doctor.asgi.application"
 # Comma-separated bearer tokens. When any are set, every endpoint except
 # the heartbeat requires "Authorization: Bearer <token>". One token per
 # calling app lets each be rotated alone. Empty disables authentication.
-# FileAwareEnv also reads DOCTOR_AUTH_TOKENS_FILE, for a mounted Secret.
 DOCTOR_AUTH_TOKENS = [
     token.strip()
     for token in env("DOCTOR_AUTH_TOKENS", default="").split(",")

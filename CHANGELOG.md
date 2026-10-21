@@ -5,8 +5,7 @@ Security:
  - `/convert/audio/mp3/` fetches the court seal only from `seals.free.law`
    (`DOCTOR_SEAL_ALLOWED_HOSTS`): https, no redirects, 2 MB cap, and the
    body must be a PNG or JPEG. A failed fetch is logged and the MP3 gets
-   the Free Law Project logo instead; before, a 404 page was embedded as
-   the "image".
+   no cover art; before, a 404 page was embedded as the "image".
  - `DOCTOR_EGRESS_ALLOWED_HOSTS` now defaults to S3 hostname shapes rather
    than `*.amazonaws.com`, so the bitonal endpoint can't be pointed at
    other AWS endpoints (API Gateway, RDS, ...). **Deployments whose
