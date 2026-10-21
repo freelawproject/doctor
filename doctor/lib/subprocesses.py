@@ -1,10 +1,10 @@
 """Run the external tools doctor shells out to under a time limit.
 
-Every parser here (ghostscript, tesseract, ffmpeg, ...) is fed files
-from callers. A crafted file can hang one, and a hang holds the worker for
-gunicorn's 90 minutes. Each call gets a wall-clock timeout; a child that overruns it is killed,
+Every parser here (ghostscript, tesseract, ffmpeg, ...) is fed files from
+callers. A crafted file can hang one, and a hang holds the single worker
+for gunicorn's 90 minutes. A child that overruns its timeout is killed,
 along with anything it spawned, and reported as failed. Memory is left to
-the pod's own limit. A timeout of 0 disables the check.
+the pod's own limit.
 """
 
 import asyncio
@@ -32,7 +32,7 @@ async def run_limited(
     timeout: float | None = None,
     **kwargs: Any,
 ) -> tuple[Any, Any, int]:
-    """Run a command and wait for it, within the configured limits.
+    """Run a command and wait for it, within the time limit.
 
     :param command: The program and its arguments; never a shell string.
     :param input: Bytes to send on stdin, if any.
@@ -41,10 +41,8 @@ async def run_limited(
     :param timeout: Wall-clock seconds; defaults to
         DOCTOR_SUBPROCESS_TIMEOUT_SECONDS.
     :return: (stdout, stderr, returncode); each output is bytes if piped
-        and None if not (hence Any, not bytes | None, which would make
-        every caller of a piped stream narrow it). A
-        child killed for running too long reports TIMED_OUT, so callers
-        handle it like any other failure.
+        and None if not. A child killed for running too long reports
+        TIMED_OUT, so callers handle it like any other failure.
     """
     if timeout is None:
         timeout = settings.DOCTOR_SUBPROCESS_TIMEOUT_SECONDS

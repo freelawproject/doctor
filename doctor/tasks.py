@@ -785,6 +785,10 @@ root = os.path.dirname(os.path.realpath(__file__))
 assets_dir = os.path.join(root, "assets")
 
 
+def _tail(stderr: bytes | None, limit: int = 500) -> str:
+    return (stderr or b"").decode(errors="replace").strip()[-limit:]
+
+
 async def convert_to_mp3[AnyStr: (bytes, str)](
     output_path: AnyStr, media: Any
 ) -> AnyStr:
@@ -796,6 +800,9 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
         # Playlist-style containers (HLS, concat) can name other files
         # and URLs; with only the pipe protocol allowed an uploaded
         # "audio" file can't make ffmpeg read or fetch anything else.
@@ -812,11 +819,13 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
         output_path,
     ]
 
-    await run_limited(
+    _, err, returncode = await run_limited(
         *av_command,
         input=media.read(),
         timeout=settings.DOCTOR_AUDIO_TIMEOUT_SECONDS,
     )
+    if returncode != 0:
+        raise RuntimeError(f"ffmpeg exited {returncode}: {_tail(err)}")
     return output_path
 
 
@@ -838,6 +847,9 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
         # Playlist-style containers (HLS, concat) can name other files
         # and URLs; with only the pipe protocol allowed an uploaded
         # "audio" file can't make ffmpeg read or fetch anything else.
@@ -861,11 +873,13 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
         output_path,
     ]
 
-    await run_limited(
+    _, err, returncode = await run_limited(
         *av_command,
         input=media.read(),
         timeout=settings.DOCTOR_AUDIO_TIMEOUT_SECONDS,
     )
+    if returncode != 0:
+        raise RuntimeError(f"ffmpeg exited {returncode}: {_tail(err)}")
     return output_path
 
 
@@ -878,39 +892,42 @@ def fetch_seal(court_pk: str) -> tuple[bytes, str] | None:
     """Fetch a court's seal, only ever from the pinned seal host.
 
     This is doctor's one outbound request that isn't a caller-supplied
-    presigned URL, so the pin lives here, in the application: a
-    Kubernetes NetworkPolicy can't allow egress by hostname. The URL
-    must be https on DOCTOR_SEAL_ALLOWED_HOSTS, redirects are not
-    followed, and the body is capped and checked to be a PNG or JPEG
-    before it goes into an ID3 tag.
+    presigned URL. The pin lives here because a Kubernetes NetworkPolicy
+    can't allow egress by hostname: https on DOCTOR_SEAL_ALLOWED_HOSTS
+    only, no redirects, a size cap, and the body must be a PNG or JPEG
+    before it goes into an ID3 tag. The seal is cosmetic, so a failed
+    fetch is logged and the conversion goes on without it.
 
     :param court_pk: The CourtListener court id.
-    :return: (image bytes, MIME type), or None if the court has no seal.
-    :raises BitonalError: EGRESS_BLOCKED if the URL is off the allowlist.
-    :raises ValueError: If the response is oversized or not an image.
+    :return: (image bytes, MIME type), or None if there is no usable seal.
+    :raises BitonalError: EGRESS_BLOCKED if the URL is off the allowlist,
+        which is a deployment error worth failing loudly on.
     """
     url = seal(court=court_pk, size=ImageSizes.MEDIUM)
     if not url:
         return None
     validate_egress_url(url, settings.DOCTOR_SEAL_ALLOWED_HOSTS)
-    content = bytearray()
-    with (
-        httpx.Client(follow_redirects=False, timeout=SEAL_TIMEOUT) as client,
-        client.stream("GET", url) as response,
-    ):
-        response.raise_for_status()
-        for chunk in response.iter_bytes():
-            content += chunk
-            if len(content) > MAX_SEAL_BYTES:
-                raise ValueError(f"seal exceeds {MAX_SEAL_BYTES} bytes")
     try:
+        content = bytearray()
+        with (
+            httpx.Client(
+                follow_redirects=False, timeout=SEAL_TIMEOUT
+            ) as client,
+            client.stream("GET", url) as response,
+        ):
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                content += chunk
+                if len(content) > MAX_SEAL_BYTES:
+                    raise ValueError(f"seal exceeds {MAX_SEAL_BYTES} bytes")
         with PILImage.open(io.BytesIO(content)) as image:
             image.verify()
             image_format = image.format
-    except Exception as e:
-        raise ValueError("seal is not a readable image") from e
-    if image_format not in SEAL_FORMATS:
-        raise ValueError("seal must be a PNG or JPEG")
+        if image_format not in SEAL_FORMATS:
+            raise ValueError(f"seal is {image_format}, not PNG or JPEG")
+    except (httpx.HTTPError, ValueError, OSError) as e:
+        logger.warning("No seal for %s: %s", court_pk, e)
+        return None
     return bytes(content), SEAL_FORMATS[image_format]
 
 

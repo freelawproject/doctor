@@ -34,6 +34,7 @@ from doctor.tasks import (  # noqa: E402
     convert_to_mp3,
     fetch_seal,
     set_mp3_meta_data,
+    validate_egress_url,
 )
 
 
@@ -110,11 +111,11 @@ class SizeLimitTest(unittest.TestCase):
         self.assertEqual((status, ran), (413, False))
 
     @override_settings(DOCTOR_AUTH_TOKENS=[], DOCTOR_MAX_REQUEST_BYTES=10)
-    def test_undeclared_stream_cut_off(self):
-        # The app sees a disconnect rather than the full body.
+    def test_undeclared_stream_gets_413(self):
+        # No Content-Length (chunked): the cap trips mid-stream and the
+        # client still gets a proper 413, not a dropped connection.
         status, ran = _request(body_chunks=[b"x" * 6, b"x" * 6])
-        self.assertEqual(status, 200)  # app ended on disconnect
-        self.assertTrue(ran)
+        self.assertEqual((status, ran), (413, True))
 
     @override_settings(DOCTOR_AUTH_TOKENS=[], DOCTOR_MAX_REQUEST_BYTES=10)
     def test_within_limit(self):
@@ -144,11 +145,6 @@ class SubprocessLimitTest(unittest.TestCase):
 class FfmpegProtocolTest(unittest.TestCase):
     """An uploaded playlist must not make ffmpeg read other files."""
 
-    def convert(self, tmp, data: bytes) -> int:
-        out = os.path.join(tmp, "out.mp3")
-        asyncio.run(convert_to_mp3(out, io.BytesIO(data)))
-        return os.path.getsize(out) if os.path.exists(out) else 0
-
     def test_playlist_cannot_read_local_files(self):
         import tempfile
 
@@ -159,7 +155,21 @@ class FfmpegProtocolTest(unittest.TestCase):
             f"file://{secret}\n#EXT-X-ENDLIST\n"
         ).encode()
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(self.convert(tmp, playlist), 0)
+            out = os.path.join(tmp, "out.mp3")
+            with self.assertRaises(RuntimeError):
+                asyncio.run(convert_to_mp3(out, io.BytesIO(playlist)))
+            self.assertFalse(os.path.exists(out))
+
+    def test_real_audio_converts(self):
+        import tempfile
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            open("doctor/test_assets/1.wma", "rb") as audio,
+        ):
+            out = os.path.join(tmp, "out.mp3")
+            asyncio.run(convert_to_mp3(out, audio))
+            self.assertGreater(os.path.getsize(out), 0)
 
 
 class SentryScrubTest(unittest.TestCase):
@@ -231,6 +241,33 @@ def _image_bytes(image_format="PNG", size=(32, 32)):
     return buffer.getvalue()
 
 
+class EgressDefaultTest(SimpleTestCase):
+    """The shipped allowlist admits S3 hostnames and nothing else on AWS."""
+
+    def test_s3_shapes_allowed(self):
+        for host in (
+            "bucket.s3.amazonaws.com",
+            "bucket.s3.us-west-2.amazonaws.com",
+            "com-courtlistener-storage.s3-us-west-2.amazonaws.com",
+            "bucket.s3.dualstack.us-west-2.amazonaws.com",
+            "name-123.s3-accesspoint.us-west-2.amazonaws.com",
+            "s3.us-west-2.amazonaws.com",
+            "s3.amazonaws.com",
+        ):
+            validate_egress_url(f"https://{host}/key?X-Amz-Signature=x")
+
+    def test_other_aws_hosts_blocked(self):
+        for host in (
+            "abc123.execute-api.us-west-2.amazonaws.com",
+            "sts.amazonaws.com",
+            "my-db.cluster-x.us-west-2.rds.amazonaws.com",
+            "s3.amazonaws.com.evil.example",
+            "169.254.169.254",
+        ):
+            with self.assertRaises(BitonalError, msg=host):
+                validate_egress_url(f"https://{host}/")
+
+
 class SealFetchTest(SimpleTestCase):
     """Audio conversion may fetch a seal, but only from the pinned host."""
 
@@ -285,27 +322,19 @@ class SealFetchTest(SimpleTestCase):
             with self.assertRaises(BitonalError, msg=url):
                 self.fetch(handler, url=url)
 
-    def test_redirects_are_not_followed(self):
-        def handler(request):
-            if request.url.host == "seals.free.law":
-                return httpx.Response(
-                    302, headers={"Location": "http://169.254.169.254/"}
-                )
-            raise AssertionError(f"followed a redirect to {request.url}")
-
-        with self.assertRaises(httpx.HTTPStatusError):
-            self.fetch(handler)
-
-    def test_bad_responses_are_rejected(self):
-        for body in (
-            b"not an image",
-            _image_bytes("GIF"),
-            b"\0" * (MAX_SEAL_BYTES + 1),
-        ):
-            with self.assertRaises(ValueError):
-                self.fetch(
-                    lambda request, b=body: httpx.Response(200, content=b)
-                )
+    def test_bad_responses_mean_no_seal(self):
+        # The seal is cosmetic: a bad response is logged, not fatal.
+        responses = [
+            httpx.Response(200, content=b"not an image"),
+            httpx.Response(200, content=_image_bytes("GIF")),
+            httpx.Response(200, content=b"\0" * (MAX_SEAL_BYTES + 1)),
+            httpx.Response(404),
+            httpx.Response(302, headers={"Location": "http://10.0.0.1/"}),
+        ]
+        for response in responses:
+            with self.assertLogs("doctor.tasks", level="WARNING"):
+                result, _ = self.fetch(lambda request, r=response: r)
+            self.assertIsNone(result)
 
     def test_seal_becomes_the_front_cover(self):
         import tempfile

@@ -33,15 +33,19 @@ If you are doing OCR or audio conversion, scaling through a system like Kubernet
 
 ## Running Doctor on a shared network
 
-Doctor has no per-user state and is meant to be reachable by many applications, so limit who can call it and what it can do:
+Doctor parses untrusted files with a long list of third-party tools and is reachable by several applications, so treat a compromise of it as likely and make it worth little. Everything below that the application can't enforce itself belongs in the pod spec and a `NetworkPolicy`.
 
- - **Authentication.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked on its own. Every endpoint except the heartbeat (`/`) then requires `Authorization: Bearer <token>` and returns `401` otherwise. Unset, authentication is off. This keeps out anything that can reach doctor but isn't one of your apps; it does not protect against a compromised caller, which holds a token.
- - **Request size.** Bodies over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected with `413` before they are read or written to disk. Set it to your largest real upload.
- - **Time limits.** Each external tool doctor runs (ghostscript, tesseract, ffmpeg, ...) has a wall-clock timeout: `DOCTOR_SUBPROCESS_TIMEOUT_SECONDS` (default 900) and `DOCTOR_AUDIO_TIMEOUT_SECONDS` (default 3600) for audio. A crafted file that hangs a tool has it killed and reported as a failure instead of holding the worker for gunicorn's 90 minutes. A limit of 0 disables it. Memory is left to the pod's own limit. The defaults are conservative guesses; tune them from your real workload.
- - **Outbound requests.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`, and checks each in the application because a Kubernetes `NetworkPolicy` can't filter egress by hostname. Bitonal transfers go to presigned S3 URLs (https and `DOCTOR_EGRESS_ALLOWED_HOSTS` only, no redirects). Audio conversion fetches the court seal, only from `seals.free.law` (`DOCTOR_SEAL_ALLOWED_HOSTS`, https, no redirects, 2 MB cap, must be a PNG or JPEG). A test fails if a network library is imported anywhere else.
- - **Container.** The image runs as an unprivileged user and only writes to `/tmp`. Run it with a read-only root filesystem, `/tmp` on a tmpfs, all capabilities dropped, `no-new-privileges` and a process limit (see `compose.yaml`; mirror it in your pod spec).
- - **Sentry.** With `SENTRY_DSN` set, local variables and request bodies are not sent, and URL query strings (presigned signatures) and `Authorization` headers are scrubbed from events and breadcrumbs.
- - **Network policy.** Do this in your orchestrator, since the application can't enforce it. Allow ingress only from the applications that use Doctor, and egress only to S3, `seals.free.law` if you use the audio endpoint, and Sentry if `SENTRY_DSN` is set. Block cloud metadata addresses (`169.254.169.254`) and cluster-internal ranges. Because the allowlist can only check that a presigned URL points at `*.amazonaws.com`, route S3 traffic through a VPC endpoint whose policy allows only your own account's buckets, so a caller can't send results to an attacker's bucket.
+**Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone (`DOCTOR_AUTH_TOKENS_FILE` reads it from a mounted Secret). Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict ingress in the `NetworkPolicy` to the pods that use doctor.
+
+**What a caller can make it do.**
+
+ - Bodies over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) get a `413` before being read. Uploads spool to `/tmp`, so give `/tmp` a disk-backed `emptyDir` with a `sizeLimit` above this, not a memory-backed one, or a large upload counts against the pod's memory.
+ - Each external tool (ghostscript, tesseract, ffmpeg, ...) has a wall-clock timeout, `DOCTOR_SUBPROCESS_TIMEOUT_SECONDS` (default 900) and `DOCTOR_AUDIO_TIMEOUT_SECONDS` (default 3600) for audio; a hung tool is killed and reported as a failure instead of holding the single worker for gunicorn's 90 minutes. The defaults are guesses; tune them from real workloads. Parsers that run in-process (pypdf, pikepdf, pdfplumber, Pillow, centralia) have no such limit: gunicorn's `--timeout` and the pod's memory limit are the only backstop, so keep both set.
+ - Doctor makes outbound requests in two places, both in `doctor/tasks.py`, and pins each in code because a `NetworkPolicy` can't filter egress by hostname: bitonal transfers to presigned S3 URLs (https, hosts matching `DOCTOR_EGRESS_ALLOWED_HOSTS`, no redirects) and the court seal for audio conversion (https, `DOCTOR_SEAL_ALLOWED_HOSTS`, default `seals.free.law`, 2 MB cap, must be a PNG or JPEG). A test fails if a network library is imported anywhere else. The S3 allowlist can only check that a URL points at S3, not at *your* buckets, so route S3 through a VPC endpoint whose policy allows only your account's buckets; otherwise a compromised caller can have doctor upload results to a bucket of its choosing.
+
+**What a compromise gets.** The image runs as UID 10001 and writes only under `/tmp`. In the pod spec set `runAsNonRoot: true`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false` and `capabilities: {drop: [ALL]}`, mount the `emptyDir` at `/tmp`, and allow egress only to S3, `seals.free.law` and Sentry. `compose.yaml` applies the same for local runs. Probes must be `httpGet` on `/`: the image no longer has `curl`.
+
+**What leaks.** With `SENTRY_DSN` set, events carry no local variables or request bodies, and URL query strings (presigned signatures) and `Authorization` headers are scrubbed.
 
 After the image is running, you should be able to test that you have a working environment by running
 
@@ -421,12 +425,12 @@ open; the HTTP response is the status channel.
 
 The `DOCTOR_EGRESS_ALLOWED_HOSTS` environment variable (comma-separated
 fnmatch patterns) restricts which hosts `input_url` and `output_url` may
-point to; allowed URLs must also be https. It defaults to
-`*.amazonaws.com`, which accepts presigned S3 URLs while blocking
-cluster-internal targets. Deployments can tighten it to exact bucket
-hostnames (a pattern without wildcards is an exact match), and setting it
-empty disables the check entirely, which local development and the test
-suite rely on (see `.env.example`).
+point to; allowed URLs must also be https. The default admits every
+hostname shape a presigned S3 URL can take and nothing else on AWS.
+Deployments can tighten it to exact bucket hostnames (a pattern without
+wildcards is an exact match), and setting it empty disables the check
+entirely, which local development and the test suite rely on (see
+`.env.example`).
 
 Four more environment variables bound the resources one request can
 consume. `DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS` (default 120) limits a

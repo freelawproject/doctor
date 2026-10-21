@@ -4,7 +4,15 @@ The following changes are not yet released, but are code complete:
 Security:
  - `/convert/audio/mp3/` fetches the court seal only from `seals.free.law`
    (`DOCTOR_SEAL_ALLOWED_HOSTS`): https, no redirects, 2 MB cap, and the
-   body must be a PNG or JPEG.
+   body must be a PNG or JPEG. A failed fetch is logged and the MP3 gets
+   the Free Law Project logo instead; before, a 404 page was embedded as
+   the "image".
+ - `DOCTOR_EGRESS_ALLOWED_HOSTS` now defaults to S3 hostname shapes rather
+   than `*.amazonaws.com`, so the bitonal endpoint can't be pointed at
+   other AWS endpoints (API Gateway, RDS, ...). **Deployments whose
+   presigned URLs are not on S3 must set it explicitly.**
+ - The audio endpoints fail with a logged ffmpeg error instead of a
+   missing-file 500 when ffmpeg exits non-zero.
  - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
    uploaded images as repeated `file` fields (at most
    `DOCTOR_MAX_IMAGE_FILES`, default 500) instead of a `sorted_urls` list,

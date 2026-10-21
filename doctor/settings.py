@@ -29,21 +29,18 @@ ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
 
-# Service-to-service authentication. Comma-separated bearer tokens; when
-# any are set, every endpoint except the heartbeat requires
-# "Authorization: Bearer <token>". Several tokens may be live at once so
-# each calling application gets its own and tokens can be rotated without
-# downtime. Empty disables authentication, which is only appropriate
-# when a network policy already restricts who can reach the service.
+# Comma-separated bearer tokens. When any are set, every endpoint except
+# the heartbeat requires "Authorization: Bearer <token>". One token per
+# calling app lets each be rotated alone. Empty disables authentication.
+# FileAwareEnv also reads DOCTOR_AUTH_TOKENS_FILE, for a mounted Secret.
 DOCTOR_AUTH_TOKENS = [
     token.strip()
     for token in env("DOCTOR_AUTH_TOKENS", default="").split(",")
     if token.strip()
 ]
 
-# Requests larger than this are refused with 413 before the body is read
-# or spooled to disk. The default matches the largest input the bitonal
-# endpoint downloads; lower it to your largest real upload.
+# Requests larger than this get a 413 before the body is read. Keep it
+# below the space available on /tmp, where uploads are spooled.
 DOCTOR_MAX_REQUEST_BYTES = env.int("DOCTOR_MAX_REQUEST_BYTES", default=1024**3)
 # Images accepted by one images-to-pdf request.
 DOCTOR_MAX_IMAGE_FILES = env.int("DOCTOR_MAX_IMAGE_FILES", default=500)
@@ -53,25 +50,26 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 1024**2
 DATA_UPLOAD_MAX_NUMBER_FILES = DOCTOR_MAX_IMAGE_FILES
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 50
 
-# Host allowlist for endpoints that fetch or upload caller-supplied
-# URLs (currently the bitonal endpoint). Comma-separated fnmatch
-# patterns; when set, URLs must be https and match one of them. The
-# default admits any AWS host (presigned S3 URLs) while blocking
-# SSRF at cluster-internal services; deployments can pin it down to
-# exact bucket hostnames. Set it empty to disable the check, which
-# is what local dev and the test suite need (see .env.example).
+# Hosts the bitonal endpoint may fetch input_url from and upload
+# output_url to. Comma-separated fnmatch patterns; URLs must be https and
+# match one. The default is every hostname shape a presigned S3 URL can
+# take (virtual-hosted, path-style, legacy region-dashed, dualstack and
+# access points) and nothing else on AWS. Pin it to exact bucket hosts
+# where you can. Empty disables the check, which local dev and the test
+# suite need (see .env.example).
 DOCTOR_EGRESS_ALLOWED_HOSTS = [
     host.strip()
     for host in env(
-        "DOCTOR_EGRESS_ALLOWED_HOSTS", default="*.amazonaws.com"
+        "DOCTOR_EGRESS_ALLOWED_HOSTS",
+        default=(
+            "*.s3.amazonaws.com,*.s3.*.amazonaws.com,*.s3-*.amazonaws.com,"
+            "s3.amazonaws.com,s3.*.amazonaws.com,s3-*.amazonaws.com"
+        ),
     ).split(",")
     if host.strip()
 ]
 
-# Host allowlist for the court seal that audio conversion embeds in an
-# MP3. Same syntax as above and always https. The seal URL is built from
-# a court id, not from caller input, but the check keeps doctor from ever
-# fetching from anywhere else. Empty disables it.
+# Where audio conversion may fetch court seals from. Same syntax as above.
 DOCTOR_SEAL_ALLOWED_HOSTS = [
     host.strip()
     for host in env(
@@ -105,9 +103,8 @@ DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
 )
 
 # Wall-clock limit on each external tool doctor runs (ghostscript,
-# tesseract, ffmpeg, ...), so one crafted file can't hang a worker. A tool
-# over its timeout is killed and reported as failed. 0 disables the limit.
-# Memory is bounded by the pod's own limit.
+# tesseract, ffmpeg, ...). A tool over it is killed and reported as
+# failed. 0 disables the limit.
 DOCTOR_SUBPROCESS_TIMEOUT_SECONDS = env.int(
     "DOCTOR_SUBPROCESS_TIMEOUT_SECONDS", default=900
 )

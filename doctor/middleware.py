@@ -15,12 +15,16 @@ from django.conf import settings
 UNAUTHENTICATED_PATHS = frozenset({"/"})
 
 
+class _BodyTooLarge(Exception):
+    """Raised from receive() once a streamed body passes the cap."""
+
+
 def _token_is_valid(authorization: str) -> bool:
     scheme, _, presented = authorization.partition(" ")
     if scheme.lower() != "bearer" or not presented:
         return False
-    # Compare against every token, without short-circuiting, so timing
-    # reveals neither which token matched nor how much of one was right.
+    # Check every token so timing reveals neither which one matched nor
+    # how much of it was right.
     matched = False
     for token in settings.DOCTOR_AUTH_TOKENS:
         if hmac.compare_digest(presented.encode(), token.encode()):
@@ -57,10 +61,6 @@ class GatekeeperMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
-            # lifespan passes through; doctor serves no websockets.
-            if scope["type"] == "websocket":
-                await send({"type": "websocket.close", "code": 1008})
-                return
             await self.app(scope, receive, send)
             return
 
@@ -84,17 +84,28 @@ class GatekeeperMiddleware:
             await _reject(send, 413, "REQUEST_TOO_LARGE")
             return
 
+        # A chunked upload declares no length, so count what arrives.
         received = 0
+        response_started = False
 
         async def limited_receive():
-            # Chunked uploads declare no length, so count what arrives
-            # and cut the connection once it passes the cap.
             nonlocal received
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
                 if received > limit:
-                    return {"type": "http.disconnect"}
+                    raise _BodyTooLarge
             return message
 
-        await self.app(scope, limited_receive, send)
+        async def tracking_send(message):
+            nonlocal response_started
+            response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, tracking_send)
+        except _BodyTooLarge:
+            # Django reads the whole body before responding, so nothing
+            # has been sent yet and a proper 413 can go out.
+            if not response_started:
+                await _reject(send, 413, "REQUEST_TOO_LARGE")
