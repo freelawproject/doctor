@@ -37,15 +37,11 @@ Doctor parses untrusted files with a long list of third-party tools and is reach
 
 **Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone. Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict ingress in the `NetworkPolicy` to the pods that use doctor.
 
-**What a caller can make it do.**
+**What a caller can make it do.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`: bitonal transfers to presigned S3 URLs (https, hosts matching `DOCTOR_EGRESS_ALLOWED_HOSTS`, no redirects) and the court seal for audio conversion, from a hard-coded `seals.free.law` URL. A test fails if a network library is imported anywhere else. The S3 allowlist can only check that a URL points at S3, not at *your* buckets, so route S3 through a VPC endpoint whose policy allows only your account's buckets; otherwise a compromised caller can have doctor upload results to a bucket of its choosing. Nothing bounds how long a parser may run on one file or how large an upload may be: gunicorn's `--timeout`, the pod's memory limit and the size of `/tmp` are the backstops, so keep all three set.
 
- - Bodies over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) get a `413` before being read. Uploads spool to `/tmp`, so give `/tmp` a disk-backed `emptyDir` with a `sizeLimit` above this, not a memory-backed one, or a large upload counts against the pod's memory.
- - Each external tool (ghostscript, tesseract, ffmpeg, ...) has a wall-clock timeout, `DOCTOR_SUBPROCESS_TIMEOUT_SECONDS` (default 900) and `DOCTOR_AUDIO_TIMEOUT_SECONDS` (default 3600) for audio; a hung tool is killed and reported as a failure instead of holding the single worker for gunicorn's 90 minutes. The defaults are guesses; tune them from real workloads. Parsers that run in-process (pypdf, pikepdf, pdfplumber, Pillow, centralia) have no such limit: gunicorn's `--timeout` and the pod's memory limit are the only backstop, so keep both set.
- - Doctor makes outbound requests in two places, both in `doctor/tasks.py`, and pins each in code because a `NetworkPolicy` can't filter egress by hostname: bitonal transfers to presigned S3 URLs (https, hosts matching `DOCTOR_EGRESS_ALLOWED_HOSTS`, no redirects) and the court seal for audio conversion (https, `DOCTOR_SEAL_ALLOWED_HOSTS`, default `seals.free.law`, 2 MB cap, must be a PNG or JPEG). A test fails if a network library is imported anywhere else. The S3 allowlist can only check that a URL points at S3, not at *your* buckets, so route S3 through a VPC endpoint whose policy allows only your account's buckets; otherwise a compromised caller can have doctor upload results to a bucket of its choosing.
+**What a compromise gets.** The image runs as UID 10001 and writes only under `/tmp`. In the pod spec set `runAsNonRoot: true`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false` and `capabilities: {drop: [ALL]}`, mount a disk-backed `emptyDir` with a `sizeLimit` at `/tmp`, and allow egress only to S3, `seals.free.law` and Sentry. `compose.yaml` applies the same for local runs. Probes must be `httpGet` on `/`: the image no longer has `curl`.
 
-**What a compromise gets.** The image runs as UID 10001 and writes only under `/tmp`. In the pod spec set `runAsNonRoot: true`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false` and `capabilities: {drop: [ALL]}`, mount the `emptyDir` at `/tmp`, and allow egress only to S3, `seals.free.law` and Sentry. `compose.yaml` applies the same for local runs. Probes must be `httpGet` on `/`: the image no longer has `curl`.
-
-**What leaks.** With `SENTRY_DSN` set, events carry no local variables or request bodies, and URL query strings (presigned signatures) and `Authorization` headers are scrubbed.
+**What leaks.** With `SENTRY_DSN` set, URL query strings (presigned signatures) and `Authorization` headers are scrubbed from events.
 
 After the image is running, you should be able to test that you have a working environment by running
 
@@ -349,7 +345,7 @@ Converts uploaded images to a PDF. Send each image as a `file` field, in page or
         -F "file=@page-2.tiff" \
         -o image.pdf
 
-This returns the binary data of the pdf. At most `DOCTOR_MAX_IMAGE_FILES` (default 500) images are accepted per request. Doctor never fetches image URLs: earlier versions took a `sorted_urls` list and downloaded each one, which let any caller point doctor at internal addresses. Download the images and upload them instead.
+This returns the binary data of the pdf. Doctor never fetches image URLs: earlier versions took a `sorted_urls` list and downloaded each one, which let any caller point doctor at internal addresses. Download the images and upload them instead.
 
 
 ### Endpoint: /convert/pdf/bitonal/
@@ -481,7 +477,7 @@ from courts across the country and standardizes the format for our end users.
 
 This endpoint also adds the SEAL of the court to the MP3 file and updates the metadata to reflect our updates.
 
-Doctor fetches the seal itself, but only from `seals.free.law` (see `DOCTOR_SEAL_ALLOWED_HOSTS`): https only, no redirects, at most 2 MB, and it must be a PNG or JPEG.
+The seal comes from a hard-coded `seals.free.law` URL; if it can't be fetched, the MP3 gets no cover art.
 
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
      -X 'POST' \

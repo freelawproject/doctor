@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import fnmatch
 import hashlib
@@ -7,6 +8,7 @@ import os
 import re
 import time
 from collections.abc import ByteString
+from http import HTTPStatus
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr
 from urllib.parse import urlparse
@@ -19,7 +21,6 @@ import xray
 from django.conf import settings
 from eyed3 import id3
 from lxml.html.clean import Cleaner
-from PIL import Image as PILImage
 from PIL.Image import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -27,7 +28,6 @@ from seal_rookery.search import ImageSizes, seal
 
 from doctor.lib.bitonal import BitonalError
 from doctor.lib.mojibake import fix_mojibake
-from doctor.lib.subprocesses import DEVNULL, run_limited
 from doctor.lib.text_extraction import (
     extract_with_ocr,
     get_page_text,
@@ -71,16 +71,19 @@ async def make_pdftotext_process(path):
     :return: Subprocess results
     """
 
-    content, err, returncode = await run_limited(
+    process = await asyncio.create_subprocess_exec(
         "pdftotext",
         "-layout",
         "-enc",
         "UTF-8",
         path,
         "-",
-        stderr=DEVNULL,
+        shell=False,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    return content.decode(), err, returncode
+    content, err = await process.communicate()
+    return content.decode(), err, process.returncode
 
 
 async def rasterize_pdf(
@@ -126,7 +129,14 @@ async def rasterize_pdf(
         gs.append(f"-dLastPage={last_page}")
     gs += ["-o", destination, path]
 
-    return await run_limited(*gs)
+    p = await asyncio.create_subprocess_exec(
+        *gs,
+        close_fds=True,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await p.communicate()
+    return stdout, stderr, p.returncode
 
 
 def get_xray(path):
@@ -396,8 +406,13 @@ async def convert_file_to_txt(path: str) -> tuple[str, str, int | None]:
         "-c",
         "tessedit_do_invert=0",  # Assume a white background for speed
     ]
-    out, err, returncode = await run_limited(*tesseract_command)
-    return out.decode(), err.decode(errors="replace"), returncode
+    p = await asyncio.create_subprocess_exec(
+        *tesseract_command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    out, err = await p.communicate()
+    return out.decode(), err.decode(errors="replace"), p.returncode
 
 
 def convert_tiff_to_pdf_bytes(single_tiff_image: Image) -> ByteString:
@@ -427,10 +442,17 @@ async def extract_from_doc(path) -> tuple[str, bytes, int | None]:
     :param path: The path to the file
     :return: A tuple containing the extracted text, any error output, and the subprocess return code
     """
-    content, err, returncode = await run_limited(
-        "antiword", path, "-i", "1", stderr=DEVNULL
+    process = await asyncio.create_subprocess_exec(
+        "antiword",
+        path,
+        "-i",
+        "1",
+        shell=False,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    return content.decode("utf-8"), err, returncode
+    content, err = await process.communicate()
+    return content.decode("utf-8"), err, process.returncode
 
 
 async def extract_from_docx(path) -> tuple[str, bytes, int | None]:
@@ -440,10 +462,16 @@ async def extract_from_docx(path) -> tuple[str, bytes, int | None]:
     :param path: The path to the .docx file
     :return: A tuple containing the extracted text, any error output (empty bytes), and the subprocess return code
     """
-    content, err, returncode = await run_limited(
-        "docx2txt", path, "-", stderr=DEVNULL
+    process = await asyncio.create_subprocess_exec(
+        "docx2txt",
+        path,
+        "-",
+        shell=False,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    return content.decode("utf-8"), err, returncode
+    content, err = await process.communicate()
+    return content.decode("utf-8"), err, process.returncode
 
 
 def extract_from_html(path: str) -> tuple[str, str, int]:
@@ -535,13 +563,18 @@ async def extract_from_wpd(path: str) -> tuple[str, bytes, int | None]:
              - The standard error output from the wpd2html subprocess (bytes)
              - The return code of the wpd2html subprocess (int). Returns 1 on Python-level errors
     """
-    content_bytes, err, returncode = await run_limited(
-        "wpd2html", path, stderr=DEVNULL
+    process = await asyncio.create_subprocess_exec(
+        "wpd2html",
+        path,
+        shell=False,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
     )
+    content_bytes, err = await process.communicate()
     content_str = content_bytes.decode("utf-8")
     content = get_clean_body_content(content_str)
 
-    return content, err, returncode
+    return content, err, process.returncode
 
 
 # Presigned URL transport for the bitonal endpoint. Transient
@@ -553,22 +586,17 @@ EGRESS_BACKOFF_SECONDS = 1.0
 EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def validate_egress_url(
-    url: str, allowed_hosts: list[str] | None = None
-) -> None:
+def validate_egress_url(url: str) -> None:
     """Check a caller-supplied URL against the egress policy.
 
-    When the allowlist is set, the URL must be https and its host must
-    match one of the configured fnmatch patterns. An empty allowlist
-    disables the check.
+    When DOCTOR_EGRESS_ALLOWED_HOSTS is set, the URL must be https
+    and its host must match one of the configured fnmatch patterns.
+    An empty setting disables the check.
 
     :param url: The URL doctor was asked to fetch from or upload to.
-    :param allowed_hosts: Host patterns to allow; defaults to
-        DOCTOR_EGRESS_ALLOWED_HOSTS.
     :raises BitonalError: EGRESS_BLOCKED when the URL is not allowed.
     """
-    if allowed_hosts is None:
-        allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
+    allowed_hosts = settings.DOCTOR_EGRESS_ALLOWED_HOSTS
     if not allowed_hosts:
         return
     parsed = urlparse(url)
@@ -579,7 +607,7 @@ def validate_egress_url(
         raise BitonalError(
             "EGRESS_BLOCKED",
             f"URL blocked by egress policy: {parsed.scheme}://{hostname}",
-            status=400,
+            status=HTTPStatus.BAD_REQUEST,
         )
 
 
@@ -611,14 +639,14 @@ def _classify_status(
             expired_code,
             f"{direction} URL returned 403; the signature has expired "
             "and a retry cannot succeed",
-            status=502,
+            status=HTTPStatus.BAD_GATEWAY,
         )
     if status >= 500:
         raise _TransientTransferError(f"HTTP {status}")
     raise BitonalError(
         failed_code,
         f"{direction} URL returned HTTP {status}",
-        status=502,
+        status=HTTPStatus.BAD_GATEWAY,
     )
 
 
@@ -649,14 +677,14 @@ def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
             # succeed, so it must neither retry here nor escape to
             # the retryable INTERNAL_ERROR catch-all.
             raise BitonalError(
-                failed_code, f"invalid URL: {e}", status=400
+                failed_code, f"invalid URL: {e}", status=HTTPStatus.BAD_REQUEST
             ) from e
         except (_TransientTransferError, httpx.HTTPError) as e:
             last_error = str(e)
     raise BitonalError(
         failed_code,
         f"{failure_prefix} after {EGRESS_MAX_ATTEMPTS} attempts: {last_error}",
-        status=502,
+        status=HTTPStatus.BAD_GATEWAY,
     )
 
 
@@ -703,7 +731,7 @@ def stream_url_to_file(url: str, output_path: str) -> str:
                     "INPUT_TOO_LARGE",
                     f"input Content-Length {content_length} exceeds "
                     f"the {max_bytes}-byte limit",
-                    status=400,
+                    status=HTTPStatus.BAD_REQUEST,
                 )
             digest = hashlib.sha256()
             received = 0
@@ -715,7 +743,7 @@ def stream_url_to_file(url: str, output_path: str) -> str:
                             "INPUT_TOO_LARGE",
                             f"input exceeded the {max_bytes}-byte "
                             "limit while streaming",
-                            status=400,
+                            status=HTTPStatus.BAD_REQUEST,
                         )
                     f.write(chunk)
                     digest.update(chunk)
@@ -819,13 +847,18 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
         output_path,
     ]
 
-    _, err, returncode = await run_limited(
+    ffmpeg_cmd = await asyncio.create_subprocess_exec(
         *av_command,
-        input=media.read(),
-        timeout=settings.DOCTOR_AUDIO_TIMEOUT_SECONDS,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        shell=False,
     )
-    if returncode != 0:
-        raise RuntimeError(f"ffmpeg exited {returncode}: {_tail(err)}")
+    _, err = await ffmpeg_cmd.communicate(media.read())
+    if ffmpeg_cmd.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg exited {ffmpeg_cmd.returncode}: {_tail(err)}"
+        )
     return output_path
 
 
@@ -873,59 +906,44 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
         output_path,
     ]
 
-    _, err, returncode = await run_limited(
+    ffmpeg_cmd = await asyncio.create_subprocess_exec(
         *av_command,
-        input=media.read(),
-        timeout=settings.DOCTOR_AUDIO_TIMEOUT_SECONDS,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        shell=False,
     )
-    if returncode != 0:
-        raise RuntimeError(f"ffmpeg exited {returncode}: {_tail(err)}")
+    _, err = await ffmpeg_cmd.communicate(media.read())
+    if ffmpeg_cmd.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg exited {ffmpeg_cmd.returncode}: {_tail(err)}"
+        )
     return output_path
 
 
-MAX_SEAL_BYTES = 2 * 1024 * 1024
-SEAL_FORMATS = {"PNG": "image/png", "JPEG": "image/jpeg"}
+# The only host doctor fetches seals from. Hard-coded on purpose: no
+# caller input reaches this URL, so no allowlist is needed.
+SEAL_URL = "https://seals.free.law/v2/{size}/{court}.png"
 SEAL_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def fetch_seal(url: str) -> tuple[bytes, str] | None:
-    """Fetch a court seal, only ever from the pinned seal host.
+def fetch_seal(court_pk: str) -> bytes | None:
+    """Fetch a court's seal PNG from seals.free.law.
 
-    This is doctor's one outbound request that isn't a caller-supplied
-    presigned URL. The pin lives here because a Kubernetes NetworkPolicy
-    can't allow egress by hostname: https on DOCTOR_SEAL_ALLOWED_HOSTS
-    only, no redirects, a size cap, and the body must be a PNG or JPEG
-    before it goes into an ID3 tag.
-
-    :param url: The seal URL from seal_rookery.
-    :return: (image bytes, MIME type), or None if the fetch failed, which
-        is logged; the seal is cosmetic.
-    :raises BitonalError: EGRESS_BLOCKED if the URL is off the allowlist,
-        a deployment error worth failing loudly on.
+    :param court_pk: The CourtListener court id.
+    :return: The PNG bytes, or None if the court has no seal or the fetch
+        failed; a failure is logged, and the MP3 just gets no cover art.
     """
-    validate_egress_url(url, settings.DOCTOR_SEAL_ALLOWED_HOSTS)
+    if seal(court=court_pk, size=ImageSizes.MEDIUM) is None:
+        return None
+    url = SEAL_URL.format(size=ImageSizes.MEDIUM.value, court=court_pk)
     try:
-        content = bytearray()
-        with (
-            httpx.Client(
-                follow_redirects=False, timeout=SEAL_TIMEOUT
-            ) as client,
-            client.stream("GET", url) as response,
-        ):
-            response.raise_for_status()
-            for chunk in response.iter_bytes():
-                content += chunk
-                if len(content) > MAX_SEAL_BYTES:
-                    raise ValueError(f"seal exceeds {MAX_SEAL_BYTES} bytes")
-        with PILImage.open(io.BytesIO(content)) as image:
-            image.verify()
-            image_format = image.format
-        if image_format not in SEAL_FORMATS:
-            raise ValueError(f"seal is {image_format}, not PNG or JPEG")
-    except (httpx.HTTPError, ValueError, OSError) as e:
+        response = httpx.get(url, follow_redirects=False, timeout=SEAL_TIMEOUT)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
         logger.warning("Seal fetch failed for %s: %s", url, e)
         return None
-    return bytes(content), SEAL_FORMATS[image_format]
+    return response.content
 
 
 def set_mp3_meta_data[AnyStr: (bytes, str)](
@@ -978,16 +996,14 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
         3,  # "Front Cover". Complete list at eyed3/id3/frames.py
         14,  # "Publisher logo".
     ]
-    url = seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM)
-    if url:
+    if seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM):
         flp_image_frames.remove(3)
-        seal_image = fetch_seal(url)
-        if seal_image:
-            seal_content, seal_mime = seal_image
+        seal_png = fetch_seal(audio_data["court_pk"])
+        if seal_png:
             audio_file.tag.images.set(
                 3,
-                seal_content,
-                seal_mime,
+                seal_png,
+                "image/png",
                 f"Seal for {audio_data['court_short_name']}",
             )
 

@@ -15,7 +15,6 @@ import magic
 import pytesseract
 from centralia import CourtNotReleased, UnknownCourt
 from centralia import read as centralia_read
-from django.conf import settings
 from django.core.exceptions import BadRequest
 from django.http import (
     FileResponse,
@@ -259,7 +258,7 @@ def extract_structured_opinion(request) -> JsonResponse:
                 "error_code": "EXTRACTION_FAILED",
                 "msg": str(e),
             },
-            status=500,
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
     finally:
         cleanup_form(form)
@@ -518,7 +517,7 @@ def convert_pdf_bitonal(request) -> HttpResponseBase:
         )
         return JsonResponse(
             {"success": False, "error_code": "INTERNAL_ERROR", "msg": str(e)},
-            status=500,
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
     finally:
         cleanup_form(form)
@@ -805,10 +804,6 @@ async def images_to_pdf(request) -> HttpResponse:
     files = request.FILES.getlist("file")
     if not files:
         raise BadRequest("Send at least one image as a 'file' field.")
-    if len(files) > settings.DOCTOR_MAX_IMAGE_FILES:
-        raise BadRequest(
-            f"At most {settings.DOCTOR_MAX_IMAGE_FILES} images are allowed."
-        )
 
     with TemporaryDirectory() as image_dir:
         # Named by position, never by the client's filename.

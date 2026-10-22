@@ -1,4 +1,4 @@
-"""Offline tests for the service's hardening.
+"""Tests for the service's hardening.
 
 Unlike tests.py these need no running doctor container:
 
@@ -21,16 +21,15 @@ import httpx  # noqa: E402
 
 django.setup()
 
+from django.conf import settings  # noqa: E402
 from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
 from django.test import Client, SimpleTestCase, override_settings  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from doctor.lib.bitonal import BitonalError  # noqa: E402
 from doctor.lib.sentry_scrub import scrub_breadcrumb, scrub_event  # noqa: E402
-from doctor.lib.subprocesses import TIMED_OUT, run_limited  # noqa: E402
 from doctor.middleware import GatekeeperMiddleware  # noqa: E402
 from doctor.tasks import (  # noqa: E402
-    MAX_SEAL_BYTES,
     convert_to_mp3,
     fetch_seal,
     set_mp3_meta_data,
@@ -104,44 +103,6 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(_request(path="/"), (200, True))
 
 
-class SizeLimitTest(unittest.TestCase):
-    @override_settings(DOCTOR_AUTH_TOKENS=[], DOCTOR_MAX_REQUEST_BYTES=10)
-    def test_declared_length_over_limit(self):
-        status, ran = _request(headers=[(b"content-length", b"11")])
-        self.assertEqual((status, ran), (413, False))
-
-    @override_settings(DOCTOR_AUTH_TOKENS=[], DOCTOR_MAX_REQUEST_BYTES=10)
-    def test_undeclared_stream_gets_413(self):
-        # No Content-Length (chunked): the cap trips mid-stream and the
-        # client still gets a proper 413, not a dropped connection.
-        status, ran = _request(body_chunks=[b"x" * 6, b"x" * 6])
-        self.assertEqual((status, ran), (413, True))
-
-    @override_settings(DOCTOR_AUTH_TOKENS=[], DOCTOR_MAX_REQUEST_BYTES=10)
-    def test_within_limit(self):
-        self.assertEqual(
-            _request(headers=[(b"content-length", b"10")]), (200, True)
-        )
-
-
-class SubprocessLimitTest(unittest.TestCase):
-    def run_it(self, *command, **kwargs):
-        return asyncio.run(run_limited(*command, **kwargs))
-
-    def test_normal_command(self):
-        out, _, code = self.run_it("echo", "hello")
-        self.assertEqual((out.strip(), code), (b"hello", 0))
-
-    def test_stdin_is_passed(self):
-        out, _, _ = self.run_it("cat", input=b"abc")
-        self.assertEqual(out, b"abc")
-
-    def test_hung_command_is_killed(self):
-        _, _, code = self.run_it("sleep", "30", timeout=1)
-        self.assertEqual(code, TIMED_OUT)
-
-
-@unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not installed")
 class FfmpegProtocolTest(unittest.TestCase):
     """An uploaded playlist must not make ffmpeg read other files."""
 
@@ -193,7 +154,6 @@ class SentryScrubTest(unittest.TestCase):
         text = repr(out)
         for leaked in ("deadbeef", "AKIA", "s3cret"):
             self.assertNotIn(leaked, text)
-        self.assertNotIn("data", out["request"])
         self.assertIn("https://b.s3.amazonaws.com/k.pdf", text)
         self.assertEqual(out["request"]["headers"]["Host"], "x")
 
@@ -226,14 +186,6 @@ class ImagesToPdfTest(SimpleTestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    @override_settings(DOCTOR_MAX_IMAGE_FILES=1)
-    def test_too_many_files(self):
-        response = Client().post(
-            "/convert/images/pdf/",
-            {"file": [self.png("red"), self.png("blue")]},
-        )
-        self.assertEqual(response.status_code, 400)
-
 
 def _image_bytes(image_format="PNG", size=(32, 32)):
     buffer = io.BytesIO()
@@ -244,6 +196,9 @@ def _image_bytes(image_format="PNG", size=(32, 32)):
 class EgressDefaultTest(SimpleTestCase):
     """The shipped allowlist admits S3 hostnames and nothing else on AWS."""
 
+    @override_settings(
+        DOCTOR_EGRESS_ALLOWED_HOSTS=settings.S3_HOST_PATTERNS.split(",")
+    )
     def test_s3_shapes_allowed(self):
         for host in (
             "bucket.s3.amazonaws.com",
@@ -256,6 +211,9 @@ class EgressDefaultTest(SimpleTestCase):
         ):
             validate_egress_url(f"https://{host}/key?X-Amz-Signature=x")
 
+    @override_settings(
+        DOCTOR_EGRESS_ALLOWED_HOSTS=settings.S3_HOST_PATTERNS.split(",")
+    )
     def test_other_aws_hosts_blocked(self):
         for host in (
             "abc123.execute-api.us-west-2.amazonaws.com",
@@ -269,67 +227,46 @@ class EgressDefaultTest(SimpleTestCase):
 
 
 class SealFetchTest(SimpleTestCase):
-    """Audio conversion may fetch a seal, but only from the pinned host."""
+    """Audio conversion fetches the seal from the hard-coded host only."""
 
-    SEAL_URL = "https://seals.free.law/v2/256/mad.png"
-
-    def client_returning(self, handler):
-        """Patch doctor's httpx.Client to answer from `handler`, and
-        record the keyword arguments it was built with."""
-        built = {}
-        real = httpx.Client
-
-        def make_client(**kwargs):
-            built.update(kwargs)
-            return real(transport=httpx.MockTransport(handler), **kwargs)
-
-        return patch("doctor.tasks.httpx.Client", make_client), built
-
-    def fetch(self, handler, url=SEAL_URL):
-        patched, built = self.client_returning(handler)
-        with patched:
-            return fetch_seal(url), built
-
-    def test_fetches_the_seal(self):
-        png = _image_bytes("PNG")
+    def fetch(self, handler, court="mad"):
+        """Run fetch_seal against a mock transport; return the result and
+        the URLs it requested."""
         seen = []
 
-        def handler(request):
+        def spy(request):
             seen.append(str(request.url))
-            return httpx.Response(200, content=png)
+            return handler(request)
 
-        (result, built) = self.fetch(handler)
-        self.assertEqual(result, (png, "image/png"))
-        self.assertEqual(seen, [self.SEAL_URL])
-        self.assertFalse(built["follow_redirects"])
+        real = httpx.get
 
-    def test_other_hosts_are_blocked_before_any_request(self):
-        def handler(request):
-            raise AssertionError(f"made a request to {request.url}")
+        def fake_get(url, **kwargs):
+            self.assertFalse(kwargs["follow_redirects"])
+            with httpx.Client(transport=httpx.MockTransport(spy)) as c:
+                return c.get(url)
 
-        for url in (
-            "https://evil.example/seal.png",
-            "http://seals.free.law/v2/256/mad.png",
-            "https://seals.free.law.evil.example/mad.png",
-            "https://evil.example/seals.free.law/mad.png",
-            "https://169.254.169.254/latest/meta-data",
-            "file:///etc/passwd",
-        ):
-            with self.assertRaises(BitonalError, msg=url):
-                self.fetch(handler, url=url)
+        with patch("doctor.tasks.httpx.get", fake_get):
+            return fetch_seal(court), seen
+        del real
 
-    def test_bad_responses_mean_no_seal(self):
-        # The seal is cosmetic: a bad response is logged, not fatal.
-        responses = [
-            httpx.Response(200, content=b"not an image"),
-            httpx.Response(200, content=_image_bytes("GIF")),
-            httpx.Response(200, content=b"\0" * (MAX_SEAL_BYTES + 1)),
+    def test_fetches_from_seals_free_law(self):
+        png = _image_bytes("PNG")
+        result, seen = self.fetch(lambda r: httpx.Response(200, content=png))
+        self.assertEqual(result, png)
+        self.assertEqual(seen, ["https://seals.free.law/v2/256/mad.png"])
+
+    def test_court_without_a_seal_makes_no_request(self):
+        result, seen = self.fetch(lambda r: httpx.Response(200), court="nope")
+        self.assertIsNone(result)
+        self.assertEqual(seen, [])
+
+    def test_failed_fetch_means_no_seal(self):
+        for response in (
             httpx.Response(404),
             httpx.Response(302, headers={"Location": "http://10.0.0.1/"}),
-        ]
-        for response in responses:
+        ):
             with self.assertLogs("doctor.tasks", level="WARNING"):
-                result, _ = self.fetch(lambda request, r=response: r)
+                result, _ = self.fetch(lambda r, resp=response: resp)
             self.assertIsNone(result)
 
     AUDIO_DATA = {
@@ -362,7 +299,7 @@ class SealFetchTest(SimpleTestCase):
 
     def test_seal_becomes_the_front_cover(self):
         seal_png = _image_bytes("PNG", (48, 48))
-        images = self.tag_images((seal_png, "image/png"))
+        images = self.tag_images(seal_png)
         self.assertEqual(images[3].image_data, seal_png)
         self.assertEqual(images[3].description, "Seal for Testing")
         self.assertIn(14, images)  # the publisher logo is still FLP's

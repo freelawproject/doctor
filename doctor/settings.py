@@ -38,17 +38,6 @@ DOCTOR_AUTH_TOKENS = [
     if token.strip()
 ]
 
-# Requests larger than this get a 413 before the body is read. Keep it
-# below the space available on /tmp, where uploads are spooled.
-DOCTOR_MAX_REQUEST_BYTES = env.int("DOCTOR_MAX_REQUEST_BYTES", default=1024**3)
-# Images accepted by one images-to-pdf request.
-DOCTOR_MAX_IMAGE_FILES = env.int("DOCTOR_MAX_IMAGE_FILES", default=500)
-# Non-file form fields are small; file parts are bounded by the count
-# below and by DOCTOR_MAX_REQUEST_BYTES.
-DATA_UPLOAD_MAX_MEMORY_SIZE = 1024**2
-DATA_UPLOAD_MAX_NUMBER_FILES = DOCTOR_MAX_IMAGE_FILES
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 50
-
 # Hosts the bitonal endpoint may fetch input_url from and upload
 # output_url to. Comma-separated fnmatch patterns; URLs must be https and
 # match one. The default is every hostname shape a presigned S3 URL can
@@ -56,23 +45,14 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = 50
 # access points) and nothing else on AWS. Pin it to exact bucket hosts
 # where you can. Empty disables the check, which local dev and the test
 # suite need (see .env.example).
+S3_HOST_PATTERNS = (
+    "*.s3.amazonaws.com,*.s3.*.amazonaws.com,*.s3-*.amazonaws.com,"
+    "s3.amazonaws.com,s3.*.amazonaws.com,s3-*.amazonaws.com"
+)
 DOCTOR_EGRESS_ALLOWED_HOSTS = [
     host.strip()
     for host in env(
-        "DOCTOR_EGRESS_ALLOWED_HOSTS",
-        default=(
-            "*.s3.amazonaws.com,*.s3.*.amazonaws.com,*.s3-*.amazonaws.com,"
-            "s3.amazonaws.com,s3.*.amazonaws.com,s3-*.amazonaws.com"
-        ),
-    ).split(",")
-    if host.strip()
-]
-
-# Where audio conversion may fetch court seals from. Same syntax as above.
-DOCTOR_SEAL_ALLOWED_HOSTS = [
-    host.strip()
-    for host in env(
-        "DOCTOR_SEAL_ALLOWED_HOSTS", default="seals.free.law"
+        "DOCTOR_EGRESS_ALLOWED_HOSTS", default=S3_HOST_PATTERNS
     ).split(",")
     if host.strip()
 ]
@@ -101,17 +81,6 @@ DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES = env.int(
     "DOCTOR_BITONAL_MAX_DOWNLOAD_BYTES", default=1024**3
 )
 
-# Wall-clock limit on each external tool doctor runs (ghostscript,
-# tesseract, ffmpeg, ...). A tool over it is killed and reported as
-# failed. 0 disables the limit.
-DOCTOR_SUBPROCESS_TIMEOUT_SECONDS = env.int(
-    "DOCTOR_SUBPROCESS_TIMEOUT_SECONDS", default=900
-)
-# Audio conversions legitimately run long (hours of recording).
-DOCTOR_AUDIO_TIMEOUT_SECONDS = env.int(
-    "DOCTOR_AUDIO_TIMEOUT_SECONDS", default=3600
-)
-
 # OCR runs ghostscript and tesseract over this many pages at a time, so a
 # request's peak memory and /tmp usage depend on the slice size rather
 # than on the document's page count. A 300 DPI letter page is ~8 MB of
@@ -128,12 +97,13 @@ if SENTRY_DSN:
             DjangoIntegration(),
         ],
         ignore_errors=[KeyboardInterrupt],
-        # Locals and request bodies hold document text and presigned
-        # URLs (bearer credentials for scanned documents in S3), and
-        # Sentry is a third party. See doctor/lib/sentry_scrub.py.
-        include_local_variables=False,
-        max_request_body_size="never",
+        # Don't attach cookies, the Authorization header, user ids or
+        # client IPs to events. Doctor has no users, so there is nothing
+        # useful in them, and the tokens must not leave the cluster.
         send_default_pii=False,
+        # Scrub presigned S3 signatures out of URLs in events and in the
+        # breadcrumbs the SDK records for outgoing HTTP calls. Each one
+        # is a credential for a document until it expires.
         before_send=scrub_event,
         before_breadcrumb=scrub_breadcrumb,
     )

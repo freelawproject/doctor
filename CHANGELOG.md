@@ -2,31 +2,24 @@
 The following changes are not yet released, but are code complete:
 
 Security:
- - `/convert/audio/mp3/` fetches the court seal only from `seals.free.law`
-   (`DOCTOR_SEAL_ALLOWED_HOSTS`): https, no redirects, 2 MB cap, and the
-   body must be a PNG or JPEG. A failed fetch is logged and the MP3 gets
-   no cover art; before, a 404 page was embedded as the "image".
+ - `/convert/audio/mp3/` fetches the court seal from a hard-coded
+   `seals.free.law` URL. A failed fetch is logged and the MP3 gets no
+   cover art; before, a 404 page was embedded as the "image".
  - `DOCTOR_EGRESS_ALLOWED_HOSTS` now defaults to S3 hostname shapes rather
    than `*.amazonaws.com`, so the bitonal endpoint can't be pointed at
    other AWS endpoints (API Gateway, RDS, ...). **Deployments whose
    presigned URLs are not on S3 must set it explicitly.**
- - The audio endpoints fail with a logged ffmpeg error instead of a
-   missing-file 500 when ffmpeg exits non-zero.
  - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
-   uploaded images as repeated `file` fields (at most
-   `DOCTOR_MAX_IMAGE_FILES`, default 500) instead of a `sorted_urls` list,
-   which let any caller make doctor fetch internal URLs. Nothing in
+   uploaded images as repeated `file` fields instead of a `sorted_urls`
+   list, which let any caller make doctor fetch internal URLs. Nothing in
    courtlistener, bigcases2 or scanning calls it.
  - New `DOCTOR_AUTH_TOKENS` setting enables bearer-token authentication on
    every endpoint but the heartbeat; unset keeps today's behavior.
- - Requests over `DOCTOR_MAX_REQUEST_BYTES` (default 1 GiB) are rejected
-   before the body is read.
- - External tools run with a wall-clock timeout
-   (`DOCTOR_SUBPROCESS_TIMEOUT_SECONDS`, `DOCTOR_AUDIO_TIMEOUT_SECONDS`).
  - ffmpeg is limited to the pipe protocol so an uploaded playlist file
-   can't make it read local files or fetch URLs.
- - Sentry events no longer carry local variables or request bodies, and
-   presigned URL signatures and `Authorization` headers are scrubbed.
+   can't make it read local files or fetch URLs, and a non-zero exit is
+   reported with its stderr instead of a missing-file 500.
+ - Sentry events no longer carry cookies, and presigned URL signatures and
+   `Authorization` headers are scrubbed.
  - The image runs as a non-root user without curl or ImageMagick, and
    `compose.yaml` runs it read-only with dropped capabilities.
  - A test fails if a network library is imported outside `doctor/tasks.py`.

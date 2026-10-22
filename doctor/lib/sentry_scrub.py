@@ -1,4 +1,4 @@
-"""Keep presigned URLs, credentials and request bodies out of Sentry.
+"""Keep presigned URLs and credentials out of Sentry.
 
 Bitonal requests carry presigned S3 URLs, which are bearer credentials
 until they expire: whoever reads one can fetch or overwrite that object.
@@ -35,10 +35,9 @@ def _scrub(value: Any) -> Any:
 
 
 def scrub_event(event: Any, hint: Any = None) -> Any:
-    """``before_send`` hook: drop request bodies, scrub URLs and secrets."""
+    """``before_send`` hook: drop cookies, scrub URLs and secrets."""
     request = event.get("request")
     if isinstance(request, dict):
-        request.pop("data", None)
         request.pop("cookies", None)
     return _scrub(event)
 
