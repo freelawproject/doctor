@@ -255,11 +255,6 @@ class SealFetchTest(SimpleTestCase):
         self.assertEqual(result, png)
         self.assertEqual(seen, ["https://seals.free.law/v2/256/mad.png"])
 
-    def test_court_without_a_seal_makes_no_request(self):
-        result, seen = self.fetch(lambda r: httpx.Response(200), court="nope")
-        self.assertIsNone(result)
-        self.assertEqual(seen, [])
-
     def test_failed_fetch_means_no_seal(self):
         for response in (
             httpx.Response(404),
@@ -283,9 +278,10 @@ class SealFetchTest(SimpleTestCase):
         "download_url": "http://www.example.com/a.mp3",
     }
 
-    def tag_images(self, fetched):
+    def tag_images(self, fetched, court="mad"):
         """Tag a copy of the test mp3 with fetch_seal patched to return
-        `fetched`, and return its images by picture type."""
+        `fetched`, and return its images by picture type. The mock is
+        left on self.fetch_seal for assertions."""
         import tempfile
 
         import eyed3
@@ -293,8 +289,10 @@ class SealFetchTest(SimpleTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "a.mp3")
             shutil.copy("doctor/test_assets/1.mp3", path)
-            with patch("doctor.tasks.fetch_seal", return_value=fetched):
-                set_mp3_meta_data(dict(self.AUDIO_DATA), path)
+            with patch(
+                "doctor.tasks.fetch_seal", return_value=fetched
+            ) as self.fetch_seal:
+                set_mp3_meta_data({**self.AUDIO_DATA, "court_pk": court}, path)
             return {i.picture_type: i for i in eyed3.load(path).tag.images}
 
     def test_seal_becomes_the_front_cover(self):
@@ -303,6 +301,14 @@ class SealFetchTest(SimpleTestCase):
         self.assertEqual(images[3].image_data, seal_png)
         self.assertEqual(images[3].description, "Seal for Testing")
         self.assertIn(14, images)  # the publisher logo is still FLP's
+
+    def test_court_without_a_seal_fetches_nothing(self):
+        images = self.tag_images(None, court="nope")
+        self.fetch_seal.assert_not_called()
+        # eyed3 keeps one of the two identical FLP-logo frames; what matters
+        # is that no frame claims to be a seal.
+        for image in images.values():
+            self.assertNotIn("Seal for", image.description)
 
     def test_failed_fetch_means_no_cover_art(self):
         images = self.tag_images(None)

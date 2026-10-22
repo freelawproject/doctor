@@ -831,9 +831,10 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
         "-hide_banner",
         "-loglevel",
         "error",
-        # Playlist-style containers (HLS, concat) can name other files
-        # and URLs; with only the pipe protocol allowed an uploaded
-        # "audio" file can't make ffmpeg read or fetch anything else.
+        # Playlist-style containers (HLS, concat) can be used to exfiltrate
+        # system information by naming other files and URLs. Using the pipe
+        # protocol blocks uploaded "audio" files from making ffmpeg read or
+        # fetch anything else.
         "-protocol_whitelist",
         "pipe",
         "-i",
@@ -883,9 +884,10 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
         "-hide_banner",
         "-loglevel",
         "error",
-        # Playlist-style containers (HLS, concat) can name other files
-        # and URLs; with only the pipe protocol allowed an uploaded
-        # "audio" file can't make ffmpeg read or fetch anything else.
+        # Playlist-style containers (HLS, concat) can be used to exfiltrate
+        # system information by naming other files and URLs. Using the pipe
+        # protocol blocks uploaded "audio" files from making ffmpeg read or
+        # fetch anything else.
         "-protocol_whitelist",
         "pipe",
         "-i",
@@ -930,12 +932,11 @@ SEAL_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 def fetch_seal(court_pk: str) -> bytes | None:
     """Fetch a court's seal PNG from seals.free.law.
 
-    :param court_pk: The CourtListener court id.
-    :return: The PNG bytes, or None if the court has no seal or the fetch
-        failed; a failure is logged, and the MP3 just gets no cover art.
+    :param court_pk: The CourtListener court id; the caller has checked
+        with seal_rookery that it has a seal.
+    :return: The PNG bytes, or None if the fetch failed; the failure is
+        logged, and the MP3 just gets no cover art.
     """
-    if seal(court=court_pk, size=ImageSizes.MEDIUM) is None:
-        return None
     url = SEAL_URL.format(size=ImageSizes.MEDIUM.value, court=court_pk)
     try:
         response = httpx.get(url, follow_redirects=False, timeout=SEAL_TIMEOUT)
