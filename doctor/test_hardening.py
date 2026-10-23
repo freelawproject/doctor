@@ -125,7 +125,17 @@ class SentryScrubTest(unittest.TestCase):
         self.assertEqual(out["request"]["headers"]["Host"], "x")
 
     def test_breadcrumb_is_scrubbed(self):
-        crumb = scrub_breadcrumb({"data": {"url": self.URL}})
+        # The httpx integration stores the query string bare, in its own
+        # field, where no URL prefix precedes it.
+        crumb = scrub_breadcrumb(
+            {
+                "data": {
+                    "url": self.URL,
+                    "http.query": "X-Amz-Signature=deadbeef",
+                    "http.fragment": "deadbeef",
+                }
+            }
+        )
         self.assertNotIn("deadbeef", repr(crumb))
 
 
@@ -154,6 +164,8 @@ class EgressDefaultTest(SimpleTestCase):
         for host in (
             "abc123.execute-api.us-west-2.amazonaws.com",
             "sts.amazonaws.com",
+            "s3-attacker-1234567890.us-west-2.elb.amazonaws.com",
+            "bucket.s3.evil.example.amazonaws.com",
             "my-db.cluster-x.us-west-2.rds.amazonaws.com",
             "s3.amazonaws.com.evil.example",
             "169.254.169.254",

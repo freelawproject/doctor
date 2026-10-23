@@ -4,8 +4,10 @@ The following changes are not yet released, but are code complete:
 Security:
  - `DOCTOR_EGRESS_ALLOWED_HOSTS` now defaults to S3 hostname shapes rather
    than `*.amazonaws.com`, so the bitonal endpoint can't be pointed at
-   other AWS endpoints (API Gateway, RDS, ...). **Deployments whose
-   presigned URLs are not on S3 must set it explicitly.**
+   other AWS endpoints (API Gateway, RDS, ...), and `*` in a pattern now
+   matches exactly one DNS label rather than anything. **Deployments
+   whose presigned URLs are not on S3, or whose patterns relied on `*`
+   spanning several labels, must set it explicitly.**
  - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
    uploaded images as repeated `file` fields instead of a `sorted_urls`
    list, which previously let any caller make doctor fetch internal URLs. Nothing in

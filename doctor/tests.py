@@ -1026,7 +1026,7 @@ class EgressPolicyTests(unittest.TestCase):
         from django.test import override_settings
 
         with override_settings(
-            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]
+            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.s3.amazonaws.com"]
         ):
             response = Client().post(
                 reverse("convert-pdf-bitonal"),
@@ -1044,7 +1044,7 @@ class EgressPolicyTests(unittest.TestCase):
         from doctor.tasks import validate_egress_url
 
         with override_settings(
-            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]
+            DOCTOR_EGRESS_ALLOWED_HOSTS=["*.s3.amazonaws.com"]
         ):
             validate_egress_url(
                 "https://bucket.s3.amazonaws.com/key?X-Amz-Signature=x"
@@ -1076,7 +1076,9 @@ class EgressPolicyTests(unittest.TestCase):
 
         url = "https://bucket.s3.amazonaws.com:notaport/shard.pdf"
         with (
-            override_settings(DOCTOR_EGRESS_ALLOWED_HOSTS=["*.amazonaws.com"]),
+            override_settings(
+                DOCTOR_EGRESS_ALLOWED_HOSTS=["*.s3.amazonaws.com"]
+            ),
             tempfile.NamedTemporaryFile(suffix=".pdf") as scratch,
         ):
             with self.assertRaises(BitonalError) as ctx:

@@ -39,14 +39,15 @@ DOCTOR_AUTH_TOKENS = [
 ]
 
 # Hosts the bitonal endpoint may fetch input_url from and upload
-# output_url to. Comma-separated fnmatch patterns; URLs must be https and
-# match one. The default is every hostname shape a presigned S3 URL can
-# take (virtual-hosted, path-style, legacy region-dashed, dualstack and
-# access points) and nothing else on AWS. Pin it to exact bucket hosts
-# where you can. Empty disables the check, which local dev and the test
-# suite need (see .env.example).
+# output_url to. Comma-separated patterns where "*" is one DNS label;
+# URLs must be https and match one. The default is every hostname shape
+# a presigned S3 URL can take (virtual-hosted, path-style, legacy
+# region-dashed, dualstack and access points) and nothing else on AWS.
+# Pin it to exact bucket hosts where you can. Empty disables the check,
+# which local dev and the test suite need (see .env.example).
 S3_HOST_PATTERNS = (
     "*.s3.amazonaws.com,*.s3.*.amazonaws.com,*.s3-*.amazonaws.com,"
+    "*.s3.dualstack.*.amazonaws.com,*.s3-accesspoint.*.amazonaws.com,"
     "s3.amazonaws.com,s3.*.amazonaws.com,s3-*.amazonaws.com"
 )
 DOCTOR_EGRESS_ALLOWED_HOSTS = [

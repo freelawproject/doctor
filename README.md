@@ -455,8 +455,9 @@ reliable completion probe. Note the upload happens while the request stays
 open; the HTTP response is the status channel.
 
 The `DOCTOR_EGRESS_ALLOWED_HOSTS` environment variable (comma-separated
-fnmatch patterns) restricts which hosts `input_url` and `output_url` may
-point to; allowed URLs must also be https. The default admits every
+host patterns, where `*` stands for exactly one DNS label) restricts which
+hosts `input_url` and `output_url` may point to; allowed URLs must also be
+https. The default admits every
 hostname shape a presigned S3 URL can take and nothing else on AWS.
 Deployments can tighten it to exact bucket hostnames (a pattern without
 wildcards is an exact match), and setting it empty disables the check

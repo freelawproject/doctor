@@ -14,7 +14,16 @@ REDACTED = "[redacted]"
 # Everything after the "?" of a URL: that is where a presigned URL keeps
 # its signature and credential.
 URL_QUERY = re.compile(r"(https?://[^\s\"'<>?#]+)\?[^\s\"'<>]*")
-SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization"}
+# Values dropped whole, by key: credentials, and the query string that
+# the SDK's HTTP-client breadcrumbs store bare, with no URL in front of
+# it for URL_QUERY to find.
+REDACTED_KEYS = {
+    "authorization",
+    "cookie",
+    "proxy-authorization",
+    "http.query",
+    "http.fragment",
+}
 
 
 def _scrub(value: Any) -> Any:
@@ -24,7 +33,7 @@ def _scrub(value: Any) -> Any:
         return {
             key: (
                 REDACTED
-                if isinstance(key, str) and key.lower() in SENSITIVE_HEADERS
+                if isinstance(key, str) and key.lower() in REDACTED_KEYS
                 else _scrub(item)
             )
             for key, item in value.items()

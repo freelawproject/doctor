@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import fnmatch
 import hashlib
 import io
 import logging
@@ -586,12 +585,28 @@ EGRESS_BACKOFF_SECONDS = 1.0
 EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
+def host_matches(hostname: str, pattern: str) -> bool:
+    """Match a hostname against an allowlist pattern.
+
+    ``*`` stands for exactly one DNS label. A glob that also matched
+    dots would let ``s3-*.amazonaws.com`` admit a load balancer named
+    ``s3-anything.us-west-2.elb.amazonaws.com``.
+
+    :param hostname: The lowercased host of the URL being checked.
+    :param pattern: The allowlist entry; no wildcard means an exact host.
+    """
+    regex = "".join(
+        "[^.]+" if char == "*" else re.escape(char) for char in pattern
+    )
+    return re.fullmatch(regex, hostname) is not None
+
+
 def validate_egress_url(url: str) -> None:
     """Check a caller-supplied URL against the egress policy.
 
     When DOCTOR_EGRESS_ALLOWED_HOSTS is set, the URL must be https
-    and its host must match one of the configured fnmatch patterns.
-    An empty setting disables the check.
+    and its host must match one of the configured patterns, where
+    ``*`` is one DNS label. An empty setting disables the check.
 
     :param url: The URL doctor was asked to fetch from or upload to.
     :raises BitonalError: EGRESS_BLOCKED when the URL is not allowed.
@@ -602,7 +617,7 @@ def validate_egress_url(url: str) -> None:
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
     if parsed.scheme != "https" or not any(
-        fnmatch.fnmatch(hostname, pattern) for pattern in allowed_hosts
+        host_matches(hostname, pattern) for pattern in allowed_hosts
     ):
         raise BitonalError(
             "EGRESS_BLOCKED",
