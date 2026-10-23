@@ -380,7 +380,7 @@ Converts uploaded images to a PDF. Send each image as a `file` field, in page or
         -F "file=@page-2.tiff" \
         -o image.pdf
 
-This returns the binary data of the pdf.
+This returns the binary data of the pdf. Up to 1000 images are accepted per request.
 
 
 ### Endpoint: /convert/pdf/bitonal/

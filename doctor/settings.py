@@ -38,6 +38,10 @@ DOCTOR_AUTH_TOKENS = [
     if token.strip()
 ]
 
+# /convert/images/pdf/ takes one multipart file per page; Django's default
+# of 100 would turn a long document into a 400.
+DATA_UPLOAD_MAX_NUMBER_FILES = 1000
+
 # Hosts the bitonal endpoint may fetch input_url from and upload
 # output_url to. Comma-separated patterns where "*" is one DNS label;
 # URLs must be https and match one. The default is every hostname shape
