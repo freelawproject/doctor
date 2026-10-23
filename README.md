@@ -31,17 +31,52 @@ If you are not using a system that supports horizontal scaling, you may wish to 
 
 If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving Doctor many workers becomes particularly important. If it does not have a worker available, your call to Doctor will probably time out.
 
-## Running Doctor on a shared network
+## Security Hardening
 
-Doctor parses untrusted files with a long list of third-party tools and is reachable by several applications, so treat a compromise of it as likely and make it worth little. Everything below that the application can't enforce itself belongs in the pod spec and a `NetworkPolicy`.
+Doctor parses untrusted files with a long list of third-party tools and is reachable by several applications, so treat a compromise of it as likely and make it worth little.
 
-**Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone. Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict ingress in the `NetworkPolicy` to the pods that use doctor.
+**Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone. Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. Callers can start sending the header before the tokens are configured here: an unset `DOCTOR_AUTH_TOKENS` ignores it. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict which hosts can reach port 5050 in your network layer (on Kubernetes, a `NetworkPolicy`).
 
-**What a caller can make it do.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`: bitonal transfers to presigned S3 URLs (https, hosts matching `DOCTOR_EGRESS_ALLOWED_HOSTS`, no redirects) and the court seal for audio conversion, from a hard-coded `seals.free.law` URL. A test fails if a network library is imported anywhere else. The S3 allowlist can only check that a URL points at S3, not at *your* buckets, so route S3 through a VPC endpoint whose policy allows only your account's buckets; otherwise a compromised caller can have doctor upload results to a bucket of its choosing. Nothing bounds how long a parser may run on one file or how large an upload may be: gunicorn's `--timeout`, the pod's memory limit and the size of `/tmp` are the backstops, so keep all three set.
+**What a caller can make it do.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`: the bitonal endpoint downloads its input from a caller-supplied presigned S3 URL and uploads the result to another (https, hosts matching `DOCTOR_EGRESS_ALLOWED_HOSTS`, no redirects), and audio conversion fetches the court seal from a hard-coded `seals.free.law` URL. A test fails if a network library is imported anywhere else. The allowlist can only check that a URL points at S3, not at *your* buckets, so on AWS route S3 through a VPC endpoint whose policy allows only your account's buckets; otherwise a compromised caller can have doctor upload results to a bucket of its choosing. Nothing bounds how long a parser may run on one file or how large an upload may be: gunicorn's `--timeout`, the container's memory limit and the size of `/tmp` are the backstops, so keep all three set.
 
-**What a compromise gets.** The image runs as UID 10001 and writes only under `/tmp`. In the pod spec set `runAsNonRoot: true`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false` and `capabilities: {drop: [ALL]}`, mount a disk-backed `emptyDir` with a `sizeLimit` at `/tmp`, and allow egress only to S3, `seals.free.law` and Sentry. `compose.yaml` applies the same for local runs. Probes must be `httpGet` on `/`: the image no longer has `curl`.
+**What a compromise gets.** The image runs as UID 10001 and writes only under `/tmp`, so it can run with a read-only root filesystem and no Linux capabilities; `compose.yaml` does that for local runs. If you run Doctor on Kubernetes, the equivalent pod settings are:
 
-**What leaks.** With `SENTRY_DSN` set, URL query strings (presigned signatures) and `Authorization` headers are scrubbed from events.
+```yaml
+spec:
+  securityContext:
+    # Refuse to start if the image ever runs as root again.
+    runAsNonRoot: true
+    # Block unusual syscalls with the runtime's default seccomp profile.
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    # Uploads and converted files land here. Disk-backed (no
+    # medium: Memory), so a large upload is not charged to the pod's
+    # memory limit; sizeLimit is the real cap on upload size.
+    - name: tmp
+      emptyDir:
+        sizeLimit: 8Gi
+  containers:
+    - name: doctor
+      securityContext:
+        # /tmp is the only writable path; an exploit can't alter the code.
+        readOnlyRootFilesystem: true
+        # setuid binaries can't grant more privilege than the process has.
+        allowPrivilegeEscalation: false
+        # No raw sockets, mounts or ptrace.
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      # Probes must be httpGet: the image has no curl for exec probes.
+      livenessProbe:
+        httpGet:
+          path: /
+          port: 5050
+```
+
+Allow egress only to S3, `seals.free.law` and Sentry. Doctor can't enforce that itself; on Kubernetes use a `NetworkPolicy`, and on AWS also block the instance metadata address (`169.254.169.254`) or require IMDSv2 with a hop limit of 1, so a compromised pod can't read the node's credentials.
 
 After the image is running, you should be able to test that you have a working environment by running
 
@@ -345,7 +380,7 @@ Converts uploaded images to a PDF. Send each image as a `file` field, in page or
         -F "file=@page-2.tiff" \
         -o image.pdf
 
-This returns the binary data of the pdf. Doctor never fetches image URLs: earlier versions took a `sorted_urls` list and downloaded each one, which let any caller point doctor at internal addresses. Download the images and upload them instead.
+This returns the binary data of the pdf.
 
 
 ### Endpoint: /convert/pdf/bitonal/

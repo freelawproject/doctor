@@ -923,12 +923,6 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     return output_path
 
 
-# The only host doctor fetches seals from. Hard-coded on purpose: no
-# caller input reaches this URL, so no allowlist is needed.
-SEAL_URL = "https://seals.free.law/v2/{size}/{court}.png"
-SEAL_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
-
-
 def fetch_seal(court_pk: str) -> bytes | None:
     """Fetch a court's seal PNG from seals.free.law.
 
@@ -937,9 +931,13 @@ def fetch_seal(court_pk: str) -> bytes | None:
     :return: The PNG bytes, or None if the fetch failed; the failure is
         logged, and the MP3 just gets no cover art.
     """
-    url = SEAL_URL.format(size=ImageSizes.MEDIUM.value, court=court_pk)
+    url = f"https://seals.free.law/v2/{ImageSizes.MEDIUM.value}/{court_pk}.png"
     try:
-        response = httpx.get(url, follow_redirects=False, timeout=SEAL_TIMEOUT)
+        response = httpx.get(
+            url,
+            follow_redirects=False,
+            timeout=httpx.Timeout(30.0, connect=10.0),
+        )
         response.raise_for_status()
     except httpx.HTTPError as e:
         logger.warning("Seal fetch failed for %s: %s", url, e)

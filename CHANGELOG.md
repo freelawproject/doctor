@@ -2,16 +2,13 @@
 The following changes are not yet released, but are code complete:
 
 Security:
- - `/convert/audio/mp3/` fetches the court seal from a hard-coded
-   `seals.free.law` URL. A failed fetch is logged and the MP3 gets no
-   cover art; before, a 404 page was embedded as the "image".
  - `DOCTOR_EGRESS_ALLOWED_HOSTS` now defaults to S3 hostname shapes rather
    than `*.amazonaws.com`, so the bitonal endpoint can't be pointed at
    other AWS endpoints (API Gateway, RDS, ...). **Deployments whose
    presigned URLs are not on S3 must set it explicitly.**
  - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
    uploaded images as repeated `file` fields instead of a `sorted_urls`
-   list, which let any caller make doctor fetch internal URLs. Nothing in
+   list, which previously let any caller make doctor fetch internal URLs. Nothing in
    courtlistener, bigcases2 or scanning calls it.
  - New `DOCTOR_AUTH_TOKENS` setting enables bearer-token authentication on
    every endpoint but the heartbeat; unset keeps today's behavior.
@@ -38,6 +35,8 @@ Features:
    and `/tmp` usage depend on the slice size rather than the page count.
 
 Fixes:
+ - `/convert/audio/mp3/` logs a failed court seal fetch and leaves the MP3
+   without cover art; before, a 404 page was embedded as the "image".
  - Delegate file identification to Magika's `identify_path`
  - `/extract/recap/text/` no longer double- and triple-spaces the words of
    an OCR'd page. Word gaps are now measured against the width of a

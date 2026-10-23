@@ -13,12 +13,18 @@ services:
       - .:/opt/app
     env_file:
       - .env.dev
-    # Hardening: the service only needs to write to /tmp.
+    # Hardening, mirroring what the README asks of a production pod.
+    # Nothing but /tmp is writable, so an exploit can't alter the code or
+    # drop tools; /tmp is an in-memory filesystem that vanishes with the
+    # container.
     read_only: true
     tmpfs:
       - /tmp
+    # No Linux capabilities: no raw sockets, mounts or ptrace.
     cap_drop:
       - ALL
+    # setuid binaries can't grant more privilege than the process has.
     security_opt:
       - no-new-privileges:true
+    # Caps the number of processes, so a fork bomb stays in the container.
     pids_limit: 512

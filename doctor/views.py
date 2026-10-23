@@ -792,11 +792,11 @@ async def pdf_to_text(request) -> JsonResponse | HttpResponse:
 async def images_to_pdf(request) -> HttpResponse:
     """Converts uploaded images into a single pdf file
 
-    Send the images as repeated ``file`` fields, in page order. A single
-    image is treated as one long scan and split into page-sized slices;
-    several images become one page each.
-
-    Doctor only reads what was uploaded: it never fetches image URLs.
+    Send the images as repeated ``file`` fields, in page order. Several
+    images become one page each. A single image is treated as one tall
+    scan of a whole document (how financial disclosures arrive, usually
+    as a TIFF) and is cut into letter-sized pages. Any format Pillow
+    reads is accepted in either case.
 
     :param request: The request object
     :return: HttpResponse object
