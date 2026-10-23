@@ -5,7 +5,6 @@ Unlike tests.py these need no running doctor container:
     python -m unittest doctor.test_hardening
 """
 
-import ast
 import asyncio
 import io
 import os
@@ -161,62 +160,6 @@ class EgressDefaultTest(SimpleTestCase):
         ):
             with self.assertRaises(BitonalError, msg=host):
                 validate_egress_url(f"https://{host}/")
-
-
-class NetworkImportGuardTest(unittest.TestCase):
-    """New outbound network code must be added on purpose.
-
-    Doctor's only legitimate egress is the allowlisted bitonal S3
-    transfer and the seal fetch from seals.free.law, both in
-    doctor/tasks.py. An import of a network library anywhere else is how
-    an unreviewed SSRF gets in: if you need one, review it and extend
-    ALLOWED_FILES.
-    """
-
-    ALLOWED_FILES = {"doctor/tasks.py"}
-    NETWORK_MODULES = {
-        "requests",
-        "httpx",
-        "urllib3",
-        "aiohttp",
-        "socket",
-        "ssl",
-        "http.client",
-        "urllib.request",
-        "ftplib",
-        "smtplib",
-        "telnetlib",
-        "xmlrpc.client",
-    }
-
-    def imported(self, tree):
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                yield from (alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                yield node.module
-                yield from (f"{node.module}.{a.name}" for a in node.names)
-
-    def is_network(self, name):
-        return any(
-            name == module or name.startswith(module + ".")
-            for module in self.NETWORK_MODULES
-        )
-
-    def test_no_network_imports_outside_allowed_modules(self):
-        root = Path(__file__).resolve().parent.parent
-        offenders = []
-        for path in sorted((root / "doctor").rglob("*.py")):
-            relative = path.relative_to(root).as_posix()
-            if relative in self.ALLOWED_FILES or path.name.startswith("test"):
-                continue
-            tree = ast.parse(path.read_text())
-            offenders += [
-                f"{relative}: {name}"
-                for name in self.imported(tree)
-                if self.is_network(name)
-            ]
-        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":

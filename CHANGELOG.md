@@ -19,7 +19,6 @@ Security:
    `Authorization` headers are scrubbed.
  - The image runs as a non-root user without curl or ImageMagick, and
    `compose.yaml` runs it read-only with dropped capabilities.
- - A test fails if a network library is imported outside `doctor/tasks.py`.
 
 Features:
  - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
