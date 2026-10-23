@@ -16,6 +16,8 @@ import environ
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
+from doctor.lib.sentry_scrub import scrub_breadcrumb, scrub_event
+
 env = environ.FileAwareEnv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,17 +29,35 @@ ROOT_URLCONF = "doctor.urls"
 ASGI_APPLICATION = "doctor.asgi.application"
 
 
-# Host allowlist for endpoints that fetch or upload caller-supplied
-# URLs (currently the bitonal endpoint). Comma-separated fnmatch
-# patterns; when set, URLs must be https and match one of them. The
-# default admits any AWS host (presigned S3 URLs) while blocking
-# SSRF at cluster-internal services; deployments can pin it down to
-# exact bucket hostnames. Set it empty to disable the check, which
-# is what local dev and the test suite need (see .env.example).
+# Comma-separated bearer tokens. When any are set, every endpoint except
+# the heartbeat requires "Authorization: Bearer <token>". One token per
+# calling app lets each be rotated alone. Empty disables authentication.
+DOCTOR_AUTH_TOKENS = [
+    token.strip()
+    for token in env("DOCTOR_AUTH_TOKENS", default="").split(",")
+    if token.strip()
+]
+
+# /convert/images/pdf/ takes one multipart file per page; Django's default
+# of 100 would turn a long document into a 400.
+DATA_UPLOAD_MAX_NUMBER_FILES = 1000
+
+# Hosts the bitonal endpoint may fetch input_url from and upload
+# output_url to. Comma-separated patterns where "*" is one DNS label;
+# URLs must be https and match one. The default is every hostname shape
+# a presigned S3 URL can take (virtual-hosted, path-style, legacy
+# region-dashed, dualstack and access points) and nothing else on AWS.
+# Pin it to exact bucket hosts where you can. Empty disables the check,
+# which local dev and the test suite need (see .env.example).
+S3_HOST_PATTERNS = (
+    "*.s3.amazonaws.com,*.s3.*.amazonaws.com,*.s3-*.amazonaws.com,"
+    "*.s3.dualstack.*.amazonaws.com,*.s3-accesspoint.*.amazonaws.com,"
+    "s3.amazonaws.com,s3.*.amazonaws.com,s3-*.amazonaws.com"
+)
 DOCTOR_EGRESS_ALLOWED_HOSTS = [
     host.strip()
     for host in env(
-        "DOCTOR_EGRESS_ALLOWED_HOSTS", default="*.amazonaws.com"
+        "DOCTOR_EGRESS_ALLOWED_HOSTS", default=S3_HOST_PATTERNS
     ).split(",")
     if host.strip()
 ]
@@ -82,6 +102,15 @@ if SENTRY_DSN:
             DjangoIntegration(),
         ],
         ignore_errors=[KeyboardInterrupt],
+        # Don't attach cookies, the Authorization header, user ids or
+        # client IPs to events. Doctor has no users, so there is nothing
+        # useful in them, and the tokens must not leave the cluster.
+        send_default_pii=False,
+        # Scrub presigned S3 signatures out of URLs in events and in the
+        # breadcrumbs the SDK records for outgoing HTTP calls. Each one
+        # is a credential for a document until it expires.
+        before_send=scrub_event,
+        before_breadcrumb=scrub_breadcrumb,
     )
 
 LOGGING = {

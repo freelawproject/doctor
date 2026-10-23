@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import time
-from http.client import BAD_REQUEST
+from http import HTTPStatus
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
@@ -13,7 +13,6 @@ import eyed3
 import img2pdf
 import magic
 import pytesseract
-import requests
 from centralia import CourtNotReleased, UnknownCourt
 from centralia import read as centralia_read
 from django.core.exceptions import BadRequest
@@ -34,7 +33,6 @@ from doctor.forms import (
     BaseFileForm,
     BitonalPdfForm,
     DocumentForm,
-    ImagePdfForm,
     MimeForm,
     StructuredOpinionForm,
     ThumbnailForm,
@@ -55,7 +53,6 @@ from doctor.tasks import (
     convert_tiff_to_pdf_bytes,
     convert_to_mp3,
     convert_to_ogg,
-    download_images,
     extract_from_doc,
     extract_from_docx,
     extract_from_html,
@@ -135,7 +132,7 @@ def image_to_pdf(request) -> HttpResponse:
 
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     fp = form.cleaned_data["fp"]
 
@@ -164,7 +161,7 @@ def extract_recap_document(request) -> JsonResponse:
             {
                 "err": "Failed validation",
             },
-            status=BAD_REQUEST,
+            status=HTTPStatus.BAD_REQUEST,
         )
     filepath = form.cleaned_data["fp"]
 
@@ -215,7 +212,7 @@ def extract_structured_opinion(request) -> JsonResponse:
                     "error_code": "VALIDATION_FAILED",
                     "msg": form.errors.get_json_data(),
                 },
-                status=BAD_REQUEST,
+                status=HTTPStatus.BAD_REQUEST,
             )
         try:
             payload = centralia_read(
@@ -230,7 +227,7 @@ def extract_structured_opinion(request) -> JsonResponse:
                     "error_code": "UNKNOWN_COURT",
                     "msg": str(e),
                 },
-                status=BAD_REQUEST,
+                status=HTTPStatus.BAD_REQUEST,
             )
         except CourtNotReleased as e:
             return JsonResponse(
@@ -239,7 +236,7 @@ def extract_structured_opinion(request) -> JsonResponse:
                     "error_code": "COURT_NOT_RELEASED",
                     "msg": str(e),
                 },
-                status=BAD_REQUEST,
+                status=HTTPStatus.BAD_REQUEST,
             )
         return JsonResponse({"success": True, **payload})
     except Exception as e:
@@ -261,7 +258,7 @@ def extract_structured_opinion(request) -> JsonResponse:
                 "error_code": "EXTRACTION_FAILED",
                 "msg": str(e),
             },
-            status=500,
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
     finally:
         cleanup_form(form)
@@ -277,7 +274,7 @@ async def extract_doc_content(request) -> JsonResponse | HttpResponse:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
     ocr_available = form.cleaned_data["ocr_available"]
     extension = form.cleaned_data["extension"]
     fp = form.cleaned_data["fp"]
@@ -365,7 +362,7 @@ async def make_png_thumbnail(request) -> HttpResponse:
     """
     form = ThumbnailForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
     document = form.cleaned_data["file"]
     with NamedTemporaryFile(suffix=".pdf") as tmp:
         with open(tmp.name, "wb") as f:
@@ -386,7 +383,7 @@ async def make_png_thumbnails_from_range(request) -> HttpResponseBase:
     """
     form = ThumbnailForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     directory = TemporaryDirectory()
     with NamedTemporaryFile(suffix=".pdf", mode="r+b") as temp_pdf:
@@ -435,7 +432,7 @@ def convert_pdf_bitonal(request) -> HttpResponseBase:
                     "error_code": "VALIDATION_FAILED",
                     "msg": form.errors.get_json_data(),
                 },
-                status=BAD_REQUEST,
+                status=HTTPStatus.BAD_REQUEST,
             )
 
         start = time.monotonic()
@@ -520,7 +517,7 @@ def convert_pdf_bitonal(request) -> HttpResponseBase:
         )
         return JsonResponse(
             {"success": False, "error_code": "INTERNAL_ERROR", "msg": str(e)},
-            status=500,
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
     finally:
         cleanup_form(form)
@@ -540,16 +537,18 @@ def xray(request) -> JsonResponse:
     try:
         if not form.is_valid():
             return JsonResponse(
-                {"error": True, "msg": "Failed validation"}, status=BAD_REQUEST
+                {"error": True, "msg": "Failed validation"},
+                status=HTTPStatus.BAD_REQUEST,
             )
         extension = form.cleaned_data["extension"]
         if extension.casefold() != "pdf":
             return JsonResponse(
-                {"error": True, "msg": "Failed file type"}, status=BAD_REQUEST
+                {"error": True, "msg": "Failed file type"},
+                status=HTTPStatus.BAD_REQUEST,
             )
         results = get_xray(form.cleaned_data["fp"])
         if results.get("error", False):
-            return JsonResponse(results, status=BAD_REQUEST)
+            return JsonResponse(results, status=HTTPStatus.BAD_REQUEST)
     finally:
         cleanup_form(form)
     return JsonResponse({"error": False, "results": results})
@@ -564,7 +563,7 @@ def page_count(request) -> HttpResponse:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     fp = form.cleaned_data["fp"]
 
@@ -588,7 +587,7 @@ async def extract_mime_type(request) -> JsonResponse | HttpResponse:
     if not form.is_valid():
         # Not valid, try to remove file
         cleanup_form(form)
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     fp = form.cleaned_data["fp"]
 
@@ -649,7 +648,7 @@ async def extract_extension(request) -> HttpResponse:
     """
     form = MimeForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     fp = form.cleaned_data["fp"]
 
@@ -774,7 +773,7 @@ async def pdf_to_text(request) -> JsonResponse | HttpResponse:
     """
     form = DocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     filepath = form.cleaned_data["fp"]
 
@@ -791,32 +790,40 @@ async def pdf_to_text(request) -> JsonResponse | HttpResponse:
 
 
 async def images_to_pdf(request) -> HttpResponse:
-    """Converts a list of images from urls into a single pdf file
+    """Converts uploaded images into a single pdf file
+
+    Send the images as repeated ``file`` fields, in page order. Several
+    images become one page each. A single image is treated as one tall
+    scan of a whole document (how financial disclosures arrive, usually
+    as a TIFF) and is cut into letter-sized pages. Any format Pillow
+    reads is accepted in either case.
 
     :param request: The request object
     :return: HttpResponse object
     """
-    form = ImagePdfForm(request.GET)
-    if not form.is_valid():
-        raise BadRequest("Invalid form")
-    sorted_urls = form.cleaned_data["sorted_urls"]
+    files = request.FILES.getlist("file")
+    if not files:
+        raise BadRequest("Send at least one image as a 'file' field.")
 
-    if len(sorted_urls) > 1:
-        with TemporaryDirectory() as image_dir:
-            image_paths = await download_images(sorted_urls, image_dir)
+    with TemporaryDirectory() as image_dir:
+        # Named by position, never by the client's filename.
+        image_paths = []
+        for index, upload in enumerate(files):
+            path = os.path.join(image_dir, f"{index:06d}")
+            with open(path, "wb") as f:
+                for chunk in upload.chunks():
+                    f.write(chunk)
+            image_paths.append(path)
+
+        if len(image_paths) > 1:
             with NamedTemporaryFile(suffix=".pdf") as tmp:
                 with open(tmp.name, "wb") as f:
                     img2pdf.convert(image_paths, outputstream=f)
                 cleaned_pdf_bytes = strip_metadata_from_path(tmp.name)
-    else:
-        with requests.get(sorted_urls[0], stream=True, timeout=60 * 5) as r:
-            tiff_image = Image.open(r.raw)
-            # Force PIL to read all pixel data before the HTTP connection
-            # closes. Without this, later crop() calls would try to pull
-            # from a dead socket.
-            tiff_image.load()
-        pdf_bytes = convert_tiff_to_pdf_bytes(tiff_image)
-        cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
+        else:
+            with Image.open(image_paths[0]) as tiff_image:
+                pdf_bytes = convert_tiff_to_pdf_bytes(tiff_image)
+            cleaned_pdf_bytes = strip_metadata_from_bytes(pdf_bytes)
     return HttpResponse(cleaned_pdf_bytes, content_type="application/pdf")
 
 
@@ -830,7 +837,9 @@ def fetch_audio_duration(request) -> HttpResponse:
     try:
         form = AudioForm(request.GET, request.FILES)
         if not form.is_valid():
-            return HttpResponse("Failed validation", status=BAD_REQUEST)
+            return HttpResponse(
+                "Failed validation", status=HTTPStatus.BAD_REQUEST
+            )
         with NamedTemporaryFile(suffix=".mp3") as tmp:
             with open(tmp.name, "wb") as f:
                 for chunk in form.cleaned_data["file"].chunks():
@@ -854,7 +863,7 @@ async def convert_audio(
     """
     form = AudioForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
 
     try:
         filepath = form.cleaned_data["fp"]
@@ -885,7 +894,7 @@ async def embed_text(request) -> FileResponse | HttpResponse:
     """
     form = DocumentForm(request.GET, request.FILES)
     if not form.is_valid():
-        return HttpResponse("Failed validation", status=BAD_REQUEST)
+        return HttpResponse("Failed validation", status=HTTPStatus.BAD_REQUEST)
     fp = form.cleaned_data["fp"]
 
     try:
@@ -932,7 +941,7 @@ def get_document_number(request) -> HttpResponse:
         validation_message = form.errors.get_json_data()["__all__"][0][
             "message"
         ]
-        return HttpResponse(validation_message, status=BAD_REQUEST)
+        return HttpResponse(validation_message, status=HTTPStatus.BAD_REQUEST)
     fp = form.cleaned_data["fp"]
 
     try:

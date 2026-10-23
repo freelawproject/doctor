@@ -21,6 +21,7 @@ import io
 import subprocess
 import threading
 import time
+from http import HTTPStatus
 
 import numpy as np
 import pikepdf
@@ -59,7 +60,7 @@ class BitonalError(Exception):
         self,
         error_code: str,
         message: str,
-        status: int = 500,
+        status: int = HTTPStatus.INTERNAL_SERVER_ERROR,
         details: dict | None = None,
     ):
         self.error_code = error_code
@@ -342,7 +343,9 @@ def convert_pdf_to_bitonal(
         PdfReadError,
     ) as e:
         raise BitonalError(
-            "INVALID_PDF", f"could not read source PDF: {e}", status=400
+            "INVALID_PDF",
+            f"could not read source PDF: {e}",
+            status=HTTPStatus.BAD_REQUEST,
         ) from e
     page_count = len(source_pages)
     if page_count == 0:
@@ -355,7 +358,7 @@ def convert_pdf_to_bitonal(
             "PAGE_RANGE_INVALID",
             f"range {first_page}-{last_page} invalid for a "
             f"{page_count}-page document",
-            status=400,
+            status=HTTPStatus.BAD_REQUEST,
         )
 
     # Without a whole-conversion budget, the per-page timeout still
