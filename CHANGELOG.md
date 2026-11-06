@@ -25,7 +25,7 @@ Fixes:
 
 Changes:
  - Bump `magika` to 1.0.3.
- - Bump `centralia` to 0.0.6.
+ - Bump `centralia` to 0.0.7.
 
 ## Current
 
