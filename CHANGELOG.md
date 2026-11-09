@@ -1,6 +1,27 @@
 ## Coming up
 The following changes are not yet released, but are code complete:
 
+Security:
+ - `DOCTOR_EGRESS_ALLOWED_HOSTS` now defaults to S3 hostname shapes rather
+   than `*.amazonaws.com`, so the bitonal endpoint can't be pointed at
+   other AWS endpoints (API Gateway, RDS, ...), and `*` in a pattern now
+   matches exactly one DNS label rather than anything. **Deployments
+   whose presigned URLs are not on S3, or whose patterns relied on `*`
+   spanning several labels, must set it explicitly.**
+ - **Breaking:** `/convert/images/pdf/` no longer downloads images. It takes
+   uploaded images as repeated `file` fields instead of a `sorted_urls`
+   list, which previously let any caller make doctor fetch internal URLs. Nothing in
+   courtlistener, bigcases2 or scanning calls it.
+ - New `DOCTOR_AUTH_TOKENS` setting enables bearer-token authentication on
+   every endpoint but the heartbeat; unset keeps today's behavior.
+ - ffmpeg is limited to the pipe protocol so an uploaded playlist file
+   can't make it read local files or fetch URLs, and a non-zero exit is
+   reported with its stderr instead of a missing-file 500.
+ - Sentry events no longer carry cookies, and presigned URL signatures and
+   `Authorization` headers are scrubbed.
+ - The image runs as a non-root user without curl or ImageMagick, and
+   `compose.yaml` runs it read-only with dropped capabilities.
+
 Features:
  - `/convert/pdf/bitonal/` reports a timeout as `CONVERSION_TIMEOUT`, which
    the caller may retry, rather than the permanent `CONVERSION_FAILED`. The
@@ -15,6 +36,8 @@ Features:
    and `/tmp` usage depend on the slice size rather than the page count.
 
 Fixes:
+ - `/convert/audio/mp3/` logs a failed court seal fetch and leaves the MP3
+   without cover art; before, a 404 page was embedded as the "image".
  - Delegate file identification to Magika's `identify_path`
  - `/extract/recap/text/` no longer double- and triple-spaces the words of
    an OCR'd page. Word gaps are now measured against the width of a

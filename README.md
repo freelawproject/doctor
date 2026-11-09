@@ -31,6 +31,53 @@ If you are not using a system that supports horizontal scaling, you may wish to 
 
 If you are doing OCR or audio conversion, scaling through a system like Kubernetes or through by giving Doctor many workers becomes particularly important. If it does not have a worker available, your call to Doctor will probably time out.
 
+## Security Hardening
+
+Doctor parses untrusted files with a long list of third-party tools and is reachable by several applications, so treat a compromise of it as likely and make it worth little.
+
+**Who can call it.** Set `DOCTOR_AUTH_TOKENS` to a comma-separated list of secrets, one per calling app, so each can be rotated or revoked alone. Every endpoint except the heartbeat `/` then requires `Authorization: Bearer <token>`; without one it returns `401`. Callers can start sending the header before the tokens are configured here: an unset `DOCTOR_AUTH_TOKENS` ignores it. This keeps out anything that can reach the service but isn't one of your apps. It does nothing against a compromised caller, which holds a token, so also restrict which hosts can reach port 5050 in your network layer (on Kubernetes, a `NetworkPolicy`).
+
+**What a caller can make it do.** Doctor makes outbound requests in two places, both in `doctor/tasks.py`: the bitonal endpoint downloads its input from a caller-supplied presigned S3 URL and uploads the result to another (https, hosts matching `DOCTOR_EGRESS_ALLOWED_HOSTS`, no redirects), and audio conversion fetches the court seal from a hard-coded `seals.free.law` URL. The allowlist can only check that a URL points at S3, not at *your* buckets, so on AWS route S3 through a VPC endpoint whose policy allows only your account's buckets; otherwise a compromised caller can have doctor upload results to a bucket of its choosing. Nothing bounds how long a parser may run on one file or how large an upload may be: gunicorn's `--timeout`, the container's memory limit and the size of `/tmp` are the backstops, so keep all three set.
+
+**What a compromise gets.** The image runs as UID 10001 and writes only under `/tmp`, so it can run with a read-only root filesystem and no Linux capabilities; `compose.yaml` does that for local runs. If you run Doctor on Kubernetes, the equivalent pod settings are:
+
+```yaml
+spec:
+  securityContext:
+    # Refuse to start if the image ever runs as root again.
+    runAsNonRoot: true
+    # Block unusual syscalls with the runtime's default seccomp profile.
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    # Uploads and converted files land here. Disk-backed (no
+    # medium: Memory), so a large upload is not charged to the pod's
+    # memory limit; sizeLimit is the real cap on upload size.
+    - name: tmp
+      emptyDir:
+        sizeLimit: 8Gi
+  containers:
+    - name: doctor
+      securityContext:
+        # /tmp is the only writable path; an exploit can't alter the code.
+        readOnlyRootFilesystem: true
+        # setuid binaries can't grant more privilege than the process has.
+        allowPrivilegeEscalation: false
+        # No raw sockets, mounts or ptrace.
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      # Probes must be httpGet: the image has no curl for exec probes.
+      livenessProbe:
+        httpGet:
+          path: /
+          port: 5050
+```
+
+Allow egress only to S3, `seals.free.law` and Sentry. Doctor can't enforce that itself; on Kubernetes use a `NetworkPolicy`, and on AWS also block the instance metadata address (`169.254.169.254`) or require IMDSv2 with a hop limit of 1, so a compromised pod can't read the node's credentials.
+
 After the image is running, you should be able to test that you have a working environment by running
 
     curl http://localhost:5050
@@ -325,13 +372,15 @@ Keep in mind that this curl will write the file to the current directory.
 
 ### Endpoint: /convert/images/pdf/
 
-Given a list of urls for images, this endpoint will convert them to a pdf. This can be used to convert multiple images to a multi-page PDF. We use this to convert financial disclosure images to simple PDFs.
+Converts uploaded images to a PDF. Send each image as a `file` field, in page order, and each becomes one page of a multi-page PDF. Send a single image and it is treated as one long scan and split into page-sized slices. We use this to convert financial disclosure images to simple PDFs.
 
-    curl 'http://localhost:5050/convert/images/pdf/?sorted_urls=%5B%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_1.tiff%22%2C+%22https%3A%2F%2Fcom-courtlistener-storage.s3-us-west-2.amazonaws.com%2Ffinancial-disclosures%2F2011%2FA-E%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11%2FArmstrong-SB%2520J3.%252009.%2520CAN_R_11_Page_2.tiff%22%5D' \
+    curl 'http://localhost:5050/convert/images/pdf/' \
         -X POST \
+        -F "file=@page-1.tiff" \
+        -F "file=@page-2.tiff" \
         -o image.pdf
 
-This returns the binary data of the pdf.
+This returns the binary data of the pdf. Up to 1000 images are accepted per request.
 
 
 ### Endpoint: /convert/pdf/bitonal/
@@ -406,13 +455,14 @@ reliable completion probe. Note the upload happens while the request stays
 open; the HTTP response is the status channel.
 
 The `DOCTOR_EGRESS_ALLOWED_HOSTS` environment variable (comma-separated
-fnmatch patterns) restricts which hosts `input_url` and `output_url` may
-point to; allowed URLs must also be https. It defaults to
-`*.amazonaws.com`, which accepts presigned S3 URLs while blocking
-cluster-internal targets. Deployments can tighten it to exact bucket
-hostnames (a pattern without wildcards is an exact match), and setting it
-empty disables the check entirely, which local development and the test
-suite rely on (see `.env.example`).
+host patterns, where `*` stands for exactly one DNS label) restricts which
+hosts `input_url` and `output_url` may point to; allowed URLs must also be
+https. The default admits every
+hostname shape a presigned S3 URL can take and nothing else on AWS.
+Deployments can tighten it to exact bucket hostnames (a pattern without
+wildcards is an exact match), and setting it empty disables the check
+entirely, which local development and the test suite rely on (see
+`.env.example`).
 
 Four more environment variables bound the resources one request can
 consume. `DOCTOR_BITONAL_PAGE_TIMEOUT_SECONDS` (default 120) limits a
@@ -462,6 +512,8 @@ This endpoint takes an audio file and converts it to an MP3 file.  This is used 
 from courts across the country and standardizes the format for our end users.  
 
 This endpoint also adds the SEAL of the court to the MP3 file and updates the metadata to reflect our updates.
+
+The seal comes from a hard-coded `seals.free.law` URL; if it can't be fetched, the MP3 gets no cover art.
 
     curl 'http://localhost:5050/convert/audio/mp3/?audio_data=%7B%22court_full_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_short_name%22%3A+%22Testing+Supreme+Court%22%2C+%22court_pk%22%3A+%22test%22%2C+%22court_url%22%3A+%22http%3A%2F%2Fwww.example.com%2F%22%2C+%22docket_number%22%3A+%22docket+number+1+005%22%2C+%22date_argued%22%3A+%222020-01-01%22%2C+%22date_argued_year%22%3A+%222020%22%2C+%22case_name%22%3A+%22SEC+v.+Frank+J.+Custable%2C+Jr.%22%2C+%22case_name_full%22%3A+%22case+name+full%22%2C+%22case_name_short%22%3A+%22short%22%2C+%22download_url%22%3A+%22http%3A%2F%2Fmedia.ca7.uscourts.gov%2Fsound%2Fexternal%2Fgw.15-1442.15-1442_07_08_2015.mp3%22%7D' \
      -X 'POST' \

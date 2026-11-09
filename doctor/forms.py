@@ -53,16 +53,6 @@ class AudioForm(BaseAudioFile):
         return self.cleaned_data
 
 
-class ImagePdfForm(forms.Form):
-    sorted_urls = forms.CharField(required=True, label="sorted-urls")
-
-    def clean(self):
-        self.cleaned_data["sorted_urls"] = json.loads(
-            self.cleaned_data["sorted_urls"]
-        )
-        return self.cleaned_data
-
-
 class MimeForm(forms.Form):
     file = forms.FileField(label="document", required=False)
     mime = forms.BooleanField(label="mime", required=False)
