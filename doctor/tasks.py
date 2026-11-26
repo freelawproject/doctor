@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import fnmatch
 import hashlib
 import io
 import logging
@@ -8,6 +7,7 @@ import os
 import re
 import time
 from collections.abc import ByteString
+from http import HTTPStatus
 from tempfile import NamedTemporaryFile
 from typing import Any, AnyStr
 from urllib.parse import urlparse
@@ -16,11 +16,9 @@ import eyed3
 import httpx
 import magic
 import pdfplumber
-import requests
 import xray
 from django.conf import settings
 from eyed3 import id3
-from httpx import AsyncClient
 from lxml.html.clean import Cleaner
 from PIL.Image import Image
 from pypdf import PdfReader
@@ -578,9 +576,6 @@ async def extract_from_wpd(path: str) -> tuple[str, bytes, int | None]:
     return content, err, process.returncode
 
 
-MAX_IMAGE_BYTES = 100 * 1024 * 1024  # 100 MB per image
-MAX_CONCURRENT_IMAGE_DOWNLOADS = 10
-
 # Presigned URL transport for the bitonal endpoint. Transient
 # failures (network errors, 5xx) are retried with backoff; a 403
 # means the presigned signature expired, so retrying the same URL
@@ -590,12 +585,28 @@ EGRESS_BACKOFF_SECONDS = 1.0
 EGRESS_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
+def host_matches(hostname: str, pattern: str) -> bool:
+    """Match a hostname against an allowlist pattern.
+
+    ``*`` stands for exactly one DNS label. A glob that also matched
+    dots would let ``s3-*.amazonaws.com`` admit a load balancer named
+    ``s3-anything.us-west-2.elb.amazonaws.com``.
+
+    :param hostname: The lowercased host of the URL being checked.
+    :param pattern: The allowlist entry; no wildcard means an exact host.
+    """
+    regex = "".join(
+        "[^.]+" if char == "*" else re.escape(char) for char in pattern
+    )
+    return re.fullmatch(regex, hostname) is not None
+
+
 def validate_egress_url(url: str) -> None:
     """Check a caller-supplied URL against the egress policy.
 
     When DOCTOR_EGRESS_ALLOWED_HOSTS is set, the URL must be https
-    and its host must match one of the configured fnmatch patterns.
-    An empty setting disables the check.
+    and its host must match one of the configured patterns, where
+    ``*`` is one DNS label. An empty setting disables the check.
 
     :param url: The URL doctor was asked to fetch from or upload to.
     :raises BitonalError: EGRESS_BLOCKED when the URL is not allowed.
@@ -606,12 +617,12 @@ def validate_egress_url(url: str) -> None:
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
     if parsed.scheme != "https" or not any(
-        fnmatch.fnmatch(hostname, pattern) for pattern in allowed_hosts
+        host_matches(hostname, pattern) for pattern in allowed_hosts
     ):
         raise BitonalError(
             "EGRESS_BLOCKED",
             f"URL blocked by egress policy: {parsed.scheme}://{hostname}",
-            status=400,
+            status=HTTPStatus.BAD_REQUEST,
         )
 
 
@@ -643,14 +654,14 @@ def _classify_status(
             expired_code,
             f"{direction} URL returned 403; the signature has expired "
             "and a retry cannot succeed",
-            status=502,
+            status=HTTPStatus.BAD_GATEWAY,
         )
     if status >= 500:
         raise _TransientTransferError(f"HTTP {status}")
     raise BitonalError(
         failed_code,
         f"{direction} URL returned HTTP {status}",
-        status=502,
+        status=HTTPStatus.BAD_GATEWAY,
     )
 
 
@@ -681,14 +692,14 @@ def _transfer_with_retries(attempt, failed_code: str, failure_prefix: str):
             # succeed, so it must neither retry here nor escape to
             # the retryable INTERNAL_ERROR catch-all.
             raise BitonalError(
-                failed_code, f"invalid URL: {e}", status=400
+                failed_code, f"invalid URL: {e}", status=HTTPStatus.BAD_REQUEST
             ) from e
         except (_TransientTransferError, httpx.HTTPError) as e:
             last_error = str(e)
     raise BitonalError(
         failed_code,
         f"{failure_prefix} after {EGRESS_MAX_ATTEMPTS} attempts: {last_error}",
-        status=502,
+        status=HTTPStatus.BAD_GATEWAY,
     )
 
 
@@ -735,7 +746,7 @@ def stream_url_to_file(url: str, output_path: str) -> str:
                     "INPUT_TOO_LARGE",
                     f"input Content-Length {content_length} exceeds "
                     f"the {max_bytes}-byte limit",
-                    status=400,
+                    status=HTTPStatus.BAD_REQUEST,
                 )
             digest = hashlib.sha256()
             received = 0
@@ -747,7 +758,7 @@ def stream_url_to_file(url: str, output_path: str) -> str:
                             "INPUT_TOO_LARGE",
                             f"input exceeded the {max_bytes}-byte "
                             "limit while streaming",
-                            status=400,
+                            status=HTTPStatus.BAD_REQUEST,
                         )
                     f.write(chunk)
                     digest.update(chunk)
@@ -811,54 +822,14 @@ def put_file_to_url(url: str, input_path: str, content_type: str) -> str:
     )
 
 
-async def download_images(sorted_urls: list[str], dest_dir: str) -> list[str]:
-    """Stream images to ``dest_dir`` and return their paths in input order.
-
-    Caps concurrent downloads so a many-URL batch can't fan out an
-    unbounded number of in-flight requests. Each response is streamed
-    straight to disk so no image's bytes sit in RAM during the fetch.
-    Files larger than ``MAX_IMAGE_BYTES`` are still kept, but logged with
-    their final size and URL because img2pdf will load each one back
-    into memory when it builds the PDF.
-
-    :param sorted_urls: List of sorted URLs for split financial disclosure
-    :param dest_dir: Directory to write downloaded images into. The
-        caller owns its lifecycle (typically a ``TemporaryDirectory``).
-    :return: Filesystem paths of each image, in the same order as
-        ``sorted_urls``
-    """
-    sem = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_DOWNLOADS)
-
-    async def _fetch(client: AsyncClient, index: int, url: str) -> str:
-        path = os.path.join(dest_dir, f"{index:06d}")
-        size = 0
-        async with sem, client.stream("GET", url) as response:
-            response.raise_for_status()
-            with open(path, "wb") as f:
-                async for chunk in response.aiter_bytes():
-                    f.write(chunk)
-                    size += len(chunk)
-        if size > MAX_IMAGE_BYTES:
-            logger.warning(
-                "Image at %s is %s bytes, exceeding limit of %s; "
-                "img2pdf will load the full file into memory during "
-                "PDF construction",
-                url,
-                size,
-                MAX_IMAGE_BYTES,
-            )
-        return path
-
-    async with AsyncClient(http2=True, follow_redirects=True) as client:
-        return await asyncio.gather(
-            *(_fetch(client, i, url) for i, url in enumerate(sorted_urls))
-        )
-
-
 # Audio
 
 root = os.path.dirname(os.path.realpath(__file__))
 assets_dir = os.path.join(root, "assets")
+
+
+def _tail(stderr: bytes | None, limit: int = 500) -> str:
+    return (stderr or b"").decode(errors="replace").strip()[-limit:]
 
 
 async def convert_to_mp3[AnyStr: (bytes, str)](
@@ -872,8 +843,17 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        # Playlist-style containers (HLS, concat) can be used to exfiltrate
+        # system information by naming other files and URLs. Using the pipe
+        # protocol blocks uploaded "audio" files from making ffmpeg read or
+        # fetch anything else.
+        "-protocol_whitelist",
+        "pipe",
         "-i",
-        "/dev/stdin",
+        "pipe:0",
         "-ar",
         "22050",
         "-ab",
@@ -887,9 +867,14 @@ async def convert_to_mp3[AnyStr: (bytes, str)](
         *av_command,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
         shell=False,
     )
-    await ffmpeg_cmd.communicate(media.read())
+    _, err = await ffmpeg_cmd.communicate(media.read())
+    if ffmpeg_cmd.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg exited {ffmpeg_cmd.returncode}: {_tail(err)}"
+        )
     return output_path
 
 
@@ -911,8 +896,17 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
     """
     av_command = [
         "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        # Playlist-style containers (HLS, concat) can be used to exfiltrate
+        # system information by naming other files and URLs. Using the pipe
+        # protocol blocks uploaded "audio" files from making ffmpeg read or
+        # fetch anything else.
+        "-protocol_whitelist",
+        "pipe",
         "-i",
-        "/dev/stdin",
+        "pipe:0",
         "-vn",
         "-map_metadata",
         "-1",
@@ -933,10 +927,37 @@ async def convert_to_ogg[AnyStr: (bytes, str)](
         *av_command,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
         shell=False,
     )
-    await ffmpeg_cmd.communicate(media.read())
+    _, err = await ffmpeg_cmd.communicate(media.read())
+    if ffmpeg_cmd.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg exited {ffmpeg_cmd.returncode}: {_tail(err)}"
+        )
     return output_path
+
+
+def fetch_seal(court_pk: str) -> bytes | None:
+    """Fetch a court's seal PNG from seals.free.law.
+
+    :param court_pk: The CourtListener court id; the caller has checked
+        with seal_rookery that it has a seal.
+    :return: The PNG bytes, or None if the fetch failed; the failure is
+        logged, and the MP3 just gets no cover art.
+    """
+    url = f"https://seals.free.law/v2/{ImageSizes.MEDIUM.value}/{court_pk}.png"
+    try:
+        response = httpx.get(
+            url,
+            follow_redirects=False,
+            timeout=httpx.Timeout(30.0, connect=10.0),
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning("Seal fetch failed for %s: %s", url, e)
+        return None
+    return response.content
 
 
 def set_mp3_meta_data[AnyStr: (bytes, str)](
@@ -981,25 +1002,24 @@ def set_mp3_meta_data[AnyStr: (bytes, str)](
     audio_file.tag.publisher_url = "https://free.law"
     audio_file.tag.recording_date = date_argued
 
-    # Add images to the mp3. If it has a seal, use that for the Front Cover
-    # and use the FLP logo for the Publisher Logo. If it lacks a seal, use the
-    # Publisher logo for both the front cover and the Publisher logo.
-    url = seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM)
-
+    # Add images to the mp3. A court with a seal gets it as the Front
+    # Cover and the FLP logo as the Publisher Logo; one without gets the
+    # FLP logo for both. If the seal exists but can't be fetched, the
+    # Front Cover is left empty rather than mislabeled.
     flp_image_frames = [
         3,  # "Front Cover". Complete list at eyed3/id3/frames.py
         14,  # "Publisher logo".
     ]
-
-    if url:
-        seal_content = requests.get(url, timeout=30).content
-        audio_file.tag.images.set(
-            3,
-            seal_content,
-            "image/png",
-            f"Seal for {audio_data['court_short_name']}",
-        )
+    if seal(court=audio_data["court_pk"], size=ImageSizes.MEDIUM):
         flp_image_frames.remove(3)
+        seal_png = fetch_seal(audio_data["court_pk"])
+        if seal_png:
+            audio_file.tag.images.set(
+                3,
+                seal_png,
+                "image/png",
+                f"Seal for {audio_data['court_short_name']}",
+            )
 
     for frame in flp_image_frames:
         cover_art_fp = os.path.join(assets_dir, "producer-300x300.png")

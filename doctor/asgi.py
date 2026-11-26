@@ -11,6 +11,8 @@ import os
 
 from django.core.asgi import get_asgi_application
 
+from doctor.middleware import GatekeeperMiddleware
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "doctor.settings")
 
-application = get_asgi_application()
+application = GatekeeperMiddleware(get_asgi_application())
