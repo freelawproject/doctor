@@ -49,14 +49,14 @@ wheels = [
 
 [[package]]
 name = "centralia"
-version = "0.0.7"
+version = "0.0.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pdfplumber" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/4b/f224e1e5a8095a13e8406bab9e81415e4dfb30314f3b5bcba78261810581/centralia-0.0.7.tar.gz", hash = "sha256:27863581dab0f32b8ea1f8af82be892df468c3c909761f8ce5e100849ba3d764", size = 26667493, upload-time = "2026-11-06T20:07:56.3Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/a3/857fb9b2cbe6cad8acb1f454eef95b53ac41cd2f7692a5b0497e33eedebe/centralia-0.0.9.tar.gz", hash = "sha256:6639b652fab83acf4108c95e14ee15a846fc07b1f8f82d58029a4aaa8f61e082", size = 26686578, upload-time = "2026-11-26T19:27:19.365Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/32/70/21165b3a620970f198eb740b16c5cd29c8cacbc26b9b2be6e36a0fce469a/centralia-0.0.7-py3-none-any.whl", hash = "sha256:4e38ff9cfc95c97371e17ad7959cf363ebf84bbb7c8c64fe038868e9fb760bbe", size = 2172127, upload-time = "2026-11-06T20:07:53.886Z" },
+    { url = "https://files.pythonhosted.org/packages/37/20/0f2994f68c8e66f3d150984879493bad28f3bdcaf7280ddc7ea878ed54b5/centralia-0.0.9-py3-none-any.whl", hash = "sha256:8f7351077e7b8fc73c6ba8af98832cd8010b5e4b33ec492ed9a345891dcb8b2c", size = 2191342, upload-time = "2026-11-26T19:27:17.478Z" },
 ]
 
 [[package]]
@@ -382,7 +382,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "centralia", specifier = ">=0.0.7" },
+    { name = "centralia", specifier = ">=0.0.9" },
     { name = "certifi" },
     { name = "chardet", specifier = ">=3.0.4" },
     { name = "django", specifier = ">=6.0,<7" },
